@@ -1,0 +1,7 @@
+-- Your SQL goes here
+CREATE TABLE trainings (
+	id SERIAL PRIMARY KEY,
+	title TEXT NOT NULL,
+	date TIMESTAMP NOT NULL,
+	open BOOLEAN NOT NULL DEFAULT FALSE
+)
