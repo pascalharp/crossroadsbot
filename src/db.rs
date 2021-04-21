@@ -1,7 +1,6 @@
 use diesel::prelude::*;
 use diesel::pg::PgConnection;
 use diesel::result::QueryResult;
-use dotenv::dotenv;
 use std::env;
 use chrono::NaiveDateTime;
 
@@ -12,7 +11,6 @@ use schema::*;
 use models::*;
 
 pub fn connect() -> PgConnection {
-    dotenv().ok();
 
     let database_url = env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set");

@@ -11,6 +11,9 @@ file](#mardown-header-.env-file) section below
 ### DATABASE\_URL
 URL to postgres database.\
 Example: *DATABASE\_URL=postgres://username:password@localhost/crossroad*
+### DISCORD\_TOKEN
+The discord bot token to be used. [Check here](https://discord.com/developers/docs/intro) for more
+information.
 
 ## Environment variables (dev only)
 ### TEST\_BASE\_URL
