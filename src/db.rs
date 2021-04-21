@@ -113,4 +113,22 @@ impl Signup {
 }
 
 /* -- Role -- */
-/* TODO */
+
+pub fn add_role(conn: &PgConnection, title: &str, repr: &str, emoji: &str) -> QueryResult<Role>{
+
+    let role = NewRole {
+        title: title,
+        repr: repr,
+        emoji: emoji,
+    };
+
+    diesel::insert_into(roles::table)
+        .values(&role)
+        .get_result(conn)
+}
+
+pub fn get_role_by_emoji(conn: &PgConnection, emoji: &str) -> QueryResult<Role> {
+    roles::table
+        .filter(roles::emoji.eq(emoji))
+        .first::<Role>(conn)
+}
