@@ -2,6 +2,10 @@ use std::env;
 use dotenv::dotenv;
 use crossroadsbot::db;
 use tracing::{error, info};
+use tracing_subscriber::{
+    FmtSubscriber,
+    EnvFilter,
+};
 
 use serenity::{
     prelude::*,
@@ -50,6 +54,8 @@ async fn main() {
 
     dotenv().ok();
     println!("Hello Crossroads!");
+
+    tracing_subscriber::fmt::init();
 
     // Make a quick check to the database
     {
