@@ -4,4 +4,4 @@ extern crate serenity;
 extern crate dotenv;
 
 pub mod db;
-pub mod bot;
+pub mod commands;
