@@ -1,4 +1,5 @@
 use std::env;
+use std::sync::Arc;
 use dotenv::dotenv;
 use crossroadsbot::db;
 use tracing::{error, info};
@@ -6,7 +7,6 @@ use tracing_subscriber::{
     FmtSubscriber,
     EnvFilter,
 };
-
 use serenity::{
     prelude::*,
     async_trait,
@@ -19,16 +19,10 @@ use serenity::{
         standard::StandardFramework,
         standard::macros::group,
     },
-    model::{
-        event::ResumedEvent,
-        gateway::Ready,
-    },
+    model::prelude::*,
 };
-
-
-use crossroadsbot::commands::{
-    misc::*,
-};
+use dashmap::DashSet;
+use crossroadsbot::commands;
 
 struct Handler;
 
@@ -43,10 +37,6 @@ impl EventHandler for Handler {
         info!("Resumed");
     }
 }
-
-#[group]
-#[commands(ping,dudu)]
-struct Misc;
 
 
 #[tokio::main]
@@ -68,12 +58,18 @@ async fn main() {
     let framework = StandardFramework::new()
         .configure(|c| c
                    .prefix("~"))
-        .group(&MISC_GROUP);
+        .group(&commands::MISC_GROUP)
+        .group(&commands::SIGNUP_GROUP);
 
     let mut client = Client::builder(token)
         .framework(framework)
         .await
         .expect("Error creating client");
+
+    {
+        let mut data = client.data.write().await;
+        data.insert::<commands::ConversationLock>(Arc::new(DashSet::new()));
+    }
 
     if let Err(why) = client.start().await {
         println!("An error occured while running the client: {:?}", why);
