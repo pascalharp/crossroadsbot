@@ -1,5 +1,6 @@
 use serenity::prelude::*;
 use serenity::model::prelude::*;
+
 use serenity::framework::standard::{
     Args,
     CommandResult,
@@ -15,7 +16,17 @@ pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
     // if the account name was provided immediately no nee to start a conversation
     if let Ok(acc_name) = args.single::<String>() {
         let conn = db::connect();
-        db::add_user(&conn, 1234, &acc_name);
+        let user_entry = db::add_user(&conn, *msg.author.id.as_u64(), &acc_name);
+        match user_entry {
+            Ok(_) => {
+                msg.react(&ctx.http, ReactionType::Unicode("✔️".to_string()) ).await.ok();
+                return Ok(());
+            },
+            Err(_) =>  {
+                msg.react(&ctx.http, ReactionType::Unicode("❌".to_string()) ).await.ok();
+                return Ok(());
+            }
+        };
     }
 
     // TODO change later. Currently for testing
