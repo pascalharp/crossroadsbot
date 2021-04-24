@@ -16,6 +16,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aho-corasick"
+version = "0.7.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7404febffaa47dac81aa44dba71523c9d069b1bdc50a77db41195149e17f68e5"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "ansi_term"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -180,6 +189,7 @@ dependencies = [
  "diesel",
  "diesel_migrations",
  "dotenv",
+ "regex 1.4.6",
  "serenity",
  "tokio",
  "tracing",
@@ -893,7 +903,7 @@ version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9329abc99e39129fcceabd24cf5d85b4671ef7c29c50e972bc5afe32438ec384"
 dependencies = [
- "aho-corasick",
+ "aho-corasick 0.6.10",
  "memchr",
  "regex-syntax 0.5.6",
  "thread_local 0.3.6",
@@ -902,10 +912,12 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.4.5"
+version = "1.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "957056ecddbeba1b26965114e191d2e8589ce74db242b6ea25fc4062427a5c19"
+checksum = "2a26af418b574bd56588335b3a3659a65725d4e636eb1016c2f9e3b38c7cc759"
 dependencies = [
+ "aho-corasick 0.7.15",
+ "memchr",
  "regex-syntax 0.6.23",
 ]
 
@@ -1337,7 +1349,7 @@ dependencies = [
  "chrono",
  "lazy_static",
  "matchers",
- "regex 1.4.5",
+ "regex 1.4.6",
  "serde",
  "serde_json",
  "sharded-slab",

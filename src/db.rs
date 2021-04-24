@@ -27,7 +27,7 @@ pub fn get_user(conn: &PgConnection, discord_id: u64) -> QueryResult<User> {
         .first::<User>(conn)
 }
 
-pub fn add_user(conn: &PgConnection, discord_id: u64, gw2_id: &str) ->QueryResult<User> {
+pub fn add_user(conn: &PgConnection, discord_id: u64, gw2_id: &str) -> QueryResult<User> {
 
     let user = NewUser {
         discord_id: discord_id as i64,
@@ -43,6 +43,12 @@ impl User {
 
     pub fn get_signups(&self, conn: &PgConnection) -> QueryResult<Vec<Signup>> {
         Signup::belonging_to(self).load(conn)
+    }
+
+    pub fn update_gw2_id(&self, conn: &PgConnection, gw2_id: &str) -> QueryResult<User> {
+        diesel::update(users::table.find(self.id))
+            .set(users::gw2_id.eq(gw2_id))
+            .get_result(conn)
     }
 }
 
