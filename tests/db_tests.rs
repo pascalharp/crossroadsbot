@@ -92,14 +92,14 @@ fn dummy_database() {
 fn add_user() {
     let db =TestDB::new("test_adduser");
     let conn = db.connect();
-    db::add_user(&conn, "discordID", "gw2ID").expect("Failed to add user");
+    db::add_user(&conn, 1234, "gw2ID").expect("Failed to add user");
 }
 
 #[test]
 fn get_user_inval() {
     let db = TestDB::new("test_getuserinval");
     let conn = db.connect();
-    db::get_user(&conn, "notadiscordid")
+    db::get_user(&conn, 0)
         .expect_err("Should not return a user");
 }
 
@@ -108,16 +108,28 @@ fn add_get_user() {
     let db = TestDB::new("test_addgetuser");
     let conn = db.connect();
 
-    let d_id = "discordID";
-    let g_id = "gw2ID";
-    let insert = db::add_user(&conn, d_id, g_id)
+    let d_id = std::u64::MAX;
+    let g_id = "MAX user";
+    let insert = db::add_user(&conn, std::u64::MAX, g_id)
         .expect("Failed to add user");
     let read = db::get_user(&conn, d_id)
         .expect("Failed to read added user");
 
-    assert_eq!(d_id, insert.discord_id);
+    assert_eq!(d_id, insert.discord_id());
     assert_eq!(g_id, insert.gw2_id);
-    assert_eq!(d_id, read.discord_id);
+    assert_eq!(d_id, read.discord_id());
+    assert_eq!(g_id, read.gw2_id);
+
+    let d_id = std::u64::MIN;
+    let g_id = "MIN user";
+    let insert = db::add_user(&conn, std::u64::MIN, g_id)
+        .expect("Failed to add user");
+    let read = db::get_user(&conn, d_id)
+        .expect("Failed to read added user");
+
+    assert_eq!(d_id, insert.discord_id());
+    assert_eq!(g_id, insert.gw2_id);
+    assert_eq!(d_id, read.discord_id());
     assert_eq!(g_id, read.gw2_id);
 }
 
@@ -199,7 +211,7 @@ fn invalid_signup() {
 
     let user = User {
         id: 666,
-        discord_id: String::from("notadiscordid"),
+        discord_id: 1234,
         gw2_id: String::from("notagw2id"),
     };
 
@@ -219,8 +231,8 @@ fn signup() {
     let db = TestDB::new("test_signup");
     let conn = db.connect();
 
-    let user1 = db::add_user(&conn, "discordID", "gw2ID").unwrap();
-    let user2 = db::add_user(&conn, "FOO", "BAR").unwrap();
+    let user1 = db::add_user(&conn, 1234, "gw2ID").unwrap();
+    let user2 = db::add_user(&conn, 4321, "BAR").unwrap();
     let training = db::add_training(
         &conn,
         "Some Training",

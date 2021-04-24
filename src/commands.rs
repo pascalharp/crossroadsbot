@@ -27,12 +27,16 @@ impl<'a> Conversation<'a>  {
         };
 
         if lock.insert(user.id) {
+            // Check if we can open a dm channel
             if let Ok(chan) = user.create_dm_channel(ctx).await {
                 return Ok( Conversation {
                             lock: lock,
                             user: user,
                             chan: chan
                         });
+            } else {
+                // no private channel. Unlock again
+                lock.remove(&user.id);
             }
         }
 

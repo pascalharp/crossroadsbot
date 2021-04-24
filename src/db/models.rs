@@ -12,14 +12,20 @@ use chrono::naive::NaiveDateTime;
 #[table_name = "users"]
 pub struct User {
     pub id: i32,
-    pub discord_id: String,
+    pub discord_id: i64,
     pub gw2_id: String,
+}
+
+impl User {
+    pub fn discord_id(&self) -> u64 {
+        self.discord_id as u64
+    }
 }
 
 #[derive(Insertable, Debug)]
 #[table_name = "users"]
 pub struct NewUser<'a> {
-    pub discord_id: &'a str,
+    pub discord_id: i64,
     pub gw2_id: &'a str
 }
 

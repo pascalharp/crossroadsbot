@@ -35,7 +35,7 @@ table! {
 table! {
     users (id) {
         id -> Int4,
-        discord_id -> Text,
+        discord_id -> Int8,
         gw2_id -> Text,
     }
 }

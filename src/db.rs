@@ -21,16 +21,16 @@ pub fn connect() -> PgConnection {
 
 /* --- User --- */
 
-pub fn get_user(conn: &PgConnection, discord_id: &str) -> QueryResult<User> {
+pub fn get_user(conn: &PgConnection, discord_id: u64) -> QueryResult<User> {
     users::table
-        .filter(users::discord_id.eq(discord_id))
+        .filter(users::discord_id.eq(discord_id as i64))
         .first::<User>(conn)
 }
 
-pub fn add_user(conn: &PgConnection, discord_id: &str, gw2_id: &str) ->QueryResult<User> {
+pub fn add_user(conn: &PgConnection, discord_id: u64, gw2_id: &str) ->QueryResult<User> {
 
     let user = NewUser {
-        discord_id: discord_id,
+        discord_id: discord_id as i64,
         gw2_id: gw2_id,
     };
 

@@ -7,9 +7,16 @@ use serenity::framework::standard::{
 };
 use super::Conversation;
 use tokio::time::{sleep, Duration};
+use crate::db;
 
 #[command]
-pub async fn register(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+
+    // if the account name was provided immediately no nee to start a conversation
+    if let Ok(acc_name) = args.single::<String>() {
+        let conn = db::connect();
+        db::add_user(&conn, 1234, &acc_name);
+    }
 
     // TODO change later. Currently for testing
     if let Ok(conv) = Conversation::start(ctx, &msg.author).await {
