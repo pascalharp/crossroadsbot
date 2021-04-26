@@ -118,12 +118,12 @@ impl Signup {
 
 /* -- Role -- */
 
-pub fn add_role(conn: &PgConnection, title: &str, repr: &str, emoji: &str) -> QueryResult<Role>{
+pub fn add_role(conn: &PgConnection, title: &str, repr: &str, emoji: u64) -> QueryResult<Role>{
 
     let role = NewRole {
         title: title,
         repr: repr,
-        emoji: emoji,
+        emoji: emoji as i64,
     };
 
     diesel::insert_into(roles::table)
@@ -131,8 +131,8 @@ pub fn add_role(conn: &PgConnection, title: &str, repr: &str, emoji: &str) -> Qu
         .get_result(conn)
 }
 
-pub fn get_role_by_emoji(conn: &PgConnection, emoji: &str) -> QueryResult<Role> {
+pub fn get_role_by_emoji(conn: &PgConnection, emoji: u64) -> QueryResult<Role> {
     roles::table
-        .filter(roles::emoji.eq(emoji))
+        .filter(roles::emoji.eq(emoji as i64))
         .first::<Role>(conn)
 }

@@ -3,7 +3,7 @@ table! {
         id -> Int4,
         title -> Text,
         repr -> Text,
-        emoji -> Text,
+        emoji -> Int8,
     }
 }
 

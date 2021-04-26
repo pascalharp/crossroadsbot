@@ -79,7 +79,7 @@ pub struct Role {
     pub id: i32,
     pub title: String,
     pub repr: String,
-    pub emoji: String
+    pub emoji: i64
 }
 
 #[derive(Insertable, Debug)]
@@ -87,5 +87,5 @@ pub struct Role {
 pub struct NewRole<'a> {
     pub title: &'a str,
     pub repr: &'a str,
-    pub emoji: &'a str
+    pub emoji: i64
 }
