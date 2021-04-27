@@ -4,12 +4,14 @@ use serenity::{
         macros::group
     },
     model::prelude::*,
+    collector::message_collector::*,
 };
-
 use std::{
     sync::Arc,
+    time::Duration,
+    error::Error,
+    fmt,
 };
-
 use dashmap::DashSet;
 
 pub struct Conversation<'a> {
@@ -18,8 +20,25 @@ pub struct Conversation<'a> {
     pub chan: PrivateChannel
 }
 
+#[derive(Debug)]
+pub enum ConversationError {
+    ConversationLocked,
+    NoDmChannel
+}
+
+impl fmt::Display for ConversationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ConversationError::ConversationLocked => write!(f, "User already in Conversation"),
+            ConversationError::NoDmChannel => write!(f, "Unable to get DM channel for user"),
+        }
+    }
+}
+
+impl Error for ConversationError {}
+
 impl<'a> Conversation<'a>  {
-    pub async fn start(ctx: &'a Context, user: &'a User) -> Result<Conversation<'a>, ()> {
+    pub async fn start(ctx: &'a Context, user: &'a User) -> Result<Conversation<'a>, ConversationError> {
 
         let lock = {
             let data_read = ctx.data.read().await;
@@ -37,10 +56,32 @@ impl<'a> Conversation<'a>  {
             } else {
                 // no private channel. Unlock again
                 lock.remove(&user.id);
+                return Err(ConversationError::NoDmChannel);
             }
         }
 
-        Err(())
+        Err(ConversationError::ConversationLocked)
+    }
+
+    // Consumes the conversation
+    pub async fn timeout_msg(self, ctx: &Context) -> serenity::Result<Message> {
+        self.chan.send_message(&ctx.http, |m| {
+            m.content("Conversation timed out")
+        }).await
+    }
+
+    pub async fn await_reply(&self, ctx: &Context) -> Option<Arc<Message>> {
+        self.user.await_reply(ctx)
+            .channel_id(self.chan.id)
+            .timeout(DEFAULT_TIMEOUT)
+            .await
+    }
+
+    pub async fn await_replies(&self, ctx: &Context) -> MessageCollector {
+        self.user.await_replies(ctx)
+            .channel_id(self.chan.id)
+            .timeout(DEFAULT_TIMEOUT)
+            .await
     }
 }
 
@@ -56,6 +97,11 @@ impl TypeMapKey for ConversationLock {
     type Value = Arc<DashSet<UserId>>;
 }
 
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60 * 3);
+pub const CHECK_EMOJI: char = '✅';
+pub const CROSS_EMOJI: char = '❌';
+pub const ENVELOP_EMOJI: char = '✉';
+
 mod misc;
 use misc::*;
 #[group]
@@ -67,3 +113,9 @@ use signup::*;
 #[group]
 #[commands(register)]
 struct Signup;
+
+mod config;
+use config::*;
+#[group]
+#[commands(add_role)]
+struct Config;

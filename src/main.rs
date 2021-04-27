@@ -59,7 +59,8 @@ async fn main() {
         .configure(|c| c
                    .prefix("~"))
         .group(&commands::MISC_GROUP)
-        .group(&commands::SIGNUP_GROUP);
+        .group(&commands::SIGNUP_GROUP)
+        .group(&commands::CONFIG_GROUP);
 
     let mut client = Client::builder(token)
         .framework(framework)
