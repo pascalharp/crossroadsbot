@@ -131,6 +131,10 @@ pub fn add_role(conn: &PgConnection, title: &str, repr: &str, emoji: u64) -> Que
         .get_result(conn)
 }
 
+pub fn get_roles(conn: &PgConnection) -> QueryResult<Vec<Role>> {
+    roles::table.load::<Role>(conn)
+}
+
 pub fn get_role_by_emoji(conn: &PgConnection, emoji: u64) -> QueryResult<Role> {
     roles::table
         .filter(roles::emoji.eq(emoji as i64))

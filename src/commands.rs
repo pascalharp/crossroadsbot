@@ -1,7 +1,9 @@
 use serenity::{
     prelude::*,
     framework::standard::{
-        macros::group
+        macros::{group,check},
+        CommandOptions,
+        Reason,
     },
     model::prelude::*,
     collector::message_collector::*,
@@ -14,6 +16,18 @@ use std::{
 };
 use dashmap::DashSet;
 
+// --- Defaults ---
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60 * 3);
+pub const CHECK_EMOJI: char = '✅';
+pub const CROSS_EMOJI: char = '❌';
+pub const ENVELOP_EMOJI: char = '✉';
+
+// --- Global Config ---
+pub struct ConfigValues {
+    pub manager_guild_id: GuildId,
+}
+
+// --- Conversation ---
 pub struct Conversation<'a> {
     lock: Arc<DashSet<UserId>>,
     pub user: &'a User,
@@ -70,6 +84,15 @@ impl<'a> Conversation<'a>  {
         }).await
     }
 
+    // Consumes the conversation
+    pub async fn abort(self, ctx: &Context, msg: Option<&str>) -> serenity::Result<Option<Message>> {
+        if let Some(msg) = msg {
+            let msg = self.chan.say(ctx, msg).await?;
+            return Ok(Some(msg));
+        }
+        Ok(None)
+    }
+
     pub async fn await_reply(&self, ctx: &Context) -> Option<Arc<Message>> {
         self.user.await_reply(ctx)
             .channel_id(self.chan.id)
@@ -92,15 +115,16 @@ impl<'a> Drop for Conversation<'a> {
     }
 }
 
+// --- Global Data ---
 pub struct ConversationLock;
 impl TypeMapKey for ConversationLock {
     type Value = Arc<DashSet<UserId>>;
 }
 
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60 * 3);
-pub const CHECK_EMOJI: char = '✅';
-pub const CROSS_EMOJI: char = '❌';
-pub const ENVELOP_EMOJI: char = '✉';
+pub struct ConfigValuesData;
+impl TypeMapKey for ConfigValuesData {
+    type Value = Arc<ConfigValues>;
+}
 
 mod misc;
 use misc::*;
@@ -117,5 +141,6 @@ struct Signup;
 mod config;
 use config::*;
 #[group]
+#[only_in(guilds)]
 #[commands(add_role)]
 struct Config;
