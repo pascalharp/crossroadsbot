@@ -142,5 +142,5 @@ mod config;
 use config::*;
 #[group]
 #[only_in(guilds)]
-#[commands(add_role)]
+#[commands(add_role,rm_role,list_roles,add_training)]
 struct Config;

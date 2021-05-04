@@ -24,6 +24,14 @@ table! {
 }
 
 table! {
+    training_roles (id) {
+        id -> Int4,
+        training_id -> Int4,
+        role_id -> Int4,
+    }
+}
+
+table! {
     trainings (id) {
         id -> Int4,
         title -> Text,
@@ -44,11 +52,14 @@ joinable!(signup_roles -> roles (role_id));
 joinable!(signup_roles -> signups (signup_id));
 joinable!(signups -> trainings (training_id));
 joinable!(signups -> users (user_id));
+joinable!(training_roles -> roles (role_id));
+joinable!(training_roles -> trainings (training_id));
 
 allow_tables_to_appear_in_same_query!(
     roles,
     signup_roles,
     signups,
+    training_roles,
     trainings,
     users,
 );

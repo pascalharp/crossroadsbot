@@ -90,6 +90,20 @@ impl Training {
     pub fn get_signups(&self, conn: &PgConnection) -> QueryResult<Vec<Signup>> {
         Signup::belonging_to(self).load(conn)
     }
+
+    pub fn add_role(&self, conn: &PgConnection, role_id: i32) -> QueryResult<TrainingRole> {
+
+        let training_role = NewTrainingRole {
+            training_id: self.id,
+            role_id: role_id,
+        };
+
+        diesel::insert_into(training_roles::table)
+            .values(&training_role)
+            .get_result(conn)
+
+    }
+
 }
 
 /* -- Signup -- */
@@ -129,6 +143,13 @@ pub fn add_role(conn: &PgConnection, title: &str, repr: &str, emoji: u64) -> Que
     diesel::insert_into(roles::table)
         .values(&role)
         .get_result(conn)
+}
+
+pub fn rm_role(conn: &PgConnection, repr: &str) -> QueryResult<usize> {
+
+    diesel::delete(roles::table
+                   .filter(roles::repr.eq(repr)))
+                   .execute(conn)
 }
 
 pub fn get_roles(conn: &PgConnection) -> QueryResult<Vec<Role>> {

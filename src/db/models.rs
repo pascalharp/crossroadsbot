@@ -2,8 +2,9 @@ use crate::db::schema::{
     users,
     trainings,
     signups,
-    signup_roles,
     roles,
+    signup_roles,
+    training_roles
 };
 
 use chrono::naive::NaiveDateTime;
@@ -63,17 +64,6 @@ pub struct NewTraining<'a> {
 }
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
-#[belongs_to(Signup)]
-#[belongs_to(Role)]
-#[table_name = "signup_roles"]
-pub struct SignupRole {
-    pub id: i32,
-    pub signup_id:  i32,
-    pub role_id: i32
-}
-
-
-#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
 #[table_name = "roles"]
 pub struct Role {
     pub id: i32,
@@ -88,4 +78,31 @@ pub struct NewRole<'a> {
     pub title: &'a str,
     pub repr: &'a str,
     pub emoji: i64
+}
+
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
+#[belongs_to(Signup)]
+#[belongs_to(Role)]
+#[table_name = "signup_roles"]
+pub struct SignupRole {
+    pub id: i32,
+    pub signup_id:  i32,
+    pub role_id: i32
+}
+
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
+#[belongs_to(Training)]
+#[belongs_to(Role)]
+#[table_name = "training_roles"]
+pub struct TrainingRole {
+    pub id: i32,
+    pub training_id: i32,
+    pub role_id: i32
+}
+
+#[derive(Insertable, Debug)]
+#[table_name = "training_roles"]
+pub struct NewTrainingRole {
+    pub training_id: i32,
+    pub role_id: i32
 }
