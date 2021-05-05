@@ -1,22 +1,19 @@
-use diesel::prelude::*;
+use chrono::NaiveDateTime;
 use diesel::pg::PgConnection;
+use diesel::prelude::*;
 use diesel::result::QueryResult;
 use std::env;
-use chrono::NaiveDateTime;
 
 pub mod models;
 pub mod schema;
 
-use schema::*;
 use models::*;
+use schema::*;
 
 pub fn connect() -> PgConnection {
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
-
-    PgConnection::establish(&database_url)
-        .expect(&format!("Error connecting to {}", database_url))
+    PgConnection::establish(&database_url).expect(&format!("Error connecting to {}", database_url))
 }
 
 /* --- User --- */
@@ -28,7 +25,6 @@ pub fn get_user(conn: &PgConnection, discord_id: u64) -> QueryResult<User> {
 }
 
 pub fn add_user(conn: &PgConnection, discord_id: u64, gw2_id: &str) -> QueryResult<User> {
-
     let user = NewUser {
         discord_id: discord_id as i64,
         gw2_id: gw2_id,
@@ -40,7 +36,6 @@ pub fn add_user(conn: &PgConnection, discord_id: u64, gw2_id: &str) -> QueryResu
 }
 
 impl User {
-
     pub fn get_signups(&self, conn: &PgConnection) -> QueryResult<Vec<Signup>> {
         Signup::belonging_to(self).load(conn)
     }
@@ -54,8 +49,11 @@ impl User {
 
 /* -- Training -- */
 
-pub fn add_training(conn: &PgConnection, title: &str, date: &NaiveDateTime) -> QueryResult<Training> {
-
+pub fn add_training(
+    conn: &PgConnection,
+    title: &str,
+    date: &NaiveDateTime,
+) -> QueryResult<Training> {
     let training = NewTraining {
         title: title,
         date: date,
@@ -67,14 +65,12 @@ pub fn add_training(conn: &PgConnection, title: &str, date: &NaiveDateTime) -> Q
 }
 
 pub fn get_open_trainings(conn: &PgConnection) -> QueryResult<Vec<Training>> {
-
     trainings::table
         .filter(trainings::open.eq(true))
         .load::<Training>(conn)
 }
 
 impl Training {
-
     pub fn open(&self, conn: &PgConnection) -> QueryResult<Training> {
         diesel::update(trainings::table.find(self.id))
             .set(trainings::open.eq(true))
@@ -92,7 +88,6 @@ impl Training {
     }
 
     pub fn add_role(&self, conn: &PgConnection, role_id: i32) -> QueryResult<TrainingRole> {
-
         let training_role = NewTrainingRole {
             training_id: self.id,
             role_id: role_id,
@@ -101,15 +96,12 @@ impl Training {
         diesel::insert_into(training_roles::table)
             .values(&training_role)
             .get_result(conn)
-
     }
-
 }
 
 /* -- Signup -- */
 
 pub fn add_signup(conn: &PgConnection, user: &User, training: &Training) -> QueryResult<Signup> {
-
     let signup = NewSignup {
         user_id: user.id,
         training_id: training.id,
@@ -121,19 +113,16 @@ pub fn add_signup(conn: &PgConnection, user: &User, training: &Training) -> Quer
 }
 
 impl Signup {
-
-    pub fn get_training(self, conn: &PgConnection) ->QueryResult<Training> {
+    pub fn get_training(self, conn: &PgConnection) -> QueryResult<Training> {
         trainings::table
             .filter(trainings::id.eq(self.training_id))
             .first::<Training>(conn)
     }
-
 }
 
 /* -- Role -- */
 
-pub fn add_role(conn: &PgConnection, title: &str, repr: &str, emoji: u64) -> QueryResult<Role>{
-
+pub fn add_role(conn: &PgConnection, title: &str, repr: &str, emoji: u64) -> QueryResult<Role> {
     let role = NewRole {
         title: title,
         repr: repr,
@@ -146,10 +135,7 @@ pub fn add_role(conn: &PgConnection, title: &str, repr: &str, emoji: u64) -> Que
 }
 
 pub fn rm_role(conn: &PgConnection, repr: &str) -> QueryResult<usize> {
-
-    diesel::delete(roles::table
-                   .filter(roles::repr.eq(repr)))
-                   .execute(conn)
+    diesel::delete(roles::table.filter(roles::repr.eq(repr))).execute(conn)
 }
 
 pub fn get_roles(conn: &PgConnection) -> QueryResult<Vec<Role>> {

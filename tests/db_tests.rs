@@ -1,11 +1,8 @@
-use diesel::prelude::*;
+use chrono::NaiveDate;
 use diesel::pg::PgConnection;
+use diesel::prelude::*;
 use dotenv::dotenv;
 use std::env;
-use chrono::{
-    NaiveDate,
-};
-
 
 use crossroadsbot::db;
 use crossroadsbot::db::models::*;
@@ -22,27 +19,19 @@ struct TestDB {
 }
 
 impl TestDB {
-
     fn new(db_name: &str) -> Self {
-
         dotenv().ok();
 
         // Create Testing Database
-        let base_url = env::var("TEST_BASE_URL")
-            .expect("TEST_BASE_URL must be set");
-        let conn = PgConnection::establish(&base_url)
-            .expect("Failed to connect to database");
-        let query = diesel::sql_query(
-            format!("CREATE DATABASE {}", db_name).as_str());
-        query
-            .execute(&conn)
-            .expect("Failed to create database");
+        let base_url = env::var("TEST_BASE_URL").expect("TEST_BASE_URL must be set");
+        let conn = PgConnection::establish(&base_url).expect("Failed to connect to database");
+        let query = diesel::sql_query(format!("CREATE DATABASE {}", db_name).as_str());
+        query.execute(&conn).expect("Failed to create database");
 
         // Run Migrations on Testing Database
-        let conn = PgConnection::establish( &format!("{}/{}", base_url, db_name))
+        let conn = PgConnection::establish(&format!("{}/{}", base_url, db_name))
             .expect("Failed to connect to database");
-        embedded_migrations::run(&conn)
-            .expect("Failed to run migrations on test database");
+        embedded_migrations::run(&conn).expect("Failed to run migrations on test database");
 
         Self {
             base_url: base_url.to_string(),
@@ -51,18 +40,15 @@ impl TestDB {
     }
 
     fn connect(&self) -> PgConnection {
-        PgConnection::establish(
-            &format!("{}/{}", self.base_url, self.db_name))
+        PgConnection::establish(&format!("{}/{}", self.base_url, self.db_name))
             .expect("Failed to connect to database")
     }
 }
 
 impl Drop for TestDB {
-
     fn drop(&mut self) {
         let pg_url = format!("{}/postgres", self.base_url);
-        let conn = PgConnection::establish(&pg_url)
-            .expect("Failed to connect to database");
+        let conn = PgConnection::establish(&pg_url).expect("Failed to connect to database");
 
         let disconnect_users = format!(
             "SELECT pg_terminate_backend(pid)
@@ -74,11 +60,9 @@ WHERE datname = '{}';",
             .execute(&conn)
             .unwrap();
 
-        diesel::sql_query(
-            format!("DROP DATABASE {}", self.db_name).as_str())
+        diesel::sql_query(format!("DROP DATABASE {}", self.db_name).as_str())
             .execute(&conn)
             .expect("Failed to drop database");
-
     }
 }
 
@@ -90,7 +74,7 @@ fn dummy_database() {
 
 #[test]
 fn add_user() {
-    let db =TestDB::new("test_adduser");
+    let db = TestDB::new("test_adduser");
     let conn = db.connect();
     db::add_user(&conn, 1234, "gw2ID").expect("Failed to add user");
 }
@@ -99,8 +83,7 @@ fn add_user() {
 fn get_user_inval() {
     let db = TestDB::new("test_getuserinval");
     let conn = db.connect();
-    db::get_user(&conn, 0)
-        .expect_err("Should not return a user");
+    db::get_user(&conn, 0).expect_err("Should not return a user");
 }
 
 #[test]
@@ -110,10 +93,8 @@ fn add_get_user() {
 
     let d_id = std::u64::MAX;
     let g_id = "MAX user";
-    let insert = db::add_user(&conn, std::u64::MAX, g_id)
-        .expect("Failed to add user");
-    let read = db::get_user(&conn, d_id)
-        .expect("Failed to read added user");
+    let insert = db::add_user(&conn, std::u64::MAX, g_id).expect("Failed to add user");
+    let read = db::get_user(&conn, d_id).expect("Failed to read added user");
 
     assert_eq!(d_id, insert.discord_id());
     assert_eq!(g_id, insert.gw2_id);
@@ -122,10 +103,8 @@ fn add_get_user() {
 
     let d_id = std::u64::MIN;
     let g_id = "MIN user";
-    let insert = db::add_user(&conn, std::u64::MIN, g_id)
-        .expect("Failed to add user");
-    let read = db::get_user(&conn, d_id)
-        .expect("Failed to read added user");
+    let insert = db::add_user(&conn, std::u64::MIN, g_id).expect("Failed to add user");
+    let read = db::get_user(&conn, d_id).expect("Failed to read added user");
 
     assert_eq!(d_id, insert.discord_id());
     assert_eq!(g_id, insert.gw2_id);
@@ -176,20 +155,23 @@ fn open_trainings() {
     let t1 = db::add_training(
         &conn,
         "Beginner Training",
-        &NaiveDate::from_ymd(2021, 04, 20).and_hms(19, 00, 00)
-        ).unwrap();
+        &NaiveDate::from_ymd(2021, 04, 20).and_hms(19, 00, 00),
+    )
+    .unwrap();
 
     let t2 = db::add_training(
         &conn,
         "Intermediate Training",
-        &NaiveDate::from_ymd(2021, 06, 20).and_hms(19, 00, 00)
-        ).unwrap();
+        &NaiveDate::from_ymd(2021, 06, 20).and_hms(19, 00, 00),
+    )
+    .unwrap();
 
     let t3 = db::add_training(
         &conn,
         "Advanced Training",
-        &NaiveDate::from_ymd(2021, 08, 20).and_hms(19, 00, 00)
-        ).unwrap();
+        &NaiveDate::from_ymd(2021, 08, 20).and_hms(19, 00, 00),
+    )
+    .unwrap();
 
     assert_eq!(0, db::get_open_trainings(&conn).unwrap().len());
 
@@ -236,8 +218,9 @@ fn signup() {
     let training = db::add_training(
         &conn,
         "Some Training",
-        &NaiveDate::from_ymd(2021, 04, 19).and_hms(09, 21, 30)
-        ).unwrap();
+        &NaiveDate::from_ymd(2021, 04, 19).and_hms(09, 21, 30),
+    )
+    .unwrap();
 
     let signup1 = db::add_signup(&conn, &user1, &training).unwrap();
     let signup2 = db::add_signup(&conn, &user2, &training).unwrap();

@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate diesel;
-extern crate serenity;
 extern crate dotenv;
+extern crate serenity;
 
-pub mod db;
 pub mod commands;
+pub mod db;

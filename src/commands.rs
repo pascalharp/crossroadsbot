@@ -1,18 +1,11 @@
-use serenity::{
-    prelude::*,
-    framework::standard::{
-        macros::{group,check},
-    },
-    model::prelude::*,
-    collector::message_collector::*,
-};
-use std::{
-    sync::Arc,
-    time::Duration,
-    error::Error,
-    fmt,
-};
 use dashmap::DashSet;
+use serenity::{
+    collector::message_collector::*,
+    framework::standard::macros::{check, group},
+    model::prelude::*,
+    prelude::*,
+};
+use std::{error::Error, fmt, sync::Arc, time::Duration};
 
 // --- Defaults ---
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60 * 3);
@@ -34,13 +27,13 @@ pub struct LogginConfig {
 pub struct Conversation<'a> {
     lock: Arc<DashSet<UserId>>,
     pub user: &'a User,
-    pub chan: PrivateChannel
+    pub chan: PrivateChannel,
 }
 
 #[derive(Debug)]
 pub enum ConversationError {
     ConversationLocked,
-    NoDmChannel
+    NoDmChannel,
 }
 
 impl fmt::Display for ConversationError {
@@ -54,9 +47,11 @@ impl fmt::Display for ConversationError {
 
 impl Error for ConversationError {}
 
-impl<'a> Conversation<'a>  {
-    pub async fn start(ctx: &'a Context, user: &'a User) -> Result<Conversation<'a>, ConversationError> {
-
+impl<'a> Conversation<'a> {
+    pub async fn start(
+        ctx: &'a Context,
+        user: &'a User,
+    ) -> Result<Conversation<'a>, ConversationError> {
         let lock = {
             let data_read = ctx.data.read().await;
             data_read.get::<ConversationLock>().unwrap().clone()
@@ -65,11 +60,11 @@ impl<'a> Conversation<'a>  {
         if lock.insert(user.id) {
             // Check if we can open a dm channel
             if let Ok(chan) = user.create_dm_channel(ctx).await {
-                return Ok( Conversation {
-                            lock: lock,
-                            user: user,
-                            chan: chan
-                        });
+                return Ok(Conversation {
+                    lock: lock,
+                    user: user,
+                    chan: chan,
+                });
             } else {
                 // no private channel. Unlock again
                 lock.remove(&user.id);
@@ -82,13 +77,17 @@ impl<'a> Conversation<'a>  {
 
     // Consumes the conversation
     pub async fn timeout_msg(self, ctx: &Context) -> serenity::Result<Message> {
-        self.chan.send_message(&ctx.http, |m| {
-            m.content("Conversation timed out")
-        }).await
+        self.chan
+            .send_message(&ctx.http, |m| m.content("Conversation timed out"))
+            .await
     }
 
     // Consumes the conversation
-    pub async fn abort(self, ctx: &Context, msg: Option<&str>) -> serenity::Result<Option<Message>> {
+    pub async fn abort(
+        self,
+        ctx: &Context,
+        msg: Option<&str>,
+    ) -> serenity::Result<Option<Message>> {
         if let Some(msg) = msg {
             let msg = self.chan.say(ctx, msg).await?;
             return Ok(Some(msg));
@@ -97,14 +96,16 @@ impl<'a> Conversation<'a>  {
     }
 
     pub async fn await_reply(&self, ctx: &Context) -> Option<Arc<Message>> {
-        self.user.await_reply(ctx)
+        self.user
+            .await_reply(ctx)
             .channel_id(self.chan.id)
             .timeout(DEFAULT_TIMEOUT)
             .await
     }
 
     pub async fn await_replies(&self, ctx: &Context) -> MessageCollector {
-        self.user.await_replies(ctx)
+        self.user
+            .await_replies(ctx)
             .channel_id(self.chan.id)
             .timeout(DEFAULT_TIMEOUT)
             .await
@@ -112,7 +113,6 @@ impl<'a> Conversation<'a>  {
 }
 
 impl<'a> Drop for Conversation<'a> {
-
     fn drop(&mut self) {
         self.lock.remove(&self.user.id);
     }
@@ -137,7 +137,7 @@ impl TypeMapKey for LogginConfigData {
 mod misc;
 use misc::*;
 #[group]
-#[commands(ping,dudu)]
+#[commands(ping, dudu)]
 struct Misc;
 
 mod signup;
@@ -150,5 +150,12 @@ mod config;
 use config::*;
 #[group]
 #[only_in(guilds)]
-#[commands(set_log_info,set_log_error,add_role,rm_role,list_roles,add_training)]
+#[commands(
+    set_log_info,
+    set_log_error,
+    add_role,
+    rm_role,
+    list_roles,
+    add_training
+)]
 struct Config;
