@@ -11,7 +11,6 @@ use serenity::framework::standard::{
 use serenity::futures::prelude::*;
 use serenity::collector::reaction_collector::ReactionAction;
 use super::{
-    Conversation,
     ConfigValuesData,
     CHECK_EMOJI,
     CROSS_EMOJI,
@@ -123,53 +122,27 @@ pub async fn set_log_error(ctx: &Context, msg: &Message, mut args: Args) -> Comm
 }
 
 // --- Roles ---
+const ADD_ROLE_USAGE: &str = "Usage example: add_role \"Power DPS\" pdps";
 #[command]
 #[checks(manager_guild)]
-pub async fn add_role(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
+pub async fn add_role(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 
-    let mut role_name = String::new();
-    let mut role_repr = String::new();
+    let author = &msg.author;
 
-    let conv = Conversation::start(ctx, &msg.author).await?;
-    // Ask for Role name
-    conv.chan.say(ctx, format!("{}\n{}",
-            "Please enter the full name of the Role",
-            "Example: Power DPS"
-            )).await?;
-
-    // Get role name
-    if let Some(reply) = conv.await_reply(ctx).await {
-        role_name.push_str(&reply.content);
-        reply.react(ctx, ReactionType::from(CHECK_EMOJI)).await?;
-    } else {
-        conv.timeout_msg(ctx).await?;
-        return Ok(());
-    }
-
-    // Ask for repr
-    conv.chan.say(ctx, format!("{}\n{}",
-            "Please enter the short representation for the role (no spaces allowed)",
-            "Example: pdps"
-            )).await?;
-
-    // Get repr
-    let mut replies = conv.await_replies(ctx).await;
-    loop {
-        if let Some(reply) = replies.next().await {
-            if reply.content.contains(" ") {
-                conv.chan.say(ctx, "I said no spaces!!!!\nTry again:").await?;
-            } else {
-                role_repr.push_str(&reply.content);
-                reply.react(ctx, CHECK_EMOJI).await?;
-                break;
-            }
-        } else {
-            conv.timeout_msg(ctx).await?;
+    let role_name = match args.single_quoted::<String>() {
+        Err(_) => {
+            msg.reply(ctx, ADD_ROLE_USAGE).await?;
             return Ok(());
-        }
-    }
-
-    let mut msg = conv.chan.say(ctx, "Loading available emojis....").await?;
+        },
+        Ok(r) => r
+    };
+    let role_repr = match args.single_quoted::<String>() {
+        Err(_) => {
+            msg.reply(ctx, ADD_ROLE_USAGE).await?;
+            return Ok(());
+        },
+        Ok(r) => r
+    };
 
     // load all roles from db
     let roles = db::get_roles(&db::connect())?;
@@ -195,24 +168,34 @@ pub async fn add_role(ctx: &Context, msg: &Message, mut _args: Args) -> CommandR
         .collect();
 
     if available.is_empty() {
-        conv.abort(ctx, Some("No more emojis for roles available")).await?;
+        msg.reply(ctx, "No more emojis for roles available").await?;
         return Ok(());
     }
 
+    let mut msg = msg.channel_id.send_message(ctx, |m| {
+        m.embed( |e| {
+            e.description("New Role");
+            e.field("Full role name", &role_name, true);
+            e.field("Short role emoji identifier", &role_repr, true);
+            e.footer( |f| {
+                f.text(format!("Choose an emoji for the role. {} to abort", CROSS_EMOJI))
+            });
+            e
+        })
+    }).await?;
+
+    msg.react(ctx, CROSS_EMOJI).await?;
     // Present all available emojis
     for e in available.clone() {
         msg.react(ctx, ReactionType::from(e)).await?;
     }
 
-    // Ask for emoji to represent role
-    msg.edit(ctx, |m| {
-        m.content("Please react to this message with the emoji to represent this role (has to be a guild emoji)")
-    }).await?;
-
     // Wait for emoji
     let emoji = msg.await_reaction(ctx)
         .timeout(DEFAULT_TIMEOUT)
+        .author_id(author.id)
         .filter(move |r| {
+            if r.emoji == ReactionType::from(CROSS_EMOJI) { return true }
             match r.emoji {
                 ReactionType::Custom {animated:_, id, name:_} => {
                     available.iter().map( |e| {
@@ -226,32 +209,30 @@ pub async fn add_role(ctx: &Context, msg: &Message, mut _args: Args) -> CommandR
 
     let emoji_id = match emoji {
         None => {
-            conv.timeout_msg(ctx).await?;
+            msg.reply(ctx, "Timed out").await?;
             return Ok(());
         },
         Some(r) => {
             match r.as_inner_ref().emoji {
                 ReactionType::Custom {animated:_, id, name:_} => id,
-                _ => return Ok(()), // Should never occur since filtered already
+                _ => return Err("Unexpected emoji".into()), // Should never occur since filtered already
             }
         }
     };
 
-    let msg = conv.chan.send_message(ctx, |m| {
-        m.embed(|e| {
-            e.title("Summary");
-            e.field("Full Role Name", &role_name, false);
-            e.field("Representing name", &role_repr, false);
-            e.field("Role Emoji", &emoji_id, false);
-            e.footer(|f| {
-                f.text(format!("React with {} to add the role to the database or with {} to abort",
-                               CHECK_EMOJI,
-                               CROSS_EMOJI,
-                               ))
+    msg.delete_reactions(ctx).await?;
+
+    msg.edit(ctx, |m| {
+        m.embed( |e| {
+            e.description("New Role");
+            e.field("Full role name", &role_name, true);
+            e.field("Short role emoji identifier", &role_repr, true);
+            e.field("Role Emoji", Mention::from(emoji_id), true);
+            e.footer( |f| {
+                f.text(format!("Choose an emoji for the role. {} to abort", CROSS_EMOJI))
             });
             e
-        });
-        m
+        })
     }).await?;
 
     msg.react(ctx, CHECK_EMOJI).await?;
@@ -270,15 +251,15 @@ pub async fn add_role(ctx: &Context, msg: &Message, mut _args: Args) -> CommandR
             };
             match res {
                 Ok(_) => {
-                    conv.chan.say(ctx, "Role added to database").await?;
+                    msg.reply(ctx, "Role added to database").await?;
                 }
                 Err(e) => {
-                    conv.chan.say(ctx, format!("Error adding role to database:\n{}", e)).await?;
+                    msg.reply(ctx, format!("Error adding role to database:\n{}", e)).await?;
                 }
             }
         }
     } else {
-        conv.timeout_msg(ctx).await?;
+        msg.reply(ctx, "Timed out").await?;
         return Ok(());
     }
 
