@@ -56,6 +56,7 @@ struct RoleEmoji {
     emoji: Emoji,
 }
 
+// --- Helper functions ---
 /// Returns a Hashmap of of Emojis and Roles that overlap with EmojiId as key
 async fn role_emojis(ctx: &Context, roles: Vec<db::models::Role>)
     -> BoxResult<HashMap<EmojiId, RoleEmoji>> {
@@ -78,6 +79,50 @@ async fn role_emojis(ctx: &Context, roles: Vec<db::models::Role>)
         Ok(map)
 }
 
+// --- Logging config ---
+#[command]
+#[checks(manager_guild)]
+pub async fn set_log_info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let channel_id: ChannelId = match args.single::<ChannelId>() {
+        Err(_) => {
+            msg.reply(ctx, "No valid channel provided").await?;
+            return Ok(());
+        },
+        Ok(c) => c
+    };
+
+    {
+        let write_lock = ctx.data.read().await.get::<super::LogginConfigData>().unwrap().clone();
+        write_lock.write().await.info = Some(channel_id);
+    }
+
+    msg.react(ctx, CHECK_EMOJI).await?;
+    Ok(())
+
+}
+
+#[command]
+#[checks(manager_guild)]
+pub async fn set_log_error(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let channel_id: ChannelId = match args.single::<ChannelId>() {
+        Err(_) => {
+            msg.reply(ctx, "No valid channel provided").await?;
+            return Ok(());
+        },
+        Ok(c) => c
+    };
+
+    {
+        let write_lock = ctx.data.read().await.get::<super::LogginConfigData>().unwrap().clone();
+        write_lock.write().await.error = Some(channel_id);
+    }
+
+    msg.react(ctx, CHECK_EMOJI).await?;
+    Ok(())
+
+}
+
+// --- Roles ---
 #[command]
 #[checks(manager_guild)]
 pub async fn add_role(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {

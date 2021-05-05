@@ -2,8 +2,6 @@ use serenity::{
     prelude::*,
     framework::standard::{
         macros::{group,check},
-        CommandOptions,
-        Reason,
     },
     model::prelude::*,
     collector::message_collector::*,
@@ -25,6 +23,11 @@ pub const ENVELOP_EMOJI: char = '✉';
 // --- Global Config ---
 pub struct ConfigValues {
     pub manager_guild_id: GuildId,
+}
+
+pub struct LogginConfig {
+    pub info: Option<ChannelId>,
+    pub error: Option<ChannelId>,
 }
 
 // --- Conversation ---
@@ -126,6 +129,11 @@ impl TypeMapKey for ConfigValuesData {
     type Value = Arc<ConfigValues>;
 }
 
+pub struct LogginConfigData;
+impl TypeMapKey for LogginConfigData {
+    type Value = Arc<RwLock<LogginConfig>>;
+}
+
 mod misc;
 use misc::*;
 #[group]
@@ -142,5 +150,5 @@ mod config;
 use config::*;
 #[group]
 #[only_in(guilds)]
-#[commands(add_role,rm_role,list_roles,add_training)]
+#[commands(set_log_info,set_log_error,add_role,rm_role,list_roles,add_training)]
 struct Config;

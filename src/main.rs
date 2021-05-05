@@ -41,10 +41,56 @@ impl EventHandler for Handler {
 }
 
 #[hook]
-async fn after(_ctx: &Context, _msg: &Message, command_name: &str, command_result: CommandResult) {
+async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result: CommandResult) {
+
+    let author = &msg.author;
+    // Log to subscriber
     match command_result {
-        Ok(()) => info!("Processed command '{}'", command_name),
-        Err(why) => error!("Command '{}' returned error {:?}", command_name, why),
+        Ok(()) => {
+            info!("{}", format!("{} used command {}: {}", author.id, command_name, "OK"));
+            let log_info = {
+                ctx.data
+                    .read().await
+                    .get::<commands::LogginConfigData>()
+                    .unwrap()
+                    .clone()
+                    .read().await
+                    .info
+            };
+            if let Some(chan) = log_info {
+                chan.send_message(ctx, |m| {
+                    m.embed( |e| {
+                        e.description("[INFO] Command used");
+                        e.field("User", Mention::from(author), true);
+                        e.field("Command", command_name, true);
+                        e
+                    })
+                }).await.ok();
+            }
+        },
+        Err(why) => {
+            error!("{}", format!("{} used command {}: {}", author.name, command_name, why));
+            let err_info = {
+                ctx.data
+                    .read().await
+                    .get::<commands::LogginConfigData>()
+                    .unwrap()
+                    .clone()
+                    .read().await
+                    .error
+            };
+            if let Some(chan) = err_info {
+                chan.send_message(ctx, |m| {
+                    m.embed( |e| {
+                        e.description("[ERROR] Command failed");
+                        e.field("User", Mention::from(author), true);
+                        e.field("Command", command_name, true);
+                        e.field("Error", why, false);
+                        e
+                    })
+                }).await.ok();
+            }
+        },
     }
 }
 
@@ -99,6 +145,11 @@ async fn main() {
             commands::ConfigValues {
                 manager_guild_id: manager_guild_id,
             }));
+        data.insert::<commands::LogginConfigData>(Arc::new(RwLock::new(
+                    commands::LogginConfig {
+                        info: None,
+                        error: None
+                    })));
     }
 
     let shard_manager = client.shard_manager.clone();
