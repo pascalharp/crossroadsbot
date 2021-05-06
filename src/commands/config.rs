@@ -1,9 +1,9 @@
-use super::{ConfigValuesData, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT};
+use super::{ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT};
 use crate::db;
 use serenity::collector::reaction_collector::ReactionAction;
 use serenity::framework::standard::{
-    macros::{check, command},
-    ArgError, Args, CommandOptions, CommandResult, Reason,
+    macros::{command},
+    ArgError, Args, CommandResult, Reason,
 };
 use serenity::futures::prelude::*;
 use serenity::model::prelude::*;
@@ -14,42 +14,6 @@ use std::{
 };
 
 type BoxResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-
-// --- Manager Guild Check ---
-#[check]
-#[name = "manager_guild"]
-async fn manager_guild_check(
-    ctx: &Context,
-    msg: &Message,
-    _: &mut Args,
-    _: &CommandOptions,
-) -> Result<(), Reason> {
-    let msg_guild_id = match msg.guild_id {
-        None => {
-            return Err(Reason::Log(
-                "Manager command outside of manager guild".to_string(),
-            ));
-        }
-        Some(g) => g,
-    };
-
-    let manager_guild_id = {
-        ctx.data
-            .read()
-            .await
-            .get::<ConfigValuesData>()
-            .unwrap()
-            .manager_guild_id
-    };
-
-    if msg_guild_id != manager_guild_id {
-        return Err(Reason::Log(
-            "Manager command outside of manager guild".to_string(),
-        ));
-    }
-
-    Ok(())
-}
 
 struct RoleEmoji {
     role: db::models::Role,
@@ -69,7 +33,7 @@ async fn role_emojis(
         .await
         .get::<ConfigValuesData>()
         .unwrap()
-        .manager_guild_id;
+        .emoji_guild_id;
     let emoji_guild = Guild::get(ctx, emojis_guild_id).await?;
     let emojis = emoji_guild.emojis;
 
@@ -88,7 +52,7 @@ async fn role_emojis(
 
 // --- Logging config ---
 #[command]
-#[checks(manager_guild)]
+#[checks(admin_role)]
 pub async fn set_log_info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let channel_id: ChannelId = match args.single::<ChannelId>() {
         Err(_) => {
@@ -114,7 +78,7 @@ pub async fn set_log_info(ctx: &Context, msg: &Message, mut args: Args) -> Comma
 }
 
 #[command]
-#[checks(manager_guild)]
+#[checks(admin_role)]
 pub async fn set_log_error(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let channel_id: ChannelId = match args.single::<ChannelId>() {
         Err(_) => {
@@ -142,7 +106,7 @@ pub async fn set_log_error(ctx: &Context, msg: &Message, mut args: Args) -> Comm
 // --- Roles ---
 const ADD_ROLE_USAGE: &str = "Usage example: add_role \"Power DPS\" pdps";
 #[command]
-#[checks(manager_guild)]
+#[checks(admin_role)]
 pub async fn add_role(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let author = &msg.author;
 
@@ -175,7 +139,7 @@ pub async fn add_role(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
         .await
         .get::<ConfigValuesData>()
         .unwrap()
-        .manager_guild_id;
+        .emoji_guild_id;
     let emoji_guild = Guild::get(ctx, gid).await?;
 
     // Remove already used emojis
@@ -212,7 +176,7 @@ pub async fn add_role(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
     msg.react(ctx, CROSS_EMOJI).await?;
     // Present all available emojis
     for e in available.clone() {
-        msg.react(ctx, ReactionType::from(e)).await?;
+        msg.react(ctx, e).await?;
     }
 
     // Wait for emoji
@@ -266,8 +230,8 @@ pub async fn add_role(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             e.field("Role Emoji", Mention::from(emoji_id), true);
             e.footer(|f| {
                 f.text(format!(
-                    "Choose an emoji for the role. {} to abort",
-                    CROSS_EMOJI
+                    "{} to finish. {} to abort",
+                    CHECK_EMOJI, CROSS_EMOJI
                 ))
             });
             e
@@ -302,6 +266,9 @@ pub async fn add_role(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
                         .await?;
                 }
             }
+        } else if e.as_inner_ref().emoji == ReactionType::from(CROSS_EMOJI) {
+            msg.reply(ctx, "Aborted").await?;
+            return Ok(());
         }
     } else {
         msg.reply(ctx, "Timed out").await?;
@@ -312,7 +279,7 @@ pub async fn add_role(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
 }
 
 #[command]
-#[checks(manager_guild)]
+#[checks(admin_role)]
 pub async fn list_roles(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
     let roles = db::get_roles(&db::connect())?;
 
@@ -340,7 +307,7 @@ pub async fn list_roles(ctx: &Context, msg: &Message, mut _args: Args) -> Comman
 }
 
 #[command]
-#[checks(manager_guild)]
+#[checks(admin_role)]
 pub async fn rm_role(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let role_repr = match args.single::<String>() {
         Ok(r) => r,
@@ -354,7 +321,8 @@ pub async fn rm_role(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
     let role = match role {
         Ok(r) => r,
         Err(e) => {
-            msg.reply(ctx, format!("Unable to find role: {}", &role_repr)).await?;
+            msg.reply(ctx, format!("Unable to find role: {}", &role_repr))
+                .await?;
             return Err(e.into());
         }
     };
@@ -415,7 +383,7 @@ async fn update_add_training(
 }
 
 #[command]
-#[checks(manager_guild)]
+#[checks(admin_role)]
 pub async fn add_training(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let training_name = match args.single_quoted::<String>() {
         Ok(r) => r,

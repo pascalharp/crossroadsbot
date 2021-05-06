@@ -1,7 +1,10 @@
 use dashmap::DashSet;
 use serenity::{
     collector::message_collector::*,
-    framework::standard::macros::{check, group},
+    framework::standard::{
+        macros::{check, group},
+        Args, CommandOptions, Reason,
+    },
     model::prelude::*,
     prelude::*,
 };
@@ -15,12 +18,31 @@ pub const ENVELOP_EMOJI: char = '✉';
 
 // --- Global Config ---
 pub struct ConfigValues {
-    pub manager_guild_id: GuildId,
+    pub main_guild_id: GuildId,
+    pub admin_role_id: RoleId,
+    pub squadmaker_role_id: RoleId,
+    pub emoji_guild_id: GuildId,
 }
 
 pub struct LogginConfig {
     pub info: Option<ChannelId>,
     pub error: Option<ChannelId>,
+}
+
+// --- Global Data ---
+pub struct ConversationLock;
+impl TypeMapKey for ConversationLock {
+    type Value = Arc<DashSet<UserId>>;
+}
+
+pub struct ConfigValuesData;
+impl TypeMapKey for ConfigValuesData {
+    type Value = Arc<ConfigValues>;
+}
+
+pub struct LogginConfigData;
+impl TypeMapKey for LogginConfigData {
+    type Value = Arc<RwLock<LogginConfig>>;
 }
 
 // --- Conversation ---
@@ -118,22 +140,19 @@ impl<'a> Drop for Conversation<'a> {
     }
 }
 
-// --- Global Data ---
-pub struct ConversationLock;
-impl TypeMapKey for ConversationLock {
-    type Value = Arc<DashSet<UserId>>;
+// --- Checks ---
+#[check]
+#[name = "admin_role"]
+async fn admin_rol_check(
+    ctx: &Context,
+    msg: &Message,
+    _: &mut Args,
+    _: &CommandOptions,
+) -> Result<(), Reason> {
+    Ok(())
 }
 
-pub struct ConfigValuesData;
-impl TypeMapKey for ConfigValuesData {
-    type Value = Arc<ConfigValues>;
-}
-
-pub struct LogginConfigData;
-impl TypeMapKey for LogginConfigData {
-    type Value = Arc<RwLock<LogginConfig>>;
-}
-
+// --- Command Setup ---
 mod misc;
 use misc::*;
 #[group]

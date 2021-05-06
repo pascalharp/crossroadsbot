@@ -113,11 +113,32 @@ async fn main() {
 
     let token = env::var("DISCORD_TOKEN").expect("discord token not set");
 
-    let manager_guild_id = GuildId::from(
-        env::var("MANAGER_GUILD_ID")
-            .expect("manager guild id not set")
+    let main_guild_id = GuildId::from(
+        env::var("MAIN_GUILD_ID")
+            .expect("MAIN_GUILD_ID not set")
             .parse::<u64>()
             .expect("Failed to parse manager guild id"),
+    );
+
+    let emoji_guild_id = GuildId::from(
+        env::var("EMOJI_GUILD_ID")
+            .expect("EMOJI_GUILD_ID not set")
+            .parse::<u64>()
+            .expect("Failed to parse emoji guild id"),
+    );
+
+    let admin_role_id = RoleId::from(
+        env::var("ADMIN_ROLE_ID")
+            .expect("ADMIN_ROLE_ID not set")
+            .parse::<u64>()
+            .expect("Failed to parse admin role id"),
+    );
+
+    let squadmaker_role_id = RoleId::from(
+        env::var("SQUADMAKER_ROLE_ID")
+            .expect("SQUADMAKER_ROLE_ID not set")
+            .parse::<u64>()
+            .expect("Failed to parse squadmaker role id"),
     );
 
     let framework = StandardFramework::new()
@@ -137,7 +158,10 @@ async fn main() {
         let mut data = client.data.write().await;
         data.insert::<commands::ConversationLock>(Arc::new(DashSet::new()));
         data.insert::<commands::ConfigValuesData>(Arc::new(commands::ConfigValues {
-            manager_guild_id: manager_guild_id,
+            main_guild_id: main_guild_id,
+            admin_role_id: admin_role_id,
+            squadmaker_role_id: squadmaker_role_id,
+            emoji_guild_id: emoji_guild_id,
         }));
         data.insert::<commands::LogginConfigData>(Arc::new(RwLock::new(commands::LogginConfig {
             info: None,

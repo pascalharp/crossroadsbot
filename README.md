@@ -14,6 +14,15 @@ Example: *DATABASE\_URL=postgres://username:password@localhost/crossroad*
 ### DISCORD\_TOKEN
 The discord bot token to be used. [Check here](https://discord.com/developers/docs/intro) for more
 information.
+### MAIN\_GUILD\_ID
+The main discord guild id the bot will be used on. This is also the discord where role
+permissions are taken from
+### EMOJI\_GUILD\_ID
+The discord guild the bot will load and use custom emojis from.
+### ADMIN\_ROLE\_ID
+The role id on MAIN\_GUILD\_ID that has access to all commands
+### SQUADMAKER\_ROLE\_ID
+The role id on MAIN\_GUILD\_ID that has access selected commands
 
 ## Environment variables (dev only)
 ### TEST\_BASE\_URL
