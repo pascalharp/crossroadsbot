@@ -144,7 +144,9 @@ async fn main() {
     let framework = StandardFramework::new()
         .configure(|c| c.prefix("~"))
         .after(after)
+        .help(&commands::HELP_CMD)
         .group(&commands::MISC_GROUP)
+        .group(&commands::ROLE_GROUP)
         .group(&commands::SIGNUP_GROUP)
         .group(&commands::CONFIG_GROUP);
 

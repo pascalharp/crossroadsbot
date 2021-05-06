@@ -2,13 +2,14 @@ use dashmap::DashSet;
 use serenity::{
     collector::message_collector::*,
     framework::standard::{
-        macros::{check, group},
-        Args, CommandOptions, Reason,
+        help_commands,
+        macros::{check, group, help},
+        Args, CommandOptions, CommandResult, HelpOptions, Reason, CommandGroup
     },
     model::prelude::*,
     prelude::*,
 };
-use std::{error::Error, fmt, sync::Arc, time::Duration};
+use std::{collections::HashSet, error::Error, fmt, sync::Arc, time::Duration};
 
 // --- Defaults ---
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60 * 3);
@@ -149,23 +150,45 @@ async fn admin_rol_check(
     _: &mut Args,
     _: &CommandOptions,
 ) -> Result<(), Reason> {
-
     let (g, r) = {
-        let config = ctx.data.read().await.get::<ConfigValuesData>().unwrap().clone();
+        let config = ctx
+            .data
+            .read()
+            .await
+            .get::<ConfigValuesData>()
+            .unwrap()
+            .clone();
         (config.main_guild_id, config.admin_role_id)
     };
 
     match msg.author.has_role(ctx, g, r).await {
-        Ok(b) => {
-            match b {
-                true => Ok(()),
-                false => Err(Reason::Log(String::from("No permissions"))),
-            }
-            }
-        Err(_) => {
-            Err(Reason::Unknown)
-        }
+        Ok(b) => match b {
+            true => Ok(()),
+            false => Err(Reason::Log(String::from("No permissions"))),
+        },
+        Err(_) => Err(Reason::Unknown),
     }
+}
+
+#[help]
+#[individual_command_tip = "Hello!\n\n\
+If you want more information about a specific command, just pass the command as argument."]
+#[command_not_found_text = "Could not find: `{}`."]
+#[max_levenshtein_distance(3)]
+#[indention_prefix = "+"]
+#[lacking_conditions = "hide"]
+#[strikethrough_commands_tip_in_guild = ""]
+#[strikethrough_commands_tip_in_dm = ""]
+async fn help_cmd(
+    context: &Context,
+    msg: &Message,
+    args: Args,
+    help_options: &'static HelpOptions,
+    groups: &[&'static CommandGroup],
+    owners: HashSet<UserId>,
+) -> CommandResult {
+    let _ = help_commands::with_embeds(context, msg, args, help_options, groups, owners).await;
+    Ok(())
 }
 
 // --- Command Setup ---
@@ -188,9 +211,9 @@ use config::*;
 #[commands(
     set_log_info,
     set_log_error,
-    add_role,
-    rm_role,
-    list_roles,
-    add_training
+    training
 )]
 struct Config;
+
+mod role;
+pub use role::ROLE_GROUP as ROLE_GROUP;
