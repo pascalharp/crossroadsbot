@@ -1,4 +1,7 @@
 table! {
+    use diesel::sql_types::*;
+    use crate::db::models::*;
+
     roles (id) {
         id -> Int4,
         title -> Text,
@@ -9,6 +12,9 @@ table! {
 }
 
 table! {
+    use diesel::sql_types::*;
+    use crate::db::models::*;
+
     signup_roles (id) {
         id -> Int4,
         signup_id -> Int4,
@@ -17,6 +23,9 @@ table! {
 }
 
 table! {
+    use diesel::sql_types::*;
+    use crate::db::models::*;
+
     signups (id) {
         id -> Int4,
         user_id -> Int4,
@@ -25,6 +34,9 @@ table! {
 }
 
 table! {
+    use diesel::sql_types::*;
+    use crate::db::models::*;
+
     training_roles (id) {
         id -> Int4,
         training_id -> Int4,
@@ -33,15 +45,21 @@ table! {
 }
 
 table! {
+    use diesel::sql_types::*;
+    use crate::db::models::*;
+
     trainings (id) {
         id -> Int4,
         title -> Text,
         date -> Timestamp,
-        open -> Bool,
+        state -> Training_state,
     }
 }
 
 table! {
+    use diesel::sql_types::*;
+    use crate::db::models::*;
+
     users (id) {
         id -> Int4,
         discord_id -> Int8,

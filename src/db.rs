@@ -66,20 +66,20 @@ pub fn add_training(
 
 pub fn get_open_trainings(conn: &PgConnection) -> QueryResult<Vec<Training>> {
     trainings::table
-        .filter(trainings::open.eq(true))
+        .filter(trainings::state.eq(TrainingState::Open))
         .load::<Training>(conn)
 }
 
 impl Training {
     pub fn open(&self, conn: &PgConnection) -> QueryResult<Training> {
         diesel::update(trainings::table.find(self.id))
-            .set(trainings::open.eq(true))
+            .set(trainings::state.eq(TrainingState::Open))
             .get_result(conn)
     }
 
     pub fn close(&self, conn: &PgConnection) -> QueryResult<Training> {
         diesel::update(trainings::table.find(self.id))
-            .set(trainings::open.eq(false))
+            .set(trainings::state.eq(TrainingState::Open))
             .get_result(conn)
     }
 

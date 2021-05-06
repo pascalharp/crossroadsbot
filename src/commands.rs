@@ -108,10 +108,10 @@ impl<'a> Conversation<'a> {
         };
 
         Ok(Conversation {
-            lock: lock,
+            lock,
             user: &user,
-            chan: chan,
-            msg: msg,
+            chan,
+            msg,
         })
     }
 

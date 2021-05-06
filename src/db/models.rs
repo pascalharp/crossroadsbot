@@ -1,4 +1,6 @@
 use crate::db::schema::{roles, signup_roles, signups, training_roles, trainings, users};
+use diesel_derive_enum::DbEnum;
+use std::fmt;
 
 use chrono::naive::NaiveDateTime;
 
@@ -40,13 +42,34 @@ pub struct NewSignup {
     pub training_id: i32,
 }
 
+#[derive(Debug, DbEnum, PartialEq)]
+#[DieselType = "Training_state"]
+pub enum TrainingState {
+    Created,
+    Open,
+    Closed,
+    Finished,
+}
+
+impl fmt::Display for TrainingState {
+
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TrainingState::Created => write!(f, "created"),
+            TrainingState::Open => write!(f, "open"),
+            TrainingState::Closed => write!(f, "close"),
+            TrainingState::Finished => write!(f, "finished"),
+        }
+    }
+}
+
 #[derive(Identifiable, Queryable, PartialEq, Debug)]
 #[table_name = "trainings"]
 pub struct Training {
     pub id: i32,
     pub title: String,
     pub date: NaiveDateTime,
-    pub open: bool,
+    pub open: TrainingState,
 }
 
 #[derive(Insertable, Debug)]

@@ -302,3 +302,13 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
     Ok(())
 }
+
+#[command]
+pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    Ok(())
+}
+
+#[command]
+pub async fn list(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    Ok(())
+}
