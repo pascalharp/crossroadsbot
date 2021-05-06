@@ -209,13 +209,22 @@ pub async fn add_role(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             return Ok(());
         }
         Some(r) => {
-            match r.as_inner_ref().emoji {
+            match &r.as_inner_ref().emoji {
                 ReactionType::Custom {
                     animated: _,
                     id,
                     name: _,
-                } => id,
-                _ => return Err("Unexpected emoji".into()), // Should never occur since filtered already
+                } => *id,
+                ReactionType::Unicode(s) => {
+                    if *s == String::from(CROSS_EMOJI) {
+                        msg.reply(ctx, "Aborted").await?;
+                        return Ok(());
+                    }
+                    // Should never occur since filtered already filtered
+                    return Err("Unexpected emoji".into());
+                }
+                    // Should never occur since filtered already filtered
+                _ => return Err("Unexpected emoji".into()),
             }
         }
     };
