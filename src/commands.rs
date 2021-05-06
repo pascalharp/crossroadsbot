@@ -149,7 +149,23 @@ async fn admin_rol_check(
     _: &mut Args,
     _: &CommandOptions,
 ) -> Result<(), Reason> {
-    Ok(())
+
+    let (g, r) = {
+        let config = ctx.data.read().await.get::<ConfigValuesData>().unwrap().clone();
+        (config.main_guild_id, config.admin_role_id)
+    };
+
+    match msg.author.has_role(ctx, g, r).await {
+        Ok(b) => {
+            match b {
+                true => Ok(()),
+                false => Err(Reason::Log(String::from("No permissions"))),
+            }
+            }
+        Err(_) => {
+            Err(Reason::Unknown)
+        }
+    }
 }
 
 // --- Command Setup ---
