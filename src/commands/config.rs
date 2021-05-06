@@ -525,7 +525,6 @@ pub async fn add_training(ctx: &Context, msg: &Message, mut args: Args) -> Comma
                 match r.as_ref() {
                     ReactionAction::Added(r) => {
                         if r.emoji == ReactionType::from(CHECK_EMOJI) {
-                            println!("CHECK: {}", r.emoji);
                             break;
                         } else if r.emoji == ReactionType::from(CROSS_EMOJI) {
                             msg.reply(ctx, "Aborted").await?;
