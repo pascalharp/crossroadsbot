@@ -342,7 +342,7 @@ pub async fn list_roles(ctx: &Context, msg: &Message, mut _args: Args) -> Comman
 #[command]
 #[checks(manager_guild)]
 pub async fn rm_role(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let role = match args.single::<String>() {
+    let role_repr = match args.single::<String>() {
         Ok(r) => r,
         Err(_) => {
             msg.reply(ctx, "Usage example: rm_role pdps").await?;
@@ -350,26 +350,16 @@ pub async fn rm_role(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
         }
     };
 
-    let res = db::rm_role(&db::connect(), &role);
-    match res {
-        Ok(1) => {
-            msg.react(ctx, ReactionType::from(CHECK_EMOJI)).await?;
-        }
-        Ok(0) => {
-            msg.reply(ctx, "No role deleted. Check spelling").await?;
-        }
+    let role = db::get_role_by_repr(&db::connect(), &role_repr);
+    let role = match role {
+        Ok(r) => r,
         Err(e) => {
-            msg.reply(ctx, format!("{}", e)).await?;
+            msg.reply(ctx, format!("Unable to find role: {}", &role_repr)).await?;
+            return Err(e.into());
         }
-        _ => {
-            msg.reply(
-                ctx,
-                "Multiple roles deleted. This is unexpected behavior!!!",
-            )
-            .await?;
-        }
-    }
+    };
 
+    role.deactivate(&db::connect())?;
     Ok(())
 }
 
@@ -454,6 +444,14 @@ pub async fn add_training(ctx: &Context, msg: &Message, mut args: Args) -> Comma
         }
     };
 
+    let mut presel_roles: HashSet<String> = HashSet::new();
+
+    for role in args.iter::<String>() {
+        if let Ok(r) = role {
+            presel_roles.insert(r);
+        }
+    }
+
     let mut msg = msg
         .channel_id
         .send_message(ctx, |m| {
@@ -478,6 +476,13 @@ pub async fn add_training(ctx: &Context, msg: &Message, mut args: Args) -> Comma
     let re = Arc::new(role_emojis(ctx, roles).await?);
     // Keep track of what roles are selected by EmojiId
     let mut selected: HashSet<EmojiId> = HashSet::new();
+
+    // Enter pre selected roles
+    for re in re.values() {
+        if presel_roles.contains(&re.role.repr) {
+            selected.insert(re.emoji.id);
+        }
+    }
 
     msg.react(ctx, CHECK_EMOJI).await?;
     msg.react(ctx, CROSS_EMOJI).await?;

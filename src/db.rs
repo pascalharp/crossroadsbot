@@ -134,16 +134,35 @@ pub fn add_role(conn: &PgConnection, title: &str, repr: &str, emoji: u64) -> Que
         .get_result(conn)
 }
 
+impl Role {
+
+    pub fn deactivate(self, conn: &PgConnection) -> QueryResult<Role> {
+        diesel::update(roles::table.find(self.id))
+            .set(roles::active.eq(false))
+            .get_result(conn)
+    }
+}
+
 pub fn rm_role(conn: &PgConnection, repr: &str) -> QueryResult<usize> {
     diesel::delete(roles::table.filter(roles::repr.eq(repr))).execute(conn)
 }
 
 pub fn get_roles(conn: &PgConnection) -> QueryResult<Vec<Role>> {
-    roles::table.load::<Role>(conn)
+    roles::table
+        .filter(roles::active.eq(true))
+        .load::<Role>(conn)
 }
 
 pub fn get_role_by_emoji(conn: &PgConnection, emoji: u64) -> QueryResult<Role> {
     roles::table
+        .filter(roles::active.eq(true))
         .filter(roles::emoji.eq(emoji as i64))
+        .first::<Role>(conn)
+}
+
+pub fn get_role_by_repr(conn: &PgConnection, repr: &str) -> QueryResult<Role> {
+    roles::table
+        .filter(roles::active.eq(true))
+        .filter(roles::repr.eq(repr))
         .first::<Role>(conn)
 }

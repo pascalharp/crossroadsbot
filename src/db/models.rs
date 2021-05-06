@@ -63,6 +63,7 @@ pub struct Role {
     pub title: String,
     pub repr: String,
     pub emoji: i64,
+    pub active: bool,
 }
 
 #[derive(Insertable, Debug)]

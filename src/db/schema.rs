@@ -4,6 +4,7 @@ table! {
         title -> Text,
         repr -> Text,
         emoji -> Int8,
+        active -> Bool,
     }
 }
 
