@@ -1,11 +1,17 @@
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 
-use super::Conversation;
 use crate::db;
 use regex::Regex;
-use serenity::framework::standard::{macros::command, Args, CommandResult};
+use serenity::framework::standard::{
+    macros::{command, group},
+    Args, CommandResult};
 use tracing::{error, info};
+
+
+#[group]
+#[commands(register)]
+struct Signup;
 
 #[command]
 pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {

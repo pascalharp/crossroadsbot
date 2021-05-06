@@ -3,8 +3,8 @@ use serenity::{
     collector::message_collector::*,
     framework::standard::{
         help_commands,
-        macros::{check, group, help},
-        Args, CommandOptions, CommandResult, HelpOptions, Reason, CommandGroup
+        macros::{check, help},
+        Args, CommandGroup, CommandOptions, CommandResult, HelpOptions, Reason,
     },
     model::prelude::*,
     prelude::*,
@@ -51,19 +51,24 @@ pub struct Conversation<'a> {
     lock: Arc<DashSet<UserId>>,
     pub user: &'a User,
     pub chan: PrivateChannel,
+    pub msg: Message,
 }
 
 #[derive(Debug)]
 pub enum ConversationError {
     ConversationLocked,
     NoDmChannel,
+    DmBlocked,
 }
 
 impl fmt::Display for ConversationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ConversationError::ConversationLocked => write!(f, "User already in Conversation"),
-            ConversationError::NoDmChannel => write!(f, "Unable to get DM channel for user"),
+            ConversationError::NoDmChannel => write!(f, "Unable to load DM channel for user"),
+            ConversationError::DmBlocked => {
+                write!(f, "Unable to send message to private DM channel")
+            }
         }
     }
 }
@@ -80,22 +85,34 @@ impl<'a> Conversation<'a> {
             data_read.get::<ConversationLock>().unwrap().clone()
         };
 
-        if lock.insert(user.id) {
-            // Check if we can open a dm channel
-            if let Ok(chan) = user.create_dm_channel(ctx).await {
-                return Ok(Conversation {
-                    lock: lock,
-                    user: user,
-                    chan: chan,
-                });
-            } else {
-                // no private channel. Unlock again
+        if !lock.insert(user.id) {
+            return Err(ConversationError::ConversationLocked);
+        }
+
+        // Check if we can open a dm channel
+        let chan = match user.create_dm_channel(ctx).await {
+            Ok(c) => c,
+            Err(_) => {
                 lock.remove(&user.id);
                 return Err(ConversationError::NoDmChannel);
             }
-        }
+        };
 
-        Err(ConversationError::ConversationLocked)
+        // Send inital message channel
+        let msg = match chan.send_message(ctx, |m| m.content("Loading ...")).await {
+            Ok(m) => m,
+            Err(_) => {
+                lock.remove(&user.id);
+                return Err(ConversationError::DmBlocked);
+            }
+        };
+
+        Ok(Conversation {
+            lock: lock,
+            user: &user,
+            chan: chan,
+            msg: msg,
+        })
     }
 
     // Consumes the conversation
@@ -193,27 +210,16 @@ async fn help_cmd(
 
 // --- Command Setup ---
 mod misc;
-use misc::*;
-#[group]
-#[commands(ping, dudu)]
-struct Misc;
+pub use misc::MISC_GROUP;
 
 mod signup;
-use signup::*;
-#[group]
-#[commands(register)]
-struct Signup;
+pub use signup::SIGNUP_GROUP;
 
 mod config;
-use config::*;
-#[group]
-#[only_in(guilds)]
-#[commands(
-    set_log_info,
-    set_log_error,
-    training
-)]
-struct Config;
+pub use config::CONFIG_GROUP;
 
 mod role;
-pub use role::ROLE_GROUP as ROLE_GROUP;
+pub use role::ROLE_GROUP;
+
+mod training;
+pub use training::TRAINING_GROUP;

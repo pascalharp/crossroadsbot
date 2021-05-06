@@ -146,6 +146,7 @@ async fn main() {
         .after(after)
         .help(&commands::HELP_CMD)
         .group(&commands::MISC_GROUP)
+        .group(&commands::TRAINING_GROUP)
         .group(&commands::ROLE_GROUP)
         .group(&commands::SIGNUP_GROUP)
         .group(&commands::CONFIG_GROUP);
