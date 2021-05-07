@@ -1,5 +1,5 @@
 -- Your SQL goes here
-CREATE TYPE training_state AS ENUM ('created', 'published', 'closed', 'finished');
+CREATE TYPE training_state AS ENUM ('created', 'published', 'closed', 'started' 'finished');
 CREATE TABLE trainings (
 	id SERIAL PRIMARY KEY,
 	title TEXT NOT NULL,

@@ -64,22 +64,25 @@ pub fn add_training(
         .get_result(conn)
 }
 
-pub fn get_open_trainings(conn: &PgConnection) -> QueryResult<Vec<Training>> {
+pub fn get_trainings_by_state(
+    conn: &PgConnection,
+    state: &TrainingState,
+) -> QueryResult<Vec<Training>> {
     trainings::table
-        .filter(trainings::state.eq(TrainingState::Open))
+        .filter(trainings::state.eq(state))
         .load::<Training>(conn)
 }
 
-impl Training {
-    pub fn open(&self, conn: &PgConnection) -> QueryResult<Training> {
-        diesel::update(trainings::table.find(self.id))
-            .set(trainings::state.eq(TrainingState::Open))
-            .get_result(conn)
-    }
+pub fn get_training_by_id(conn: &PgConnection, id: i32) -> QueryResult<Training> {
+    trainings::table
+        .filter(trainings::id.eq(id))
+        .first::<Training>(conn)
+}
 
-    pub fn close(&self, conn: &PgConnection) -> QueryResult<Training> {
+impl Training {
+    pub fn set_state(&self, conn: &PgConnection, state: &TrainingState) -> QueryResult<Training> {
         diesel::update(trainings::table.find(self.id))
-            .set(trainings::state.eq(TrainingState::Open))
+            .set(trainings::state.eq(state))
             .get_result(conn)
     }
 
@@ -135,7 +138,6 @@ pub fn add_role(conn: &PgConnection, title: &str, repr: &str, emoji: u64) -> Que
 }
 
 impl Role {
-
     pub fn deactivate(self, conn: &PgConnection) -> QueryResult<Role> {
         diesel::update(roles::table.find(self.id))
             .set(roles::active.eq(false))

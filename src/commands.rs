@@ -16,6 +16,7 @@ pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60 * 3);
 pub const CHECK_EMOJI: char = '✅';
 pub const CROSS_EMOJI: char = '❌';
 pub const ENVELOP_EMOJI: char = '✉';
+pub const WARNING_EMOJI: char = '⚠';
 
 // --- Global Config ---
 pub struct ConfigValues {

@@ -1,6 +1,9 @@
 use crate::db::schema::{roles, signup_roles, signups, training_roles, trainings, users};
 use diesel_derive_enum::DbEnum;
-use std::fmt;
+use std::{
+    fmt,
+    str,
+};
 
 use chrono::naive::NaiveDateTime;
 
@@ -42,12 +45,13 @@ pub struct NewSignup {
     pub training_id: i32,
 }
 
-#[derive(Debug, DbEnum, PartialEq)]
+#[derive(Debug, DbEnum, PartialEq, PartialOrd)]
 #[DieselType = "Training_state"]
 pub enum TrainingState {
     Created,
-    Open,
+    Published,
     Closed,
+    Started,
     Finished,
 }
 
@@ -56,9 +60,25 @@ impl fmt::Display for TrainingState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TrainingState::Created => write!(f, "created"),
-            TrainingState::Open => write!(f, "open"),
+            TrainingState::Published => write!(f, "published"),
             TrainingState::Closed => write!(f, "close"),
+            TrainingState::Started => write!(f, "started"),
             TrainingState::Finished => write!(f, "finished"),
+        }
+    }
+}
+
+impl str::FromStr for TrainingState {
+    type Err = ();
+
+    fn from_str(input: &str) -> Result<TrainingState, Self::Err> {
+        match input {
+            "created" => Ok(TrainingState::Created),
+            "published" => Ok(TrainingState::Published),
+            "closed" => Ok(TrainingState::Closed),
+            "started" => Ok(TrainingState::Started),
+            "finished" => Ok(TrainingState::Finished),
+            _ => Err(()),
         }
     }
 }

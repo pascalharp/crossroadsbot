@@ -1,5 +1,6 @@
-use super::{ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT};
+use super::{ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, WARNING_EMOJI, DEFAULT_TIMEOUT};
 use crate::db;
+use crate::db::models::TrainingState;
 use serenity::collector::reaction_collector::ReactionAction;
 use serenity::framework::standard::{
     macros::{command, group},
@@ -15,7 +16,7 @@ use std::{
 
 #[group]
 #[prefix = "training"]
-#[commands(add)]
+#[commands(add,set,list)]
 pub struct Training;
 
 type BoxResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -304,11 +305,169 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 }
 
 #[command]
-pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+#[checks(admin_role)]
+#[description = "sets the training with the specified id to the specified state"]
+#[example = "19832 started"]
+#[usage = "training_id ( created | published | closed | started | finished )"]
+pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+
+    let training_id = match args.single::<i32>() {
+        Ok(i) => i,
+        Err(_) => {
+            msg.reply(ctx, "Unable to parse training is").await?;
+            return Ok(());
+        }
+    };
+
+    let state = match args.single::<TrainingState>() {
+        Ok(s) => s,
+        Err(_) => {
+            msg.reply(ctx, "Not a training state").await?;
+            return Ok(());
+        }
+    };
+
+    let conn = db::connect();
+    let training = db::get_training_by_id(&conn, training_id);
+    let training = match training {
+        Ok(t) => t,
+        Err(_) => {
+            msg.reply(ctx, "Failed to load training, double check id").await?;
+            return Ok(());
+        }
+    };
+
+    training.set_state(&conn, &state)?;
+    msg.react(ctx, CHECK_EMOJI).await?;
+
+    Ok(())
+}
+
+async fn list_by_state(ctx: &Context, msg: &Message, state: TrainingState) -> CommandResult {
+    let author_id = msg.author.id;
+    let trainings = {
+        let conn = db::connect();
+        db::get_trainings_by_state(&conn, &state)?
+    };
+
+    // An embed can only have 25 fields. So partition the training to be sent
+    // over multiple messages if needed
+    let partitioned = trainings.rchunks(25).collect::<Vec<_>>();
+
+    if partitioned.is_empty() {
+        msg.reply(ctx, "No trainings found").await?;
+        return Ok(());
+    }
+
+    if partitioned.len() > 1 {
+        let msg = msg.channel_id.send_message(ctx, |m| {
+            m.embed( |f| {
+                f.description("**WARNING**");
+                f.color( (230, 160, 20) );
+                f.field(
+                    format!("{}", WARNING_EMOJI),
+                    "More than 25 trainings found. This will take multiple messages to send. Continue?",
+                    false);
+                f.footer( |f| {
+                    f.text(format!(
+                            "{} to continue. {} to cancel",
+                            CHECK_EMOJI,
+                            CROSS_EMOJI))
+                })
+            })
+        }).await?;
+
+        msg.react(ctx, CHECK_EMOJI).await?;
+        msg.react(ctx, CROSS_EMOJI).await?;
+
+        let react = msg.await_reaction(ctx)
+            .author_id(author_id)
+            .timeout(DEFAULT_TIMEOUT)
+            .filter( |r| {
+                r.emoji == ReactionType::from(CHECK_EMOJI) ||
+                    r.emoji == ReactionType::from(CROSS_EMOJI)
+            });
+
+        match react.await {
+            Some(r) => {
+                if r.as_inner_ref().emoji != ReactionType::from(CHECK_EMOJI) {
+                    msg.reply(ctx, "Aborted").await?;
+                    return Ok(());
+                }
+            }
+            None => {
+                msg.reply(ctx, "Timed out").await?;
+                return Ok(());
+            }
+        }
+    }
+
+    let state = &state;
+    for trainings in partitioned.iter() {
+        msg.channel_id
+            .send_message(ctx, |m| {
+                m.embed(move |f| {
+                    f.title(format!(
+                            "{} Trainings",
+                            match state {
+                                TrainingState::Published => "Published",
+                                TrainingState::Created => "Created",
+                                TrainingState::Closed => "Closed",
+                                TrainingState::Started => "Started",
+                                TrainingState::Finished => "Finished",
+                            }));
+                    for t in trainings.iter() {
+                        f.field(
+                            &t.title,
+                            format!("**Date**: {}\n**Id**: {}", t.date, t.id),
+                            true,
+                        );
+                    }
+                    f
+                })
+            })
+            .await?;
+    }
     Ok(())
 }
 
 #[command]
-pub async fn list(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    Ok(())
+#[description = "List trainings. Lists published trainings by default"]
+#[usage = "[ training_state ]"]
+#[sub_commands(
+    list_created,
+    list_published,
+    list_closed,
+    list_started,
+    list_finished)]
+async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
+    list_by_state(ctx, msg, TrainingState::Published).await
+}
+
+#[command("created")]
+#[checks(admin_role)]
+async fn list_created(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
+    list_by_state(ctx, msg, TrainingState::Created).await
+}
+
+#[command("published")]
+async fn list_published(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
+    list_by_state(ctx, msg, TrainingState::Published).await
+}
+
+#[command("closed")]
+async fn list_closed(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
+    list_by_state(ctx, msg, TrainingState::Closed).await
+}
+
+#[command("started")]
+#[checks(admin_role)]
+async fn list_started(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
+    list_by_state(ctx, msg, TrainingState::Started).await
+}
+
+#[command("finished")]
+#[checks(admin_role)]
+async fn list_finished(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
+    list_by_state(ctx, msg, TrainingState::Finished).await
 }
