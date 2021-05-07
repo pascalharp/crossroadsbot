@@ -28,7 +28,7 @@ pub struct NewUser<'a> {
     pub gw2_id: &'a str,
 }
 
-#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
+#[derive(Identifiable, Queryable, Associations, Clone, PartialEq, Debug)]
 #[belongs_to(User)]
 #[belongs_to(Training)]
 #[table_name = "signups"]
@@ -61,7 +61,7 @@ impl fmt::Display for TrainingState {
         match self {
             TrainingState::Created => write!(f, "created"),
             TrainingState::Published => write!(f, "published"),
-            TrainingState::Closed => write!(f, "close"),
+            TrainingState::Closed => write!(f, "closed"),
             TrainingState::Started => write!(f, "started"),
             TrainingState::Finished => write!(f, "finished"),
         }
@@ -89,7 +89,7 @@ pub struct Training {
     pub id: i32,
     pub title: String,
     pub date: NaiveDateTime,
-    pub open: TrainingState,
+    pub state: TrainingState,
 }
 
 #[derive(Insertable, Debug)]

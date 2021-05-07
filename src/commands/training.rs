@@ -1,4 +1,6 @@
-use super::{ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, WARNING_EMOJI, DEFAULT_TIMEOUT};
+use super::{
+    ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT, WARNING_EMOJI, RUNNING_EMOJI, GREEN_CIRCLE_EMOJI, RED_CIRCLE_EMOJI
+};
 use crate::db;
 use crate::db::models::TrainingState;
 use serenity::collector::reaction_collector::ReactionAction;
@@ -13,10 +15,12 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
+use chrono::{DateTime, Utc};
+use chrono_tz::Europe::{London, Paris, Moscow};
 
 #[group]
 #[prefix = "training"]
-#[commands(add,set,list)]
+#[commands(list, show, add, set)]
 pub struct Training;
 
 type BoxResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -30,7 +34,7 @@ struct RoleEmoji {
 /// Returns a Hashmap of of Emojis and Roles that overlap with EmojiId as key
 async fn role_emojis(
     ctx: &Context,
-    roles: Vec<db::models::Role>,
+    roles: Vec<db::Role>,
 ) -> BoxResult<HashMap<EmojiId, RoleEmoji>> {
     let mut map = HashMap::new();
     let emojis_guild_id = ctx
@@ -294,10 +298,102 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                 e.field("Name", training.title, false);
                 e.field("Id", training.id, false);
                 e.field("Date", training.date, false);
-                e.field("Open", training.open, false);
+                e.field("State", training.state, false);
                 e
             });
             m
+        })
+        .await?;
+
+    Ok(())
+}
+
+const TRAINING_TIME_FMT: &str =
+    "%a, %B %Y at %H:%M %Z";
+
+#[command]
+#[description = "Displays information about the training with the specified id"]
+#[example = "121"]
+#[usage = "training_id"]
+pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let training_id = match args.single::<i32>() {
+        Ok(i) => i,
+        Err(_) => {
+            msg.reply(ctx, "Unable to parse training id").await?;
+            return Ok(());
+        }
+    };
+
+    let training = db::get_training_by_id(&db::connect(), training_id);
+    let training = &match training {
+        Ok(t) => t,
+        Err(_) => {
+            msg.reply(ctx, "Unable to find training with this id")
+                .await?;
+            return Ok(());
+        }
+    };
+
+    match training.state {
+        TrainingState::Created | TrainingState::Finished => {
+            msg.reply(ctx, "Information for this training is not public").await?;
+            return Ok(());
+        }
+        _ => (),
+    }
+
+    let roles: Vec<db::Role> = {
+        let conn = db::connect();
+        training
+            .get_roles(&conn)?
+            .iter()
+            .filter_map(|r| {
+                // Ignores deactivated roles
+                r.role(&conn).ok()
+            })
+            .collect()
+    };
+
+    let role_map = role_emojis(ctx, roles).await?;
+
+    let utc = DateTime::<Utc>::from_utc(training.date, Utc);
+    msg.channel_id
+        .send_message(ctx, |m| {
+            m.embed(|f| {
+                f.description(format!(
+                        "{} {}",
+                        match &training.state {
+                            TrainingState::Published => GREEN_CIRCLE_EMOJI,
+                            TrainingState::Closed => RED_CIRCLE_EMOJI,
+                            TrainingState::Started => RUNNING_EMOJI,
+                            _ => ' '},
+                        &training.title));
+                f.field(
+                    "**Date**",
+                    format!(
+                        "{}\n{}\n{}\n{}",
+                        utc.format(TRAINING_TIME_FMT),
+                        utc.with_timezone(&London).format(TRAINING_TIME_FMT),
+                        utc.with_timezone(&Paris).format(TRAINING_TIME_FMT),
+                        utc.with_timezone(&Moscow).format(TRAINING_TIME_FMT),
+                    ),
+                    false);
+                f.field("**State**", &training.state, true);
+                f.field("**ID**", &training.id, true);
+                f.field(
+                    "**Available roles**    ",
+                    "**-----------------**",
+                    false,
+                );
+                f.fields(role_map.values().map(|rm| {
+                    (
+                        format!("{}   {}", Mention::from(rm.emoji.id), &rm.role.repr),
+                        &rm.role.title,
+                        true,
+                    )
+                }));
+                f
+            })
         })
         .await?;
 
@@ -309,12 +405,12 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 #[description = "sets the training with the specified id to the specified state"]
 #[example = "19832 started"]
 #[usage = "training_id ( created | published | closed | started | finished )"]
+#[num_args(2)]
 pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-
     let training_id = match args.single::<i32>() {
         Ok(i) => i,
         Err(_) => {
-            msg.reply(ctx, "Unable to parse training is").await?;
+            msg.reply(ctx, "Unable to parse training id").await?;
             return Ok(());
         }
     };
@@ -332,7 +428,8 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     let training = match training {
         Ok(t) => t,
         Err(_) => {
-            msg.reply(ctx, "Failed to load training, double check id").await?;
+            msg.reply(ctx, "Failed to load training, double check id")
+                .await?;
             return Ok(());
         }
     };
@@ -380,12 +477,13 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: TrainingState) -> Co
         msg.react(ctx, CHECK_EMOJI).await?;
         msg.react(ctx, CROSS_EMOJI).await?;
 
-        let react = msg.await_reaction(ctx)
+        let react = msg
+            .await_reaction(ctx)
             .author_id(author_id)
             .timeout(DEFAULT_TIMEOUT)
-            .filter( |r| {
-                r.emoji == ReactionType::from(CHECK_EMOJI) ||
-                    r.emoji == ReactionType::from(CROSS_EMOJI)
+            .filter(|r| {
+                r.emoji == ReactionType::from(CHECK_EMOJI)
+                    || r.emoji == ReactionType::from(CROSS_EMOJI)
             });
 
         match react.await {
@@ -408,14 +506,15 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: TrainingState) -> Co
             .send_message(ctx, |m| {
                 m.embed(move |f| {
                     f.title(format!(
-                            "{} Trainings",
-                            match state {
-                                TrainingState::Published => "Published",
-                                TrainingState::Created => "Created",
-                                TrainingState::Closed => "Closed",
-                                TrainingState::Started => "Started",
-                                TrainingState::Finished => "Finished",
-                            }));
+                        "{} Trainings",
+                        match state {
+                            TrainingState::Published => "Published",
+                            TrainingState::Created => "Created",
+                            TrainingState::Closed => "Closed",
+                            TrainingState::Started => "Started",
+                            TrainingState::Finished => "Finished",
+                        }
+                    ));
                     for t in trainings.iter() {
                         f.field(
                             &t.title,
@@ -434,12 +533,7 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: TrainingState) -> Co
 #[command]
 #[description = "List trainings. Lists published trainings by default"]
 #[usage = "[ training_state ]"]
-#[sub_commands(
-    list_created,
-    list_published,
-    list_closed,
-    list_started,
-    list_finished)]
+#[sub_commands(list_created, list_published, list_closed, list_started, list_finished)]
 async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
     list_by_state(ctx, msg, TrainingState::Published).await
 }

@@ -17,6 +17,10 @@ pub const CHECK_EMOJI: char = '✅';
 pub const CROSS_EMOJI: char = '❌';
 pub const ENVELOP_EMOJI: char = '✉';
 pub const WARNING_EMOJI: char = '⚠';
+pub const DIZZY_EMOJI: char = '😵';
+pub const RUNNING_EMOJI: char = '🏃';
+pub const GREEN_CIRCLE_EMOJI: char = '🟢';
+pub const RED_CIRCLE_EMOJI: char = '🔴';
 
 // --- Global Config ---
 pub struct ConfigValues {
@@ -193,10 +197,8 @@ async fn admin_rol_check(
 If you want more information about a specific command, just pass the command as argument."]
 #[command_not_found_text = "Could not find: `{}`."]
 #[max_levenshtein_distance(3)]
-#[indention_prefix = "+"]
-#[lacking_conditions = "hide"]
-#[strikethrough_commands_tip_in_guild = ""]
-#[strikethrough_commands_tip_in_dm = ""]
+#[indention_prefix = "-"]
+#[lacking_conditions = "strike"]
 async fn help_cmd(
     context: &Context,
     msg: &Message,

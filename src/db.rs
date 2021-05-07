@@ -7,7 +7,7 @@ use std::env;
 pub mod models;
 pub mod schema;
 
-use models::*;
+pub use models::*;
 use schema::*;
 
 pub fn connect() -> PgConnection {
@@ -100,6 +100,10 @@ impl Training {
             .values(&training_role)
             .get_result(conn)
     }
+
+    pub fn get_roles(&self, conn: &PgConnection) -> QueryResult<Vec<TrainingRole>> {
+        TrainingRole::belonging_to(self).load(conn)
+    }
 }
 
 /* -- Signup -- */
@@ -167,4 +171,25 @@ pub fn get_role_by_repr(conn: &PgConnection, repr: &str) -> QueryResult<Role> {
         .filter(roles::active.eq(true))
         .filter(roles::repr.eq(repr))
         .first::<Role>(conn)
+}
+
+// --- TrainingRole ---
+
+impl TrainingRole {
+    /// Ignores deactivated roles. To load deactivated roles as well use
+    /// role_unfilterd
+    pub fn role(&self, conn: &PgConnection) -> QueryResult<Role> {
+        roles::table
+            .filter(roles::active.eq(true))
+            .filter(roles::id.eq(self.role_id))
+            .first::<Role>(conn)
+    }
+
+    /// Loads the role even if it is deactivated
+    pub fn role_unfilterd(&self, conn: &PgConnection) -> QueryResult<Role> {
+        roles::table
+            .filter(roles::id.eq(self.role_id))
+            .first::<Role>(conn)
+    }
+
 }

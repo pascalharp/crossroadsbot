@@ -5,7 +5,7 @@ use dotenv::dotenv;
 use serenity::{
     async_trait,
     client::{Client, EventHandler},
-    framework::standard::{macros::hook, CommandResult, StandardFramework},
+    framework::standard::{macros::hook, DispatchError, CommandResult, StandardFramework},
     model::prelude::*,
     prelude::*,
 };
@@ -94,6 +94,28 @@ async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result:
     }
 }
 
+#[hook]
+async fn dispatch_error_hook(ctx: &Context, msg: &Message, error: DispatchError) {
+    match error {
+        DispatchError::NotEnoughArguments { min, given } => {
+            let s = format!("Need {} arguments, but only got {}.", min, given);
+            msg.reply(ctx, &s).await.ok();
+        },
+        DispatchError::TooManyArguments { max, given } => {
+            let s = format!("Max arguments allowed is {}, but got {}.", max, given);
+            msg.reply(ctx, &s).await.ok();
+        },
+        DispatchError::CheckFailed(..) => {
+            let s = format!("No permissions to use this command");
+            msg.reply(ctx, &s).await.ok();
+        },
+        _ => {
+            msg.react(ctx, commands::DIZZY_EMOJI).await.ok();
+        }
+    }
+}
+
+
 #[tokio::main]
 async fn main() {
     // Load .env into ENV
@@ -143,6 +165,7 @@ async fn main() {
 
     let framework = StandardFramework::new()
         .configure(|c| c.prefix("~"))
+        .on_dispatch_error(dispatch_error_hook)
         .after(after)
         .help(&commands::HELP_CMD)
         .group(&commands::MISC_GROUP)
