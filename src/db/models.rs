@@ -83,13 +83,14 @@ impl str::FromStr for TrainingState {
     }
 }
 
-#[derive(Identifiable, Queryable, PartialEq, Debug)]
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
 #[table_name = "trainings"]
 pub struct Training {
     pub id: i32,
     pub title: String,
     pub date: NaiveDateTime,
     pub state: TrainingState,
+    pub tier: Option<i32>
 }
 
 #[derive(Insertable, Debug)]

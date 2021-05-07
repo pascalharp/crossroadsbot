@@ -1,0 +1,8 @@
+--- /tmp/schema.rs	2019-03-04 09:58:14.000000000 -0000
++++ db/schema.rs	2019-03-04 09:58:19.000000000 -0000
+@@ -1,3 +1,5 @@
++#![allow(unused_imports)]
++
+ table! {
+     use diesel::sql_types::*;
+     use crate::models::*;
