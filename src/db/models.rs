@@ -1,4 +1,4 @@
-use crate::db::schema::{roles, signup_roles, signups, training_roles, trainings, users};
+use crate::db::schema::{roles, signup_roles, signups, training_roles, trainings, users, tiers, tier_mappings};
 use diesel_derive_enum::DbEnum;
 use std::{
     fmt,
@@ -143,4 +143,33 @@ pub struct TrainingRole {
 pub struct NewTrainingRole {
     pub training_id: i32,
     pub role_id: i32,
+}
+
+#[derive(Identifiable, Queryable, PartialEq, Debug)]
+#[table_name = "tiers"]
+pub struct Tier {
+    pub id: i32,
+    pub name: String
+}
+
+#[derive(Insertable, Debug)]
+#[table_name = "tiers"]
+pub struct NewTier<'a> {
+    pub name: &'a str,
+}
+
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
+#[table_name = "tier_mappings"]
+#[belongs_to(Tier)]
+pub struct TierMapping {
+    pub id: i32,
+    pub tier_id: i32,
+    pub discord_role_id: i64
+}
+
+#[derive(Insertable, Debug)]
+#[table_name = "tier_mappings"]
+pub struct NewTierMapping {
+    pub tier_id: i32,
+    pub discord_role_id: i64,
 }
