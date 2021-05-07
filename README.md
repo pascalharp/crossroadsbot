@@ -20,9 +20,9 @@ permissions are taken from
 ### EMOJI\_GUILD\_ID
 The discord guild the bot will load and use custom emojis from.
 ### ADMIN\_ROLE\_ID
-The role id on MAIN\_GUILD\_ID that has access to all commands
+The discord role id for MAIN\_GUILD\_ID that has access to all commands
 ### SQUADMAKER\_ROLE\_ID
-The role id on MAIN\_GUILD\_ID that has access selected commands
+The discord role id for MAIN\_GUILD\_ID that has access selected commands
 
 ## Environment variables (dev only)
 ### TEST\_BASE\_URL
@@ -32,10 +32,17 @@ removes the databse again.\
 Example: *TEST\_BASE\_URL=postgres:://username:password@localhost*
 
 ## .env file
-A *.env* file can be placed in the rood directory of the project that will be sourced when the
+A *.env* file can be placed in the root directory of the project that will be sourced when the
 application is started and for all tests.\
 Example *./.env* file content:
 ```
 DATABASE_URL=postgres://username:password@localhost/crossroad
+DISCORD_TOKEN=AVERYLONGSECRETTOKENTHATSHOULDNEVERBEMADEPUBLIC
+MAIN_GUILD_ID=111222333444555666
+EMOJI_GUILD_ID=111222333444555666
+ADMIN_ROLE_ID=666777888999000111
+SQUADMAKER_ROLE_ID=666777888999000111
+RUST_LOG=info
+
 TEST_BASE_URL=postgres://username:password@localhost
 ```
