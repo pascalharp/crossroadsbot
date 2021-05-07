@@ -363,7 +363,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 f.description(format!(
                         "{} {}",
                         match &training.state {
-                            TrainingState::Published => GREEN_CIRCLE_EMOJI,
+                            TrainingState::Open => GREEN_CIRCLE_EMOJI,
                             TrainingState::Closed => RED_CIRCLE_EMOJI,
                             TrainingState::Started => RUNNING_EMOJI,
                             _ => ' '},
@@ -508,7 +508,7 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: TrainingState) -> Co
                     f.title(format!(
                         "{} Trainings",
                         match state {
-                            TrainingState::Published => "Published",
+                            TrainingState::Open => "Open",
                             TrainingState::Created => "Created",
                             TrainingState::Closed => "Closed",
                             TrainingState::Started => "Started",
@@ -535,7 +535,7 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: TrainingState) -> Co
 #[usage = "[ training_state ]"]
 #[sub_commands(list_created, list_published, list_closed, list_started, list_finished)]
 async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, TrainingState::Published).await
+    list_by_state(ctx, msg, TrainingState::Open).await
 }
 
 #[command("created")]
@@ -546,7 +546,7 @@ async fn list_created(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
 
 #[command("published")]
 async fn list_published(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, TrainingState::Published).await
+    list_by_state(ctx, msg, TrainingState::Open).await
 }
 
 #[command("closed")]

@@ -49,7 +49,7 @@ pub struct NewSignup {
 #[DieselType = "Training_state"]
 pub enum TrainingState {
     Created,
-    Published,
+    Open,
     Closed,
     Started,
     Finished,
@@ -60,7 +60,7 @@ impl fmt::Display for TrainingState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TrainingState::Created => write!(f, "created"),
-            TrainingState::Published => write!(f, "published"),
+            TrainingState::Open => write!(f, "open"),
             TrainingState::Closed => write!(f, "closed"),
             TrainingState::Started => write!(f, "started"),
             TrainingState::Finished => write!(f, "finished"),
@@ -74,7 +74,7 @@ impl str::FromStr for TrainingState {
     fn from_str(input: &str) -> Result<TrainingState, Self::Err> {
         match input {
             "created" => Ok(TrainingState::Created),
-            "published" => Ok(TrainingState::Published),
+            "open" => Ok(TrainingState::Open),
             "closed" => Ok(TrainingState::Closed),
             "started" => Ok(TrainingState::Started),
             "finished" => Ok(TrainingState::Finished),
