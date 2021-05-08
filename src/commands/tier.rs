@@ -9,8 +9,54 @@ use serenity::prelude::*;
 
 #[group]
 #[prefix = "tier"]
-#[commands(add)]
+#[commands(list, add)]
 pub struct Tier;
+
+#[command]
+#[checks(admin_role)]
+#[description = "Lists all tiers and their corresponding discord roles"]
+#[example = ""]
+#[usage = ""]
+#[only_in("guild")]
+#[min_args(0)]
+pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
+    let conn = db::connect();
+    let tiers = db::get_tiers(&conn)?;
+
+    let mut tier_roles: Vec<(db::Tier, Vec<db::TierMapping>)> = tiers
+        .into_iter()
+        .map(|t| {
+            let mapping = t.get_discord_roles(&conn)?;
+            Ok((t, mapping))
+        })
+        .collect::<Result<_, diesel::result::Error>>()?;
+
+    // List tiers with more roles first.It feels more inclusive =D
+    tier_roles.sort_by( | (_,a), (_,b) | b.len().cmp(&a.len()));
+
+    msg.channel_id
+        .send_message(ctx, |m| {
+            m.allowed_mentions(|am| am.empty_parse());
+            m.embed(|e| {
+                e.description("Current Tiers for trainings");
+                e.fields(tier_roles.into_iter().map(|(t, r)| {
+                    (
+                        t.name,
+                        r.iter()
+                            .map(|r| {
+                                Mention::from(RoleId::from(r.discord_role_id as u64)).to_string()
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                        true,
+                    )
+                }))
+            })
+        })
+        .await?;
+
+    Ok(())
+}
 
 #[command]
 #[checks(admin_role)]

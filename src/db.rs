@@ -203,6 +203,17 @@ pub fn add_tier(conn: &PgConnection, name: &str) -> QueryResult<Tier> {
         .get_result(conn)
 }
 
+pub fn get_tiers(conn: &PgConnection) -> QueryResult<Vec<Tier>> {
+    tiers::table
+        .load::<Tier>(conn)
+}
+
+pub fn get_tier(conn: &PgConnection, name: &str) -> QueryResult<Tier> {
+    tiers::table
+        .filter(tiers::name.eq(name))
+        .first::<Tier>(conn)
+}
+
 impl Tier {
     pub fn add_discord_role(
         &self,
@@ -217,6 +228,10 @@ impl Tier {
         diesel::insert_into(tier_mappings::table)
             .values(&new_tier_mapping)
             .get_result(conn)
+    }
+
+    pub fn get_discord_roles(&self, conn: &PgConnection) -> QueryResult<Vec<TierMapping>> {
+        TierMapping::belonging_to(self).load(conn)
     }
 }
 
