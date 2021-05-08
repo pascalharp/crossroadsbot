@@ -22,13 +22,14 @@ pub struct Tier;
 pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let author_id = msg.author.id;
     let tier_name = match args.single_quoted::<String>() {
-        Err(e) => {
+        Err(_) => {
             msg.reply(ctx, "Unable to parse tier name").await?;
             return Ok(());
         }
         Ok(t) => {
             if t.contains(" ") {
                 msg.reply(ctx, "Tier name may not contain spaces").await?;
+                return Ok(());
             }
             t
         }
