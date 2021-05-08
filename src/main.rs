@@ -168,11 +168,12 @@ async fn main() {
         .on_dispatch_error(dispatch_error_hook)
         .after(after)
         .help(&commands::HELP_CMD)
-        .group(&commands::MISC_GROUP)
+        .group(&commands::SIGNUP_GROUP)
         .group(&commands::TRAINING_GROUP)
         .group(&commands::ROLE_GROUP)
-        .group(&commands::SIGNUP_GROUP)
-        .group(&commands::CONFIG_GROUP);
+        .group(&commands::TIER_GROUP)
+        .group(&commands::CONFIG_GROUP)
+        .group(&commands::MISC_GROUP);
 
     let mut client = Client::builder(token)
         .framework(framework)

@@ -191,5 +191,33 @@ impl TrainingRole {
             .filter(roles::id.eq(self.role_id))
             .first::<Role>(conn)
     }
-
 }
+
+// --- Tier ---
+
+pub fn add_tier(conn: &PgConnection, name: &str) -> QueryResult<Tier> {
+    let new_tier = NewTier { name };
+
+    diesel::insert_into(tiers::table)
+        .values(&new_tier)
+        .get_result(conn)
+}
+
+impl Tier {
+    pub fn add_discord_role(
+        &self,
+        conn: &PgConnection,
+        discord_id: u64,
+    ) -> QueryResult<TierMapping> {
+        let new_tier_mapping = NewTierMapping {
+            tier_id: self.id,
+            discord_role_id: discord_id as i64,
+        };
+
+        diesel::insert_into(tier_mappings::table)
+            .values(&new_tier_mapping)
+            .get_result(conn)
+    }
+}
+
+// --- TierMapping ---

@@ -226,3 +226,6 @@ pub use role::ROLE_GROUP;
 
 mod training;
 pub use training::TRAINING_GROUP;
+
+mod tier;
+pub use tier::TIER_GROUP;
