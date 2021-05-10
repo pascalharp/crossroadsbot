@@ -86,6 +86,12 @@ impl Training {
             .get_result(conn)
     }
 
+    pub fn set_tier(&self, conn: &PgConnection, tier: Option<i32>) -> QueryResult<Training> {
+        diesel::update(trainings::table.find(self.id))
+            .set(trainings::tier_id.eq(tier))
+            .get_result(conn)
+    }
+
     pub fn get_signups(&self, conn: &PgConnection) -> QueryResult<Vec<Signup>> {
         Signup::belonging_to(self).load(conn)
     }
@@ -204,8 +210,7 @@ pub fn add_tier(conn: &PgConnection, name: &str) -> QueryResult<Tier> {
 }
 
 pub fn get_tiers(conn: &PgConnection) -> QueryResult<Vec<Tier>> {
-    tiers::table
-        .load::<Tier>(conn)
+    tiers::table.load::<Tier>(conn)
 }
 
 pub fn get_tier(conn: &PgConnection, name: &str) -> QueryResult<Tier> {
@@ -230,9 +235,23 @@ impl Tier {
             .get_result(conn)
     }
 
+    pub fn delete(self, conn: &PgConnection) -> QueryResult<usize> {
+        diesel::delete(tiers::table.filter(tiers::id.eq(self.id))).execute(conn)
+    }
+
     pub fn get_discord_roles(&self, conn: &PgConnection) -> QueryResult<Vec<TierMapping>> {
         TierMapping::belonging_to(self).load(conn)
+    }
+
+    pub fn get_trainings(&self, conn: &PgConnection) -> QueryResult<Vec<Training>> {
+        Training::belonging_to(self).load(conn)
     }
 }
 
 // --- TierMapping ---
+
+impl TierMapping {
+    pub fn delete(self, conn: &PgConnection) -> QueryResult<usize> {
+        diesel::delete(tier_mappings::table.filter(tier_mappings::id.eq(self.id))).execute(conn)
+    }
+}

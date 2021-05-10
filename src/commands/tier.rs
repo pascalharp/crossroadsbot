@@ -1,5 +1,5 @@
 use super::{ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT};
-use crate::db;
+use crate::{db,utils};
 use serenity::framework::standard::{
     macros::{command, group},
     Args, CommandResult,
@@ -9,7 +9,7 @@ use serenity::prelude::*;
 
 #[group]
 #[prefix = "tier"]
-#[commands(list, add)]
+#[commands(list, add, remove)]
 pub struct Tier;
 
 #[command]
@@ -32,7 +32,7 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
         .collect::<Result<_, diesel::result::Error>>()?;
 
     // List tiers with more roles first.It feels more inclusive =D
-    tier_roles.sort_by( | (_,a), (_,b) | b.len().cmp(&a.len()));
+    tier_roles.sort_by(|(_, a), (_, b)| b.len().cmp(&a.len()));
 
     msg.channel_id
         .send_message(ctx, |m| {
@@ -77,7 +77,8 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                 msg.reply(ctx, "Tier name may not contain spaces").await?;
                 return Ok(());
             } else if t.to_lowercase().eq("none") {
-                msg.reply(ctx, "none is a reserved keyword and can not be used").await?;
+                msg.reply(ctx, "none is a reserved keyword and can not be used")
+                    .await?;
                 return Ok(());
             }
             t
@@ -161,6 +162,100 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     }
 
     msg.reply(ctx, "Tier added").await?;
+
+    Ok(())
+}
+
+#[command]
+#[checks(admin_role)]
+#[aliases("rm")]
+#[description = "Remove a tier role. This will remove the tier requirement from all trainings, that currently have this tier requirement set."]
+#[example = "tierII"]
+#[usage = "tier_name"]
+#[only_in("guild")]
+#[min_args(1)]
+pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let author_id = msg.author.id;
+    let tier_name = match args.single_quoted::<String>() {
+        Ok(t) => t,
+        Err(_) => {
+            msg.reply(ctx, "Unable to parse tier name").await?;
+            return Ok(());
+        }
+    };
+
+    let conn = db::connect();
+    let tier = db::get_tier(&conn, &tier_name);
+    let tier = match tier {
+        Ok(t) => t,
+        Err(e) => {
+            msg.reply(
+                ctx,
+                "Failed to load tier from database. Double check tier name",
+            )
+            .await?;
+            return Err(e.into());
+        }
+    };
+    let roles = tier.get_discord_roles(&conn)?;
+    let trainings = tier.get_trainings(&conn)?;
+    drop(conn);
+
+    let (created, open, closed, started, finished) =
+        trainings
+            .iter()
+            .fold((0, 0, 0, 0, 0), |(cr, o, cl, s, f), t| match t.state {
+                db::TrainingState::Created => (cr + 1, o, cl, s, f),
+                db::TrainingState::Open => (cr, o + 1, cl, s, f),
+                db::TrainingState::Closed => (cr, o, cl + 1, s, f),
+                db::TrainingState::Started => (cr, o, cl, s + 1, f),
+                db::TrainingState::Finished => (cr, o, cl, s, f + 1),
+            });
+
+    let msg = msg.channel_id.send_message(ctx, |m| {
+        m.embed( |e| {
+            e.description("Removing tier");
+            e.field(
+                "Tier information",
+                format!("Name: {}\nId: {}", &tier.name, &tier.id),
+                false
+            );
+            e.field(
+            "WARNING",
+            format!(
+            "Removing this tier will remove all tier requirement for associated trainings:\nCreated: {}\nOpen: {}\nClosed: {}\nStarted: {}\nFinished: {}",
+            created, open, closed, started, finished),
+            false)
+        })
+    }).await?;
+
+    utils::send_yes_or_no(ctx, &msg).await?;
+    match utils::await_yes_or_no(ctx, &msg, Some(author_id)).await {
+        None => {
+            msg.reply(ctx, "Timed out").await?;
+            return Ok(());
+        },
+        Some(r) => {
+            match r {
+                utils::YesOrNo::Yes => (),
+                utils::YesOrNo::No => {
+                    msg.reply(ctx, "Aborted").await?;
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    let conn = db::connect();
+    for r in roles {
+        r.delete(&conn)?;
+    }
+    for t in trainings {
+        t.set_tier(&conn, None)?;
+    }
+    tier.delete(&conn)?;
+
+    msg.reply(ctx, "Tier removed").await?;
 
     Ok(())
 }
