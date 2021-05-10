@@ -9,7 +9,7 @@ use serenity::prelude::*;
 
 #[group]
 #[prefix = "tier"]
-#[commands(list, add, remove)]
+#[commands(list, add, remove, edit)]
 pub struct Tier;
 
 #[command]
@@ -18,7 +18,7 @@ pub struct Tier;
 #[example = ""]
 #[usage = ""]
 #[only_in("guild")]
-#[min_args(0)]
+#[num_args(0)]
 pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
     let conn = db::connect();
     let tiers = db::get_tiers(&conn)?;
@@ -64,7 +64,7 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
 #[example = "tierII @TierII @TierIII"]
 #[usage = "tier_name [ discord_role ... ]"]
 #[only_in("guild")]
-#[min_args(1)]
+#[min_args(2)]
 pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let author_id = msg.author.id;
     let tier_name = match args.single_quoted::<String>() {
@@ -125,24 +125,20 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     msg.react(ctx, CHECK_EMOJI).await?;
     msg.react(ctx, CROSS_EMOJI).await?;
 
-    let react = msg
-        .await_reaction(ctx)
-        .author_id(author_id)
-        .timeout(DEFAULT_TIMEOUT)
-        .filter(|r| {
-            r.emoji == ReactionType::from(CHECK_EMOJI) || r.emoji == ReactionType::from(CROSS_EMOJI)
-        })
-        .await;
+    utils::send_yes_or_no(ctx, &msg).await?;
 
-    match react {
+    match utils::await_yes_or_no(ctx, &msg, Some(author_id)).await {
         None => {
             msg.reply(ctx, "Timed out").await?;
             return Ok(());
         }
         Some(r) => {
-            if r.as_inner_ref().emoji == ReactionType::from(CROSS_EMOJI) {
-                msg.reply(ctx, "Aborted").await?;
-                return Ok(());
+            match r {
+                utils::YesOrNo::No => {
+                    msg.reply(ctx, "Aborted").await?;
+                    return Ok(());
+                },
+                _ => (),
             }
         }
     }
@@ -173,7 +169,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 #[example = "tierII"]
 #[usage = "tier_name"]
 #[only_in("guild")]
-#[min_args(1)]
+#[num_args(1)]
 pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let author_id = msg.author.id;
     let tier_name = match args.single_quoted::<String>() {
@@ -258,4 +254,111 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
     msg.reply(ctx, "Tier removed").await?;
 
     Ok(())
+}
+
+#[command]
+#[sub_commands(edit_add,edit_remove)]
+#[checks(admin_role)]
+#[description = "Edit a tier by adding or removing a discord role"]
+#[example = "add @TierII"]
+#[usage = "(add | remove) @TierII"]
+#[only_in("guild")]
+#[num_args(0)]
+pub async fn edit(_: &Context, _: &Message, _: Args) -> CommandResult {
+    Ok(())
+}
+
+#[command("add")]
+#[checks(admin_role)]
+#[description = "Add a discord role to an already existing tier"]
+#[example = "tierII @TierIII"]
+#[usage = "tier_name discord_role"]
+#[only_in("guild")]
+#[num_args(2)]
+pub async fn edit_add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let tier = args.single_quoted::<String>()?;
+    let role = match args.single_quoted::<RoleId>() {
+        Ok(r) => r,
+        Err(_) => {
+            msg.reply(ctx, "Failed to parse discord role").await?;
+            return Ok(())
+        }
+    };
+
+    let conn = db::connect();
+    let tier = db::get_tier(&conn, &tier);
+    let tier = match tier {
+        Ok(t) => t,
+        Err(_) => {
+            msg.reply(ctx, "Failed to load tier. Check spelling").await?;
+            return Ok(());
+        }
+    };
+    let discord_roles = tier.get_discord_roles(&conn)?;
+    if discord_roles.iter().any(|d| { RoleId::from(d.discord_role_id as u64) == role }) {
+        msg.reply(ctx, "That discord role is already part of that tier").await?;
+        return Ok(());
+    }
+
+    let added = tier.add_discord_role(&conn, *role.as_u64());
+    match added {
+        Ok(_) => {
+            msg.reply(ctx, "Discord role added").await?;
+            return Ok(())
+        },
+        Err(e) => {
+            msg.reply(ctx, "Failed to add discord role").await?;
+            return Err(e.into());
+        }
+    }
+}
+
+#[command("remove")]
+#[aliases("rm")]
+#[checks(admin_role)]
+#[description = "Remove a discord role from an already existing tier"]
+#[example = "tierII @TierI"]
+#[usage = "tier_name discord_role"]
+#[only_in("guild")]
+#[num_args(2)]
+pub async fn edit_remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let tier = args.single_quoted::<String>()?;
+    let role = match args.single_quoted::<RoleId>() {
+        Ok(r) => r,
+        Err(_) => {
+            msg.reply(ctx, "Failed to parse discord role").await?;
+            return Ok(())
+        }
+    };
+
+    let conn = db::connect();
+    let tier = db::get_tier(&conn, &tier);
+    let tier = match tier {
+        Ok(t) => t,
+        Err(_) => {
+            msg.reply(ctx, "Failed to load tier. Check spelling").await?;
+            return Ok(());
+        }
+    };
+    let discord_roles = tier.get_discord_roles(&conn)?;
+    let to_remove = discord_roles.into_iter().find(|d| { RoleId::from(d.discord_role_id as u64) == role });
+    let to_remove = match to_remove {
+        None => {
+            msg.reply(ctx, "Provided discord role is not part of the provided tier").await?;
+            return Ok(())
+        },
+        Some(i) => i
+    };
+
+    let removed = to_remove.delete(&conn);
+    match removed {
+        Ok(_) => {
+            msg.reply(ctx, "Discord role removed").await?;
+            return Ok(())
+        },
+        Err(e) => {
+            msg.reply(ctx, "Failed to remove discord role").await?;
+            return Err(e.into());
+        }
+    }
 }
