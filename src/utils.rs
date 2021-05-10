@@ -50,10 +50,7 @@ pub async fn await_yes_or_no<'a>(
                 if e.emoji == ReactionType::from(CHECK_EMOJI) {
                     return Some(YesOrNo::Yes);
                 }
-                if e.emoji == ReactionType::from(CROSS_EMOJI) {
-                    return Some(YesOrNo::No);
-                }
-                return None;
+                return Some(YesOrNo::No);
             }
             _ => return None,
         },

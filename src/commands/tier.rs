@@ -1,4 +1,4 @@
-use super::{ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT};
+use super::{ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI};
 use crate::{db, utils};
 use serenity::framework::standard::{
     macros::{command, group},
