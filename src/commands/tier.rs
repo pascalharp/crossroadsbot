@@ -76,6 +76,9 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             if t.contains(" ") {
                 msg.reply(ctx, "Tier name may not contain spaces").await?;
                 return Ok(());
+            } else if t.to_lowercase().eq("none") {
+                msg.reply(ctx, "none is a reserved keyword and can not be used").await?;
+                return Ok(());
             }
             t
         }
