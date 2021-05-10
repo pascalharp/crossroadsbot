@@ -1,5 +1,5 @@
 use super::{ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT};
-use crate::{db,utils};
+use crate::{db, utils};
 use serenity::framework::standard::{
     macros::{command, group},
     Args, CommandResult,
@@ -132,15 +132,13 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             msg.reply(ctx, "Timed out").await?;
             return Ok(());
         }
-        Some(r) => {
-            match r {
-                utils::YesOrNo::No => {
-                    msg.reply(ctx, "Aborted").await?;
-                    return Ok(());
-                },
-                _ => (),
+        Some(r) => match r {
+            utils::YesOrNo::No => {
+                msg.reply(ctx, "Aborted").await?;
+                return Ok(());
             }
-        }
+            _ => (),
+        },
     }
 
     let conn = db::connect();
@@ -230,16 +228,14 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
         None => {
             msg.reply(ctx, "Timed out").await?;
             return Ok(());
-        },
-        Some(r) => {
-            match r {
-                utils::YesOrNo::Yes => (),
-                utils::YesOrNo::No => {
-                    msg.reply(ctx, "Aborted").await?;
-                    return Ok(());
-                }
-            }
         }
+        Some(r) => match r {
+            utils::YesOrNo::Yes => (),
+            utils::YesOrNo::No => {
+                msg.reply(ctx, "Aborted").await?;
+                return Ok(());
+            }
+        },
     }
 
     let conn = db::connect();
@@ -257,7 +253,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
 }
 
 #[command]
-#[sub_commands(edit_add,edit_remove)]
+#[sub_commands(edit_add, edit_remove)]
 #[checks(admin_role)]
 #[description = "Edit a tier by adding or removing a discord role"]
 #[example = "add @TierII"]
@@ -281,7 +277,7 @@ pub async fn edit_add(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
         Ok(r) => r,
         Err(_) => {
             msg.reply(ctx, "Failed to parse discord role").await?;
-            return Ok(())
+            return Ok(());
         }
     };
 
@@ -290,13 +286,18 @@ pub async fn edit_add(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
     let tier = match tier {
         Ok(t) => t,
         Err(_) => {
-            msg.reply(ctx, "Failed to load tier. Check spelling").await?;
+            msg.reply(ctx, "Failed to load tier. Check spelling")
+                .await?;
             return Ok(());
         }
     };
     let discord_roles = tier.get_discord_roles(&conn)?;
-    if discord_roles.iter().any(|d| { RoleId::from(d.discord_role_id as u64) == role }) {
-        msg.reply(ctx, "That discord role is already part of that tier").await?;
+    if discord_roles
+        .iter()
+        .any(|d| RoleId::from(d.discord_role_id as u64) == role)
+    {
+        msg.reply(ctx, "That discord role is already part of that tier")
+            .await?;
         return Ok(());
     }
 
@@ -304,8 +305,8 @@ pub async fn edit_add(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
     match added {
         Ok(_) => {
             msg.reply(ctx, "Discord role added").await?;
-            return Ok(())
-        },
+            return Ok(());
+        }
         Err(e) => {
             msg.reply(ctx, "Failed to add discord role").await?;
             return Err(e.into());
@@ -327,7 +328,7 @@ pub async fn edit_remove(ctx: &Context, msg: &Message, mut args: Args) -> Comman
         Ok(r) => r,
         Err(_) => {
             msg.reply(ctx, "Failed to parse discord role").await?;
-            return Ok(())
+            return Ok(());
         }
     };
 
@@ -336,26 +337,33 @@ pub async fn edit_remove(ctx: &Context, msg: &Message, mut args: Args) -> Comman
     let tier = match tier {
         Ok(t) => t,
         Err(_) => {
-            msg.reply(ctx, "Failed to load tier. Check spelling").await?;
+            msg.reply(ctx, "Failed to load tier. Check spelling")
+                .await?;
             return Ok(());
         }
     };
     let discord_roles = tier.get_discord_roles(&conn)?;
-    let to_remove = discord_roles.into_iter().find(|d| { RoleId::from(d.discord_role_id as u64) == role });
+    let to_remove = discord_roles
+        .into_iter()
+        .find(|d| RoleId::from(d.discord_role_id as u64) == role);
     let to_remove = match to_remove {
         None => {
-            msg.reply(ctx, "Provided discord role is not part of the provided tier").await?;
-            return Ok(())
-        },
-        Some(i) => i
+            msg.reply(
+                ctx,
+                "Provided discord role is not part of the provided tier",
+            )
+            .await?;
+            return Ok(());
+        }
+        Some(i) => i,
     };
 
     let removed = to_remove.delete(&conn);
     match removed {
         Ok(_) => {
             msg.reply(ctx, "Discord role removed").await?;
-            return Ok(())
-        },
+            return Ok(());
+        }
         Err(e) => {
             msg.reply(ctx, "Failed to remove discord role").await?;
             return Err(e.into());

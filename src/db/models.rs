@@ -1,9 +1,8 @@
-use crate::db::schema::{roles, signup_roles, signups, training_roles, trainings, users, tiers, tier_mappings};
-use diesel_derive_enum::DbEnum;
-use std::{
-    fmt,
-    str,
+use crate::db::schema::{
+    roles, signup_roles, signups, tier_mappings, tiers, training_roles, trainings, users,
 };
+use diesel_derive_enum::DbEnum;
+use std::{fmt, str};
 
 use chrono::naive::NaiveDateTime;
 
@@ -56,7 +55,6 @@ pub enum TrainingState {
 }
 
 impl fmt::Display for TrainingState {
-
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TrainingState::Created => write!(f, "created"),
@@ -91,7 +89,7 @@ pub struct Training {
     pub title: String,
     pub date: NaiveDateTime,
     pub state: TrainingState,
-    pub tier_id: Option<i32>
+    pub tier_id: Option<i32>,
 }
 
 #[derive(Insertable, Debug)]
@@ -99,6 +97,7 @@ pub struct Training {
 pub struct NewTraining<'a> {
     pub title: &'a str,
     pub date: &'a NaiveDateTime,
+    pub tier_id: Option<i32>,
 }
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
@@ -150,7 +149,7 @@ pub struct NewTrainingRole {
 #[table_name = "tiers"]
 pub struct Tier {
     pub id: i32,
-    pub name: String
+    pub name: String,
 }
 
 #[derive(Insertable, Debug)]
@@ -165,7 +164,7 @@ pub struct NewTier<'a> {
 pub struct TierMapping {
     pub id: i32,
     pub tier_id: i32,
-    pub discord_role_id: i64
+    pub discord_role_id: i64,
 }
 
 #[derive(Insertable, Debug)]

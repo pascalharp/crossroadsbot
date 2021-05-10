@@ -1,8 +1,11 @@
 use super::{
-    ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT, WARNING_EMOJI, RUNNING_EMOJI, GREEN_CIRCLE_EMOJI, RED_CIRCLE_EMOJI
+    ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT,
+    GREEN_CIRCLE_EMOJI, RED_CIRCLE_EMOJI, RUNNING_EMOJI, WARNING_EMOJI,
 };
 use crate::db;
 use crate::db::models::TrainingState;
+use chrono::{DateTime, Utc};
+use chrono_tz::Europe::{London, Moscow, Paris};
 use serenity::collector::reaction_collector::ReactionAction;
 use serenity::framework::standard::{
     macros::{command, group},
@@ -15,8 +18,6 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
-use chrono::{DateTime, Utc};
-use chrono_tz::Europe::{London, Paris, Moscow};
 
 #[group]
 #[prefix = "training"]
@@ -68,13 +69,22 @@ async fn update_add_training(
     selected: &HashSet<EmojiId>,
     training_name: &str,
     training_time: &chrono::NaiveDateTime,
+    training_tier: &Option<db::Tier>,
 ) -> BoxResult<()> {
     msg.edit(ctx, |m| {
         m.embed(|e| {
             e.description("New Training");
             e.field(
                 "Details",
-                format!("{}\n{}", training_name, training_time),
+                format!(
+                    "{}\n{}\n{}",
+                    training_name,
+                    training_time,
+                    match training_tier {
+                        Some(t) => t.name.clone(),
+                        None => String::from("none"),
+                    }
+                ),
                 false,
             );
 
@@ -109,9 +119,9 @@ async fn update_add_training(
 
 #[command]
 #[checks(admin_role)]
-#[usage = "training_name %Y-%m-%dT%H:%M:%S% [ role_identifier... ]"]
-#[example = "\"Beginner Training\" 2021-05-11T19:00:00 pdps cdps banners"]
-#[min_args(2)]
+#[usage = "training_name %Y-%m-%dT%H:%M:%S% training_tier [ role_identifier... ]"]
+#[example = "\"Beginner Training\" 2021-05-11T19:00:00 none pdps cdps banners"]
+#[min_args(3)]
 pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let training_name = args.single_quoted::<String>()?;
 
@@ -131,6 +141,27 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                 }
             }
             return Ok(());
+        }
+    };
+
+    let training_tier = args.single_quoted::<String>()?;
+    let training_tier: Option<db::Tier> = {
+        if training_tier.to_lowercase().eq("none") {
+            None
+        } else {
+            let conn = db::connect();
+            let tier = db::get_tier(&conn, &training_tier);
+            match tier {
+                Err(_) => {
+                    msg.reply(
+                        ctx,
+                        "Tier not found. You can use \"none\" to open the training for everyone",
+                    )
+                    .await?;
+                    return Ok(());
+                }
+                Ok(t) => Some(t),
+            }
         }
     };
 
@@ -188,6 +219,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         &selected,
         &training_name,
         &training_time,
+        &training_tier,
     )
     .await?;
 
@@ -254,6 +286,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                     &selected,
                     &training_name,
                     &training_time,
+                    &training_tier,
                 )
                 .await?;
             }
@@ -267,7 +300,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     // Do all the database stuff
     let training = {
         let conn = db::connect();
-        let training = db::add_training(&conn, &training_name, &training_time);
+        let training = db::add_training(&conn, &training_name, &training_time, &training_tier);
         let training = match training {
             Err(e) => {
                 msg.reply(ctx, format!("{}", e)).await?;
@@ -308,8 +341,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     Ok(())
 }
 
-const TRAINING_TIME_FMT: &str =
-    "%a, %B %Y at %H:%M %Z";
+const TRAINING_TIME_FMT: &str = "%a, %B %Y at %H:%M %Z";
 
 #[command]
 #[description = "Displays information about the training with the specified id"]
@@ -336,7 +368,8 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 
     match training.state {
         TrainingState::Created | TrainingState::Finished => {
-            msg.reply(ctx, "Information for this training is not public").await?;
+            msg.reply(ctx, "Information for this training is not public")
+                .await?;
             return Ok(());
         }
         _ => (),
@@ -354,20 +387,33 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             .collect()
     };
 
+    let (tier, tier_roles) = {
+        let conn = db::connect();
+        let tier = training.get_tier(&conn)?;
+        let tier_roles = match &tier {
+            None => None,
+            Some(t) => Some(t.get_discord_roles(&conn)?),
+        };
+        (tier, tier_roles)
+    };
+
     let role_map = role_emojis(ctx, roles).await?;
 
     let utc = DateTime::<Utc>::from_utc(training.date, Utc);
     msg.channel_id
         .send_message(ctx, |m| {
+            m.allowed_mentions(|am| am.empty_parse());
             m.embed(|f| {
                 f.description(format!(
-                        "{} {}",
-                        match &training.state {
-                            TrainingState::Open => GREEN_CIRCLE_EMOJI,
-                            TrainingState::Closed => RED_CIRCLE_EMOJI,
-                            TrainingState::Started => RUNNING_EMOJI,
-                            _ => ' '},
-                        &training.title));
+                    "{} {}",
+                    match &training.state {
+                        TrainingState::Open => GREEN_CIRCLE_EMOJI,
+                        TrainingState::Closed => RED_CIRCLE_EMOJI,
+                        TrainingState::Started => RUNNING_EMOJI,
+                        _ => ' ',
+                    },
+                    &training.title
+                ));
                 f.field(
                     "**Date**",
                     format!(
@@ -377,14 +423,33 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                         utc.with_timezone(&Paris).format(TRAINING_TIME_FMT),
                         utc.with_timezone(&Moscow).format(TRAINING_TIME_FMT),
                     ),
-                    false);
-                f.field("**State**", &training.state, true);
-                f.field("**ID**", &training.id, true);
-                f.field(
-                    "**Available roles**    ",
-                    "**-----------------**",
                     false,
                 );
+                f.field(
+                    "**Requirements**",
+                    match tier {
+                        Some(t) => {
+                            format!(
+                                "{}\n{}",
+                                t.name,
+                                tier_roles
+                                    .unwrap_or(vec![])
+                                    .iter()
+                                    .map(|r| {
+                                        Mention::from(RoleId::from(r.discord_role_id as u64))
+                                            .to_string()
+                                    })
+                                    .collect::<Vec<_>>()
+                                    .join("\n"),
+                            )
+                        }
+                        None => "Open for everyone".to_string(),
+                    },
+                    true,
+                );
+                f.field("**State**", &training.state, true);
+                f.field("**ID**", &training.id, true);
+                f.field("**Available roles**    ", "**-----------------**", false);
                 f.fields(role_map.values().map(|rm| {
                     (
                         format!("{}   {}", Mention::from(rm.emoji.id), &rm.role.repr),

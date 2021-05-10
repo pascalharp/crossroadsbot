@@ -1,12 +1,12 @@
 use crate::commands::{CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT};
 use serenity::{
     client::bridge::gateway::ShardMessenger,
-    collector::reaction_collector::{ReactionAction},
+    collector::reaction_collector::ReactionAction,
+    http::CacheHttp,
     model::{
         channel::{Message, Reaction, ReactionType},
         id::UserId,
     },
-    http::CacheHttp,
     Result,
 };
 
@@ -18,9 +18,8 @@ pub enum YesOrNo {
 /// Reacts with CHECK_EMOJI and CROSS_EMOJI on the provided message
 pub async fn send_yes_or_no<'a>(
     cache_http: &'a impl CacheHttp,
-    msg: &'a Message
+    msg: &'a Message,
 ) -> Result<(Reaction, Reaction)> {
-
     let check = msg.react(cache_http, CHECK_EMOJI).await?;
     let cross = msg.react(cache_http, CROSS_EMOJI).await?;
     Ok((check, cross))

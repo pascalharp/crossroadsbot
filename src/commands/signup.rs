@@ -5,9 +5,9 @@ use crate::db;
 use regex::Regex;
 use serenity::framework::standard::{
     macros::{command, group},
-    Args, CommandResult};
+    Args, CommandResult,
+};
 use tracing::{error, info};
-
 
 #[group]
 #[commands(register)]

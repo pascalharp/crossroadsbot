@@ -5,7 +5,7 @@ use dotenv::dotenv;
 use serenity::{
     async_trait,
     client::{Client, EventHandler},
-    framework::standard::{macros::hook, DispatchError, CommandResult, StandardFramework},
+    framework::standard::{macros::hook, CommandResult, DispatchError, StandardFramework},
     model::prelude::*,
     prelude::*,
 };
@@ -100,21 +100,20 @@ async fn dispatch_error_hook(ctx: &Context, msg: &Message, error: DispatchError)
         DispatchError::NotEnoughArguments { min, given } => {
             let s = format!("Need {} arguments, but only got {}.", min, given);
             msg.reply(ctx, &s).await.ok();
-        },
+        }
         DispatchError::TooManyArguments { max, given } => {
             let s = format!("Max arguments allowed is {}, but got {}.", max, given);
             msg.reply(ctx, &s).await.ok();
-        },
+        }
         DispatchError::CheckFailed(..) => {
             let s = format!("No permissions to use this command");
             msg.reply(ctx, &s).await.ok();
-        },
+        }
         _ => {
             msg.react(ctx, commands::DIZZY_EMOJI).await.ok();
         }
     }
 }
-
 
 #[tokio::main]
 async fn main() {

@@ -53,10 +53,16 @@ pub fn add_training(
     conn: &PgConnection,
     title: &str,
     date: &NaiveDateTime,
+    tier: &Option<Tier>,
 ) -> QueryResult<Training> {
+    let tier_id: Option<i32> = match tier {
+        None => None,
+        Some(t) => Some(t.id),
+    };
     let training = NewTraining {
         title: title,
         date: date,
+        tier_id: tier_id,
     };
 
     diesel::insert_into(trainings::table)
@@ -109,6 +115,22 @@ impl Training {
 
     pub fn get_roles(&self, conn: &PgConnection) -> QueryResult<Vec<TrainingRole>> {
         TrainingRole::belonging_to(self).load(conn)
+    }
+
+    pub fn get_tier(&self, conn: &PgConnection) -> QueryResult<Option<Tier>> {
+        let tier_id = match self.tier_id {
+            None => return Ok(None),
+            Some(t) => t,
+        };
+
+        let tier = tiers::table
+            .filter(tiers::id.eq(tier_id))
+            .get_result::<Tier>(conn);
+
+        match tier {
+            Err(e) => Err(e),
+            Ok(t) => Ok(Some(t)),
+        }
     }
 }
 
