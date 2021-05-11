@@ -44,7 +44,7 @@ pub struct NewSignup {
     pub training_id: i32,
 }
 
-#[derive(Debug, DbEnum, PartialEq, PartialOrd)]
+#[derive(Debug, DbEnum, PartialEq, PartialOrd, Clone)]
 #[DieselType = "Training_state"]
 pub enum TrainingState {
     Created,
@@ -94,9 +94,9 @@ pub struct Training {
 
 #[derive(Insertable, Debug)]
 #[table_name = "trainings"]
-pub struct NewTraining<'a> {
-    pub title: &'a str,
-    pub date: &'a NaiveDateTime,
+pub struct NewTraining {
+    pub title: String,
+    pub date: NaiveDateTime,
     pub tier_id: Option<i32>,
 }
 

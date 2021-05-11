@@ -198,7 +198,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
     let (created, open, closed, started, finished) =
         trainings
             .iter()
-            .fold((0, 0, 0, 0, 0), |(cr, o, cl, s, f), t| match t.state {
+            .fold((0u32, 0u32, 0u32, 0u32, 0u32), |(cr, o, cl, s, f), t| match t.state {
                 db::TrainingState::Created => (cr + 1, o, cl, s, f),
                 db::TrainingState::Open => (cr, o + 1, cl, s, f),
                 db::TrainingState::Closed => (cr, o, cl + 1, s, f),
@@ -243,7 +243,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
         r.delete(&conn)?;
     }
     for t in trainings {
-        t.set_tier(&conn, None)?;
+        t.set_tier(None).await?;
     }
     tier.delete(&conn)?;
 

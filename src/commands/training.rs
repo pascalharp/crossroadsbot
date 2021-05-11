@@ -3,7 +3,6 @@ use super::{
     GREEN_CIRCLE_EMOJI, RED_CIRCLE_EMOJI, RUNNING_EMOJI, WARNING_EMOJI,
 };
 use crate::db;
-use crate::db::models::TrainingState;
 use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Moscow, Paris};
 use serenity::collector::reaction_collector::ReactionAction;
@@ -299,9 +298,17 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
     // Do all the database stuff
     let training = {
-        let conn = db::connect();
-        let training = db::add_training(&conn, &training_name, &training_time, &training_tier);
-        let training = match training {
+        let training_tier_id = match training_tier {
+            Some(t) => Some(t.id),
+            None => None,
+        };
+        let new_training = db::NewTraining {
+            title: String::from(training_name),
+            date: training_time,
+            tier_id: training_tier_id,
+
+        };
+        let training = match new_training.add().await {
             Err(e) => {
                 msg.reply(ctx, format!("{}", e)).await?;
                 return Ok(());
@@ -311,14 +318,13 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
         for r in re.values() {
             if selected.contains(&r.emoji.id) {
-                let training_role = training.add_role(&conn, r.role.id);
-                match training_role {
+                match training.add_role(r.role.id).await {
                     Err(e) => {
                         msg.reply(ctx, format!("{}", e)).await?;
                         return Ok(());
                     }
                     _ => (),
-                }
+                };
             }
         }
         training
@@ -356,9 +362,8 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         }
     };
 
-    let training = db::get_training_by_id(&db::connect(), training_id);
-    let training = &match training {
-        Ok(t) => t,
+    let training = match db::Training::by_id(training_id).await {
+        Ok(t) => Arc::new(t),
         Err(_) => {
             msg.reply(ctx, "Unable to find training with this id")
                 .await?;
@@ -367,7 +372,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     };
 
     match training.state {
-        TrainingState::Created | TrainingState::Finished => {
+        db::TrainingState::Created | db::TrainingState::Finished => {
             msg.reply(ctx, "Information for this training is not public")
                 .await?;
             return Ok(());
@@ -375,10 +380,10 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         _ => (),
     }
 
+    let conn = db::connect();
     let roles: Vec<db::Role> = {
-        let conn = db::connect();
-        training
-            .get_roles(&conn)?
+        training.clone()
+            .get_roles().await?
             .iter()
             .filter_map(|r| {
                 // Ignores deactivated roles
@@ -388,8 +393,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     };
 
     let (tier, tier_roles) = {
-        let conn = db::connect();
-        let tier = training.get_tier(&conn)?;
+        let tier = training.get_tier().await?;
         let tier_roles = match &tier {
             None => None,
             Some(t) => Some(t.get_discord_roles(&conn)?),
@@ -407,9 +411,9 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 f.description(format!(
                     "{} {}",
                     match &training.state {
-                        TrainingState::Open => GREEN_CIRCLE_EMOJI,
-                        TrainingState::Closed => RED_CIRCLE_EMOJI,
-                        TrainingState::Started => RUNNING_EMOJI,
+                        db::TrainingState::Open => GREEN_CIRCLE_EMOJI,
+                        db::TrainingState::Closed => RED_CIRCLE_EMOJI,
+                        db::TrainingState::Started => RUNNING_EMOJI,
                         _ => ' ',
                     },
                     &training.title
@@ -480,7 +484,7 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         }
     };
 
-    let state = match args.single::<TrainingState>() {
+    let state = match args.single::<db::TrainingState>() {
         Ok(s) => s,
         Err(_) => {
             msg.reply(ctx, "Not a training state").await?;
@@ -488,9 +492,7 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         }
     };
 
-    let conn = db::connect();
-    let training = db::get_training_by_id(&conn, training_id);
-    let training = match training {
+    let training = match db::Training::by_id(training_id).await {
         Ok(t) => t,
         Err(_) => {
             msg.reply(ctx, "Failed to load training, double check id")
@@ -499,17 +501,16 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         }
     };
 
-    training.set_state(&conn, &state)?;
+    training.set_state(state).await?;
     msg.react(ctx, CHECK_EMOJI).await?;
 
     Ok(())
 }
 
-async fn list_by_state(ctx: &Context, msg: &Message, state: TrainingState) -> CommandResult {
+async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -> CommandResult {
     let author_id = msg.author.id;
     let trainings = {
-        let conn = db::connect();
-        db::get_trainings_by_state(&conn, &state)?
+        db::Training::by_state(state.clone()).await?
     };
 
     // An embed can only have 25 fields. So partition the training to be sent
@@ -573,11 +574,11 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: TrainingState) -> Co
                     f.title(format!(
                         "{} Trainings",
                         match state {
-                            TrainingState::Open => "Open",
-                            TrainingState::Created => "Created",
-                            TrainingState::Closed => "Closed",
-                            TrainingState::Started => "Started",
-                            TrainingState::Finished => "Finished",
+                            db::TrainingState::Open => "Open",
+                            db::TrainingState::Created => "Created",
+                            db::TrainingState::Closed => "Closed",
+                            db::TrainingState::Started => "Started",
+                            db::TrainingState::Finished => "Finished",
                         }
                     ));
                     for t in trainings.iter() {
@@ -599,34 +600,36 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: TrainingState) -> Co
 #[description = "List trainings. Lists published trainings by default"]
 #[usage = "[ training_state ]"]
 #[sub_commands(list_created, list_published, list_closed, list_started, list_finished)]
+#[num_args(1)]
 async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, TrainingState::Open).await
+    msg.reply(ctx, "Not a training state").await?;
+    Ok(())
 }
 
 #[command("created")]
 #[checks(admin_role)]
 async fn list_created(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, TrainingState::Created).await
+    list_by_state(ctx, msg, db::TrainingState::Created).await
 }
 
-#[command("published")]
+#[command("open")]
 async fn list_published(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, TrainingState::Open).await
+    list_by_state(ctx, msg, db::TrainingState::Open).await
 }
 
 #[command("closed")]
 async fn list_closed(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, TrainingState::Closed).await
+    list_by_state(ctx, msg, db::TrainingState::Closed).await
 }
 
 #[command("started")]
 #[checks(admin_role)]
 async fn list_started(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, TrainingState::Started).await
+    list_by_state(ctx, msg, db::TrainingState::Started).await
 }
 
 #[command("finished")]
 #[checks(admin_role)]
 async fn list_finished(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, TrainingState::Finished).await
+    list_by_state(ctx, msg, db::TrainingState::Finished).await
 }

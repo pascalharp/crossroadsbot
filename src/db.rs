@@ -3,7 +3,6 @@
 //! is used to hold connections and allowing diesel calls to be move to a blocking thread
 //! with tokio task::spawn_blocking to not block on the executer thread
 
-use chrono::NaiveDateTime;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -98,88 +97,101 @@ impl User {
 
 /* -- Training -- */
 
-pub fn add_training(
-    conn: &PgConnection,
-    title: &str,
-    date: &NaiveDateTime,
-    tier: &Option<Tier>,
-) -> QueryResult<Training> {
-    let tier_id: Option<i32> = match tier {
-        None => None,
-        Some(t) => Some(t.id),
-    };
-    let training = NewTraining {
-        title: title,
-        date: date,
-        tier_id: tier_id,
-    };
-
-    diesel::insert_into(trainings::table)
-        .values(&training)
-        .get_result(conn)
-}
-
-pub fn get_trainings_by_state(
-    conn: &PgConnection,
-    state: &TrainingState,
-) -> QueryResult<Vec<Training>> {
-    trainings::table
-        .filter(trainings::state.eq(state))
-        .load::<Training>(conn)
-}
-
-pub fn get_training_by_id(conn: &PgConnection, id: i32) -> QueryResult<Training> {
-    trainings::table
-        .filter(trainings::id.eq(id))
-        .first::<Training>(conn)
-}
-
 impl Training {
-    pub fn set_state(&self, conn: &PgConnection, state: &TrainingState) -> QueryResult<Training> {
-        diesel::update(trainings::table.find(self.id))
-            .set(trainings::state.eq(state))
-            .get_result(conn)
+
+    pub async fn by_state(state: TrainingState) -> QueryResult<Vec<Training>> {
+        let pool = POOL.clone();
+        task::spawn_blocking( move || {
+            trainings::table
+                .filter(trainings::state.eq(state))
+                .load::<Training>(&pool.get().unwrap())
+        }).await.unwrap()
     }
 
-    pub fn set_tier(&self, conn: &PgConnection, tier: Option<i32>) -> QueryResult<Training> {
-        diesel::update(trainings::table.find(self.id))
-            .set(trainings::tier_id.eq(tier))
-            .get_result(conn)
+    pub async fn by_id(id: i32) -> QueryResult<Training> {
+        let pool = POOL.clone();
+        task::spawn_blocking( move || {
+            trainings::table
+                .filter(trainings::id.eq(id))
+                .first::<Training>(&pool.get().unwrap())
+        }).await.unwrap()
     }
 
-    pub fn get_signups(&self, conn: &PgConnection) -> QueryResult<Vec<Signup>> {
-        Signup::belonging_to(self).load(conn)
+    pub async fn set_state(&self, state: TrainingState) -> QueryResult<Training> {
+        let training_id = self.id;
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            diesel::update(trainings::table.find(training_id))
+                .set(trainings::state.eq(state))
+                .get_result(&pool.get().unwrap())
+        }).await.unwrap()
     }
 
-    pub fn add_role(&self, conn: &PgConnection, role_id: i32) -> QueryResult<TrainingRole> {
+    pub async fn set_tier(&self, tier: Option<i32>) -> QueryResult<Training> {
+        let training_id = self.id;
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            diesel::update(trainings::table.find(training_id))
+                .set(trainings::tier_id.eq(tier))
+                .get_result(&pool.get().unwrap())
+        }).await.unwrap()
+    }
+
+    pub async fn get_signups(self: Arc<Training>) -> QueryResult<Vec<Signup>> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            Signup::belonging_to(self.as_ref()).load(&pool.get().unwrap())
+        }).await.unwrap()
+    }
+
+    pub async fn add_role(&self, role_id: i32) -> QueryResult<TrainingRole> {
         let training_role = NewTrainingRole {
             training_id: self.id,
             role_id: role_id,
         };
-
-        diesel::insert_into(training_roles::table)
-            .values(&training_role)
-            .get_result(conn)
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            diesel::insert_into(training_roles::table)
+                .values(&training_role)
+                .get_result(&pool.get().unwrap())
+        }).await.unwrap()
     }
 
-    pub fn get_roles(&self, conn: &PgConnection) -> QueryResult<Vec<TrainingRole>> {
-        TrainingRole::belonging_to(self).load(conn)
+    pub async fn get_roles(self: Arc<Training>) -> QueryResult<Vec<TrainingRole>> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            TrainingRole::belonging_to(self.as_ref()).load(&pool.get().unwrap())
+        }).await.unwrap()
     }
 
-    pub fn get_tier(&self, conn: &PgConnection) -> QueryResult<Option<Tier>> {
+    pub async fn get_tier(&self) -> QueryResult<Option<Tier>> {
         let tier_id = match self.tier_id {
             None => return Ok(None),
             Some(t) => t,
         };
 
-        let tier = tiers::table
-            .filter(tiers::id.eq(tier_id))
-            .get_result::<Tier>(conn);
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            let tier = tiers::table
+                .filter(tiers::id.eq(tier_id))
+                .get_result::<Tier>(&pool.get().unwrap());
 
-        match tier {
-            Err(e) => Err(e),
-            Ok(t) => Ok(Some(t)),
-        }
+            match tier {
+                Err(e) => Err(e),
+                Ok(t) => Ok(Some(t)),
+            }
+        }).await.unwrap()
+    }
+}
+
+impl NewTraining {
+    pub async fn add(self: NewTraining) -> QueryResult<Training> {
+        let pool = POOL.clone();
+        task::spawn_blocking( move || {
+            diesel::insert_into(trainings::table)
+                .values(&self)
+                .get_result(&pool.get().unwrap())
+        }).await.unwrap()
     }
 }
 
