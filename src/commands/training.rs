@@ -189,10 +189,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         .await?;
 
     // Get roles and turn them into a HashMap with Emojis
-    let roles = {
-        let conn = db::connect();
-        db::get_roles(&conn)?
-    };
+    let roles = db::Role::all().await?;
     let re = Arc::new(role_emojis(ctx, roles).await?);
     // Keep track of what roles are selected by EmojiId
     let mut selected: HashSet<EmojiId> = HashSet::new();

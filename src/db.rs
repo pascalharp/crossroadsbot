@@ -197,70 +197,87 @@ impl NewTraining {
 
 /* -- Signup -- */
 
-pub fn add_signup(conn: &PgConnection, user: &User, training: &Training) -> QueryResult<Signup> {
-    let signup = NewSignup {
-        user_id: user.id,
-        training_id: training.id,
-    };
-
-    diesel::insert_into(signups::table)
-        .values(&signup)
-        .get_result(conn)
+impl Signup {
+    pub async fn get_training(&self) -> QueryResult<Training> {
+        let training_id = self.training_id;
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            trainings::table
+                .filter(trainings::id.eq(training_id))
+                .first::<Training>(&pool.get().unwrap())
+        }).await.unwrap()
+    }
 }
 
-impl Signup {
-    pub fn get_training(self, conn: &PgConnection) -> QueryResult<Training> {
-        trainings::table
-            .filter(trainings::id.eq(self.training_id))
-            .first::<Training>(conn)
+impl NewSignup {
+    pub async fn add(self) -> QueryResult<Signup> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            diesel::insert_into(signups::table)
+                .values(&self)
+                .get_result(&pool.get().unwrap())
+        }).await.unwrap()
     }
 }
 
 /* -- Role -- */
 
-pub fn add_role(conn: &PgConnection, title: &str, repr: &str, emoji: u64) -> QueryResult<Role> {
-    let role = NewRole {
-        title: title,
-        repr: repr,
-        emoji: emoji as i64,
-    };
-
-    diesel::insert_into(roles::table)
-        .values(&role)
-        .get_result(conn)
-}
-
 impl Role {
-    pub fn deactivate(self, conn: &PgConnection) -> QueryResult<Role> {
-        diesel::update(roles::table.find(self.id))
-            .set(roles::active.eq(false))
-            .get_result(conn)
+
+    /// Deactivates the role but keeps it in database
+    pub async fn deactivate(self) -> QueryResult<Role> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            diesel::update(roles::table.find(self.id))
+                .set(roles::active.eq(false))
+                .get_result(&pool.get().unwrap())
+        }).await.unwrap()
+    }
+
+    /// Loads all active roles
+    pub async fn all() -> QueryResult<Vec<Role>> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            roles::table
+                .filter(roles::active.eq(true))
+                .load::<Role>(&pool.get().unwrap())
+        }).await.unwrap()
+    }
+
+    /// Loads the current active role associated with provided emoji
+    pub async fn by_emoji(emoji: u64) -> QueryResult<Role> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            roles::table
+                .filter(roles::active.eq(true))
+                .filter(roles::emoji.eq(emoji as i64))
+                .first::<Role>(&pool.get().unwrap())
+        }).await.unwrap()
+    }
+
+    /// Loads the current active role with specified repr
+    pub async fn by_repr(repr: String) -> QueryResult<Role> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            roles::table
+                .filter(roles::active.eq(true))
+                .filter(roles::repr.eq(repr))
+                .first::<Role>(&pool.get().unwrap())
+        }).await.unwrap()
     }
 }
 
-pub fn rm_role(conn: &PgConnection, repr: &str) -> QueryResult<usize> {
-    diesel::delete(roles::table.filter(roles::repr.eq(repr))).execute(conn)
+impl NewRole {
+    pub async fn add(self) -> QueryResult<Role> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            diesel::insert_into(roles::table)
+                .values(&self)
+                .get_result(&pool.get().unwrap())
+        }).await.unwrap()
+    }
 }
 
-pub fn get_roles(conn: &PgConnection) -> QueryResult<Vec<Role>> {
-    roles::table
-        .filter(roles::active.eq(true))
-        .load::<Role>(conn)
-}
-
-pub fn get_role_by_emoji(conn: &PgConnection, emoji: u64) -> QueryResult<Role> {
-    roles::table
-        .filter(roles::active.eq(true))
-        .filter(roles::emoji.eq(emoji as i64))
-        .first::<Role>(conn)
-}
-
-pub fn get_role_by_repr(conn: &PgConnection, repr: &str) -> QueryResult<Role> {
-    roles::table
-        .filter(roles::active.eq(true))
-        .filter(roles::repr.eq(repr))
-        .first::<Role>(conn)
-}
 
 // --- TrainingRole ---
 
