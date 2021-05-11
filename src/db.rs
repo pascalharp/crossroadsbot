@@ -284,18 +284,26 @@ impl NewRole {
 impl TrainingRole {
     /// Ignores deactivated roles. To load deactivated roles as well use
     /// role_unfilterd
-    pub fn role(&self, conn: &PgConnection) -> QueryResult<Role> {
-        roles::table
-            .filter(roles::active.eq(true))
-            .filter(roles::id.eq(self.role_id))
-            .first::<Role>(conn)
+    pub async fn role(&self) -> QueryResult<Role> {
+        let role_id = self.role_id;
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            roles::table
+                .filter(roles::active.eq(true))
+                .filter(roles::id.eq(role_id))
+                .first::<Role>(&pool.get().unwrap())
+        }).await.unwrap()
     }
 
-    /// Loads the role even if it is deactivated
-    pub fn role_unfilterd(&self, conn: &PgConnection) -> QueryResult<Role> {
-        roles::table
-            .filter(roles::id.eq(self.role_id))
-            .first::<Role>(conn)
+    /// Like role() but also loads deactivated roles
+    pub async fn role_unfilterd(&self) -> QueryResult<Role> {
+        let role_id = self.role_id;
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            roles::table
+                .filter(roles::id.eq(role_id))
+                .first::<Role>(&pool.get().unwrap())
+        }).await.unwrap()
     }
 }
 

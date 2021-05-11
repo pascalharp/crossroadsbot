@@ -17,6 +17,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
+use serenity::futures::stream;
 
 #[group]
 #[prefix = "training"]
@@ -379,14 +380,13 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 
     let conn = db::connect();
     let roles: Vec<db::Role> = {
-        training.clone()
-            .get_roles().await?
-            .iter()
-            .filter_map(|r| {
+        let stream = stream::iter(training.clone().get_roles().await?);
+        stream
+            .filter_map(|r| async move {
                 // Ignores deactivated roles
-                r.role(&conn).ok()
+                r.role().await.ok()
             })
-            .collect()
+            .collect().await
     };
 
     let (tier, tier_roles) = {
