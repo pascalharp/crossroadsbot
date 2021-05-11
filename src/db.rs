@@ -1,8 +1,17 @@
+//! # db
+//! This file contains abstractions for diesel sql query calls. A global connection pool
+//! is used to hold connections and allowing diesel calls to be move to a blocking thread
+//! with tokio task::spawn_blocking to not block on the executer thread
+
 use chrono::NaiveDateTime;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
+use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::result::QueryResult;
+use lazy_static::lazy_static;
 use std::env;
+use std::sync::Arc;
+use tokio::task;
 
 pub mod models;
 pub mod schema;
@@ -10,40 +19,80 @@ pub mod schema;
 pub use models::*;
 use schema::*;
 
+
+
+lazy_static! {
+    /// Global connection pool for postgresql database. Lazily created on first use
+    static ref POOL: Pool<ConnectionManager<PgConnection>> = {
+        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let manager = ConnectionManager::<PgConnection>::new(database_url);
+        Pool::new(manager).unwrap()
+    };
+}
+
 pub fn connect() -> PgConnection {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-
     PgConnection::establish(&database_url).expect(&format!("Error connecting to {}", database_url))
+}
+
+pub async fn pool_test() -> QueryResult<Vec<Role>> {
+    let pool = POOL.clone();
+    task::spawn_blocking(move || {
+        let conn = pool.get().unwrap();
+        roles::table
+            .filter(roles::active.eq(true))
+            .load::<Role>(&conn)
+    })
+    .await
+    .unwrap()
 }
 
 /* --- User --- */
 
-pub fn get_user(conn: &PgConnection, discord_id: u64) -> QueryResult<User> {
-    users::table
-        .filter(users::discord_id.eq(discord_id as i64))
-        .first::<User>(conn)
+pub async fn get_user(discord_id: u64) -> QueryResult<User> {
+    let pool = POOL.clone();
+    task::spawn_blocking(move || {
+        users::table
+            .filter(users::discord_id.eq(discord_id as i64))
+            .first::<User>(&pool.get().unwrap())
+    })
+    .await
+    .unwrap()
 }
 
-pub fn add_user(conn: &PgConnection, discord_id: u64, gw2_id: &str) -> QueryResult<User> {
-    let user = NewUser {
-        discord_id: discord_id as i64,
-        gw2_id: gw2_id,
-    };
+pub async fn add_user(discord_id: u64, gw2_id: &str) -> QueryResult<User> {
+    let pool = POOL.clone();
+    let gw2_id = String::from(gw2_id);
+    task::spawn_blocking(move || {
+        let user = NewUser {
+            discord_id: discord_id as i64,
+            gw2_id: &gw2_id,
+        };
 
-    diesel::insert_into(users::table)
-        .values(&user)
-        .get_result(conn)
+        diesel::insert_into(users::table)
+            .values(&user)
+            .get_result(&pool.get().unwrap())
+    })
+    .await
+    .unwrap()
 }
 
 impl User {
-    pub fn get_signups(&self, conn: &PgConnection) -> QueryResult<Vec<Signup>> {
-        Signup::belonging_to(self).load(conn)
+    pub async fn get_signups(self: Arc<User>) -> QueryResult<Vec<Signup>> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            Signup::belonging_to(self.as_ref()).load(&pool.get().unwrap())
+        }).await.unwrap()
     }
 
-    pub fn update_gw2_id(&self, conn: &PgConnection, gw2_id: &str) -> QueryResult<User> {
-        diesel::update(users::table.find(self.id))
-            .set(users::gw2_id.eq(gw2_id))
-            .get_result(conn)
+    pub async fn update_gw2_id(self: Arc<User>, gw2_id: &str) -> QueryResult<User> {
+        let pool = POOL.clone();
+        let gw2_id = String::from(gw2_id);
+        task::spawn_blocking(move || {
+            diesel::update(users::table.find(self.id))
+                .set(users::gw2_id.eq(gw2_id))
+                .get_result(&pool.get().unwrap())
+        }).await.unwrap()
     }
 }
 

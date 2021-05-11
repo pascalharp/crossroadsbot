@@ -115,7 +115,7 @@ async fn dispatch_error_hook(ctx: &Context, msg: &Message, error: DispatchError)
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
     // Load .env into ENV
     dotenv().ok();
@@ -129,6 +129,7 @@ async fn main() {
 
     // Make a quick check to the database
     {
+        print!("{:?}",db::pool_test().await);
         db::connect();
     }
 
