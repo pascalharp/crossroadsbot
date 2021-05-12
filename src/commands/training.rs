@@ -149,9 +149,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         if training_tier.to_lowercase().eq("none") {
             None
         } else {
-            let conn = db::connect();
-            let tier = db::get_tier(&conn, &training_tier);
-            match tier {
+            match db::Tier::by_name(training_tier).await {
                 Err(_) => {
                     msg.reply(
                         ctx,
@@ -378,7 +376,6 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         _ => (),
     }
 
-    let conn = db::connect();
     let roles: Vec<db::Role> = {
         let stream = stream::iter(training.clone().get_roles().await?);
         stream
@@ -391,11 +388,16 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 
     let (tier, tier_roles) = {
         let tier = training.get_tier().await?;
-        let tier_roles = match &tier {
-            None => None,
-            Some(t) => Some(t.get_discord_roles(&conn)?),
-        };
-        (tier, tier_roles)
+        match tier {
+            None => (None, None),
+            Some(t) => {
+                let t = Arc::new(t);
+                (
+                    Some(t.clone()),
+                    Some(t.clone().get_discord_roles().await?)
+                )
+            }
+        }
     };
 
     let role_map = role_emojis(ctx, roles).await?;

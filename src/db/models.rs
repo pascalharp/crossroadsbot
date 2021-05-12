@@ -154,8 +154,8 @@ pub struct Tier {
 
 #[derive(Insertable, Debug)]
 #[table_name = "tiers"]
-pub struct NewTier<'a> {
-    pub name: &'a str,
+pub struct NewTier {
+    pub name: String,
 }
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]

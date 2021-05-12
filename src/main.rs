@@ -127,10 +127,9 @@ async fn main() {
 
     tracing::subscriber::set_global_default(subscriber).expect("Failed to start the logger");
 
-    // Make a quick check to the database
+    // Make a quick check to the database TODO raplace later with updating migrations
     {
         print!("{:?}",db::pool_test().await);
-        db::connect();
     }
 
     let token = env::var("DISCORD_TOKEN").expect("discord token not set");

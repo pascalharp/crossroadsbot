@@ -18,8 +18,6 @@ pub mod schema;
 pub use models::*;
 use schema::*;
 
-
-
 lazy_static! {
     /// Global connection pool for postgresql database. Lazily created on first use
     static ref POOL: Pool<ConnectionManager<PgConnection>> = {
@@ -27,11 +25,6 @@ lazy_static! {
         let manager = ConnectionManager::<PgConnection>::new(database_url);
         Pool::new(manager).unwrap()
     };
-}
-
-pub fn connect() -> PgConnection {
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    PgConnection::establish(&database_url).expect(&format!("Error connecting to {}", database_url))
 }
 
 pub async fn pool_test() -> QueryResult<Vec<Role>> {
@@ -308,58 +301,80 @@ impl TrainingRole {
 }
 
 // --- Tier ---
-
-pub fn add_tier(conn: &PgConnection, name: &str) -> QueryResult<Tier> {
-    let new_tier = NewTier { name };
-
-    diesel::insert_into(tiers::table)
-        .values(&new_tier)
-        .get_result(conn)
-}
-
-pub fn get_tiers(conn: &PgConnection) -> QueryResult<Vec<Tier>> {
-    tiers::table.load::<Tier>(conn)
-}
-
-pub fn get_tier(conn: &PgConnection, name: &str) -> QueryResult<Tier> {
-    tiers::table
-        .filter(tiers::name.eq(name))
-        .first::<Tier>(conn)
-}
-
 impl Tier {
-    pub fn add_discord_role(
-        &self,
-        conn: &PgConnection,
-        discord_id: u64,
-    ) -> QueryResult<TierMapping> {
+
+    pub async fn all() -> QueryResult<Vec<Tier>> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            tiers::table.load::<Tier>(&pool.get().unwrap())
+        }).await.unwrap()
+    }
+
+    pub async fn by_name(name: String) -> QueryResult<Tier> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            tiers::table
+                .filter(tiers::name.eq(name))
+                .first::<Tier>(&pool.get().unwrap())
+        }).await.unwrap()
+    }
+
+    pub async fn add_discord_role(&self, discord_id: u64) -> QueryResult<TierMapping> {
+        let pool = POOL.clone();
         let new_tier_mapping = NewTierMapping {
-            tier_id: self.id,
-            discord_role_id: discord_id as i64,
-        };
+                tier_id: self.id,
+                discord_role_id: discord_id as i64,
+            };
 
-        diesel::insert_into(tier_mappings::table)
-            .values(&new_tier_mapping)
-            .get_result(conn)
+        task::spawn_blocking(move || {
+            diesel::insert_into(tier_mappings::table)
+                .values(&new_tier_mapping)
+                .get_result(&pool.get().unwrap())
+        }).await.unwrap()
     }
 
-    pub fn delete(self, conn: &PgConnection) -> QueryResult<usize> {
-        diesel::delete(tiers::table.filter(tiers::id.eq(self.id))).execute(conn)
+    pub async fn delete(self) -> QueryResult<usize> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            diesel::delete(tiers::table.filter(tiers::id.eq(self.id))).execute(&pool.get().unwrap())
+        }).await.unwrap()
     }
 
-    pub fn get_discord_roles(&self, conn: &PgConnection) -> QueryResult<Vec<TierMapping>> {
-        TierMapping::belonging_to(self).load(conn)
+    pub async fn get_discord_roles(self: Arc<Tier>) -> QueryResult<Vec<TierMapping>> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            TierMapping::belonging_to(self.as_ref()).load(&pool.get().unwrap())
+        }).await.unwrap()
     }
 
-    pub fn get_trainings(&self, conn: &PgConnection) -> QueryResult<Vec<Training>> {
-        Training::belonging_to(self).load(conn)
+    pub async fn get_trainings(self: Arc<Tier>) -> QueryResult<Vec<Training>> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            Training::belonging_to(self.as_ref()).load(&pool.get().unwrap())
+        }).await.unwrap()
+    }
+}
+
+impl NewTier {
+
+    pub async fn add(self) -> QueryResult<Tier> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            diesel::insert_into(tiers::table)
+                .values(&self)
+                .get_result(&pool.get().unwrap())
+        }).await.unwrap()
     }
 }
 
 // --- TierMapping ---
 
 impl TierMapping {
-    pub fn delete(self, conn: &PgConnection) -> QueryResult<usize> {
-        diesel::delete(tier_mappings::table.filter(tier_mappings::id.eq(self.id))).execute(conn)
+    pub async fn delete(self) -> QueryResult<usize> {
+        let pool = POOL.clone();
+        let id = self.id;
+        task::spawn_blocking(move || {
+            diesel::delete(tier_mappings::table.filter(tier_mappings::id.eq(id))).execute(&pool.get().unwrap())
+        }).await.unwrap()
     }
 }
