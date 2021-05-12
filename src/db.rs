@@ -40,36 +40,34 @@ pub async fn pool_test() -> QueryResult<Vec<Role>> {
 }
 
 /* --- User --- */
-
-pub async fn get_user(discord_id: u64) -> QueryResult<User> {
-    let pool = POOL.clone();
-    task::spawn_blocking(move || {
-        users::table
-            .filter(users::discord_id.eq(discord_id as i64))
-            .first::<User>(&pool.get().unwrap())
-    })
-    .await
-    .unwrap()
-}
-
-pub async fn add_user(discord_id: u64, gw2_id: &str) -> QueryResult<User> {
-    let pool = POOL.clone();
-    let gw2_id = String::from(gw2_id);
-    task::spawn_blocking(move || {
-        let user = NewUser {
-            discord_id: discord_id as i64,
-            gw2_id: &gw2_id,
-        };
-
-        diesel::insert_into(users::table)
-            .values(&user)
-            .get_result(&pool.get().unwrap())
-    })
-    .await
-    .unwrap()
-}
-
 impl User {
+    pub async fn add(discord_id: u64, gw2_id: String) -> QueryResult<User> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            let user = NewUser {
+                discord_id: discord_id as i64,
+                gw2_id: &gw2_id,
+            };
+
+            diesel::insert_into(users::table)
+                .values(&user)
+                .get_result(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
+    pub async fn get(discord_id: u64) -> QueryResult<User> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            users::table
+                .filter(users::discord_id.eq(discord_id as i64))
+                .first::<User>(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
     pub async fn get_signups(self: Arc<User>) -> QueryResult<Vec<Signup>> {
         let pool = POOL.clone();
         task::spawn_blocking(move || Signup::belonging_to(self.as_ref()).load(&pool.get().unwrap()))
