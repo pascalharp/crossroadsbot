@@ -6,6 +6,7 @@ use serenity::framework::standard::{
 };
 use serenity::model::prelude::*;
 use serenity::prelude::*;
+use std::sync::Arc;
 
 #[group]
 #[prefix = "tier"]
@@ -20,16 +21,15 @@ pub struct Tier;
 #[only_in("guild")]
 #[num_args(0)]
 pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    let conn = db::connect();
-    let tiers = db::get_tiers(&conn)?;
+    let tiers = db::Tier::all().await?;
 
-    let mut tier_roles: Vec<(db::Tier, Vec<db::TierMapping>)> = tiers
-        .into_iter()
-        .map(|t| {
-            let mapping = t.get_discord_roles(&conn)?;
-            Ok((t, mapping))
-        })
-        .collect::<Result<_, diesel::result::Error>>()?;
+    let mut tier_roles: Vec<(Arc<db::Tier>, Vec<db::TierMapping>)> = vec![];
+
+    for t in tiers {
+        let t = Arc::new(t);
+        let m = t.clone().get_discord_roles().await?;
+        tier_roles.push((t,m));
+    }
 
     // List tiers with more roles first.It feels more inclusive =D
     tier_roles.sort_by(|(_, a), (_, b)| b.len().cmp(&a.len()));
@@ -41,7 +41,7 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
                 e.description("Current Tiers for trainings");
                 e.fields(tier_roles.into_iter().map(|(t, r)| {
                     (
-                        t.name,
+                        String::from(&t.name),
                         r.iter()
                             .map(|r| {
                                 Mention::from(RoleId::from(r.discord_role_id as u64)).to_string()
@@ -141,9 +141,10 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         },
     }
 
-    let conn = db::connect();
-    let tier = db::add_tier(&conn, &tier_name);
-    let tier = match tier {
+    let new_tier = db::NewTier {
+        name: String::from(tier_name)
+    };
+    let tier = match new_tier.add().await {
         Err(e) => {
             msg.reply(ctx, "Error adding tier to database").await?;
             return Err(e.into());
@@ -152,7 +153,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     };
 
     for r in roles {
-        tier.add_discord_role(&conn, *r.as_u64())?;
+        tier.add_discord_role(*r.as_u64()).await?;
     }
 
     msg.reply(ctx, "Tier added").await?;
@@ -178,10 +179,8 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
         }
     };
 
-    let conn = db::connect();
-    let tier = db::get_tier(&conn, &tier_name);
-    let tier = match tier {
-        Ok(t) => t,
+    let tier = match db::Tier::by_name(tier_name).await {
+        Ok(t) => Arc::new(t),
         Err(e) => {
             msg.reply(
                 ctx,
@@ -191,14 +190,13 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
             return Err(e.into());
         }
     };
-    let roles = tier.get_discord_roles(&conn)?;
-    let trainings = tier.get_trainings(&conn)?;
-    drop(conn);
+    let roles = tier.clone().get_discord_roles().await?;
+    let trainings = tier.clone().get_trainings().await?;
 
     let (created, open, closed, started, finished) =
         trainings
             .iter()
-            .fold((0, 0, 0, 0, 0), |(cr, o, cl, s, f), t| match t.state {
+            .fold((0u32, 0u32, 0u32, 0u32, 0u32), |(cr, o, cl, s, f), t| match t.state {
                 db::TrainingState::Created => (cr + 1, o, cl, s, f),
                 db::TrainingState::Open => (cr, o + 1, cl, s, f),
                 db::TrainingState::Closed => (cr, o, cl + 1, s, f),
@@ -238,14 +236,19 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
         },
     }
 
-    let conn = db::connect();
     for r in roles {
-        r.delete(&conn)?;
+        r.delete().await?;
     }
     for t in trainings {
-        t.set_tier(&conn, None)?;
+        t.set_tier(None).await?;
     }
-    tier.delete(&conn)?;
+    match Arc::try_unwrap(tier) {
+        Ok(t) => { t.delete().await?; },
+        Err(_) => {
+            msg.reply(ctx, "Dangling reference to tier. Failed to delete =(").await?; 
+            return Ok(());
+        },
+    };
 
     msg.reply(ctx, "Tier removed").await?;
 
@@ -281,17 +284,15 @@ pub async fn edit_add(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
         }
     };
 
-    let conn = db::connect();
-    let tier = db::get_tier(&conn, &tier);
-    let tier = match tier {
-        Ok(t) => t,
+    let tier = match db::Tier::by_name(tier).await {
+        Ok(t) => Arc::new(t),
         Err(_) => {
             msg.reply(ctx, "Failed to load tier. Check spelling")
                 .await?;
             return Ok(());
         }
     };
-    let discord_roles = tier.get_discord_roles(&conn)?;
+    let discord_roles = tier.clone().get_discord_roles().await?;
     if discord_roles
         .iter()
         .any(|d| RoleId::from(d.discord_role_id as u64) == role)
@@ -301,7 +302,7 @@ pub async fn edit_add(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
         return Ok(());
     }
 
-    let added = tier.add_discord_role(&conn, *role.as_u64());
+    let added = tier.clone().add_discord_role(*role.as_u64()).await;
     match added {
         Ok(_) => {
             msg.reply(ctx, "Discord role added").await?;
@@ -332,17 +333,15 @@ pub async fn edit_remove(ctx: &Context, msg: &Message, mut args: Args) -> Comman
         }
     };
 
-    let conn = db::connect();
-    let tier = db::get_tier(&conn, &tier);
-    let tier = match tier {
-        Ok(t) => t,
+    let tier = match db::Tier::by_name(tier).await {
+        Ok(t) => Arc::new(t),
         Err(_) => {
             msg.reply(ctx, "Failed to load tier. Check spelling")
                 .await?;
             return Ok(());
         }
     };
-    let discord_roles = tier.get_discord_roles(&conn)?;
+    let discord_roles = tier.get_discord_roles().await?;
     let to_remove = discord_roles
         .into_iter()
         .find(|d| RoleId::from(d.discord_role_id as u64) == role);
@@ -358,7 +357,7 @@ pub async fn edit_remove(ctx: &Context, msg: &Message, mut args: Args) -> Comman
         Some(i) => i,
     };
 
-    let removed = to_remove.delete(&conn);
+    let removed = to_remove.delete().await;
     match removed {
         Ok(_) => {
             msg.reply(ctx, "Discord role removed").await?;

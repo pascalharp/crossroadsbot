@@ -115,7 +115,7 @@ async fn dispatch_error_hook(ctx: &Context, msg: &Message, error: DispatchError)
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() {
     // Load .env into ENV
     dotenv().ok();
@@ -127,9 +127,9 @@ async fn main() {
 
     tracing::subscriber::set_global_default(subscriber).expect("Failed to start the logger");
 
-    // Make a quick check to the database
+    // Make a quick check to the database TODO raplace later with updating migrations
     {
-        db::connect();
+        print!("{:?}",db::pool_test().await);
     }
 
     let token = env::var("DISCORD_TOKEN").expect("discord token not set");

@@ -8,6 +8,7 @@ use serenity::framework::standard::{
     Args, CommandResult,
 };
 use tracing::{error, info};
+use std::sync::Arc;
 
 #[group]
 #[commands(register)]
@@ -27,12 +28,12 @@ pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             return Ok(());
         }
 
-        let conn = db::connect();
-        let user_req = db::get_user(&conn, *msg.author.id.as_u64());
+        let user_req = db::get_user(*msg.author.id.as_u64()).await;
         match user_req {
             // User already exist. update account name
             Ok(user) => {
-                if let Err(e) = user.update_gw2_id(&conn, &acc_name) {
+                let user = Arc::new(user);
+                if let Err(e) = user.clone().update_gw2_id(&acc_name).await {
                     error!("{}", e);
                     return Ok(());
                 } else {
@@ -46,7 +47,7 @@ pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             }
             // User does not exist. Create new one
             Err(_) => {
-                if let Err(e) = db::add_user(&conn, *msg.author.id.as_u64(), &acc_name) {
+                if let Err(e) = db::add_user(*msg.author.id.as_u64(), &acc_name).await {
                     error!("{}", e);
                     return Ok(());
                 } else {

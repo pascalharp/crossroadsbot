@@ -31,7 +31,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     }
 
     // load all roles from db
-    let roles = db::get_roles(&db::connect())?;
+    let roles = db::Role::all().await?;
     let db_emojis: Vec<EmojiId> = roles
         .iter()
         .map(|r| EmojiId::from(r.emoji as u64))
@@ -167,12 +167,13 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
     if let Some(e) = react {
         if e.as_inner_ref().emoji == ReactionType::from(CHECK_EMOJI) {
-            // Save to database
-            let res = {
-                let db_conn = db::connect();
-                db::add_role(&db_conn, &role_name, &role_repr, *emoji_id.as_u64())
+            let new_role = db::NewRole {
+                title: String::from(role_name),
+                repr: String::from(role_repr),
+                emoji: *emoji_id.as_u64() as i64,
             };
-            match res {
+
+            match new_role.add().await {
                 Ok(_) => {
                     msg.reply(ctx, "Role added to database").await?;
                 }
@@ -203,8 +204,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 #[num_args(1)]
 pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let role_repr = args.single::<String>()?;
-    let role = db::get_role_by_repr(&db::connect(), &role_repr);
-    let role = match role {
+    let role = match db::Role::by_repr(role_repr.clone()).await {
         Ok(r) => r,
         Err(e) => match e {
             diesel::result::Error::NotFound => {
@@ -216,7 +216,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
         },
     };
 
-    role.deactivate(&db::connect())?;
+    role.deactivate().await?;
     msg.react(ctx, CHECK_EMOJI).await?;
     Ok(())
 }
@@ -228,7 +228,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
 #[only_in("guild")]
 #[num_args(0)]
 pub async fn list(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
-    let roles = db::get_roles(&db::connect())?;
+    let roles = db::Role::all().await?;
 
     msg.channel_id
         .send_message(ctx, |m| {
