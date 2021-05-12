@@ -22,7 +22,7 @@ struct Signup;
 #[num_args(1)]
 pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let acc_name = args.single::<String>()?;
-    let re = Regex::new("^[a-zA-Z]{3,27}.[0-9]{4}$").unwrap();
+    let re = Regex::new("^[a-zA-Z]{3,27}\\.[0-9]{4}$").unwrap();
 
     if !re.is_match(&acc_name) {
         msg.reply(
