@@ -129,7 +129,7 @@ async fn main() {
 
     // Make a quick check to the database TODO raplace later with updating migrations
     {
-        print!("{:?}",db::pool_test().await);
+        print!("{:?}", db::pool_test().await);
     }
 
     let token = env::var("DISCORD_TOKEN").expect("discord token not set");

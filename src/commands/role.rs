@@ -1,5 +1,5 @@
 use super::{ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT};
-use crate::db;
+use crate::{db, utils};
 use serenity::framework::standard::{
     macros::{command, group},
     Args, CommandResult,
@@ -144,7 +144,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             e.field("Role Emoji", Mention::from(emoji_id), true);
             e.footer(|f| {
                 f.text(format!(
-                    "{} to finish. {} to abort",
+                    "{} to confirm. {} to abort",
                     CHECK_EMOJI, CROSS_EMOJI
                 ))
             });
@@ -153,38 +153,31 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     })
     .await?;
 
-    msg.react(ctx, CHECK_EMOJI).await?;
-    msg.react(ctx, CROSS_EMOJI).await?;
+    utils::send_yes_or_no(ctx, &msg).await?;
 
-    let react = msg
-        .await_reaction(ctx)
-        .author_id(author.id)
-        .filter(|r| {
-            r.emoji == ReactionType::from(CHECK_EMOJI) || r.emoji == ReactionType::from(CROSS_EMOJI)
-        })
-        .timeout(DEFAULT_TIMEOUT)
-        .await;
+    if let Some(e) = utils::await_yes_or_no(ctx, &msg, Some(author.id)).await {
+        match e {
+            utils::YesOrNo::Yes => {
+                let new_role = db::NewRole {
+                    title: String::from(role_name),
+                    repr: String::from(role_repr),
+                    emoji: *emoji_id.as_u64() as i64,
+                };
 
-    if let Some(e) = react {
-        if e.as_inner_ref().emoji == ReactionType::from(CHECK_EMOJI) {
-            let new_role = db::NewRole {
-                title: String::from(role_name),
-                repr: String::from(role_repr),
-                emoji: *emoji_id.as_u64() as i64,
-            };
-
-            match new_role.add().await {
-                Ok(_) => {
-                    msg.reply(ctx, "Role added to database").await?;
-                }
-                Err(e) => {
-                    msg.reply(ctx, format!("Error adding role to database:\n{}", e))
-                        .await?;
-                }
+                match new_role.add().await {
+                    Ok(_) => {
+                        msg.reply(ctx, "Role added to database").await?;
+                    }
+                    Err(e) => {
+                        msg.reply(ctx, format!("Error adding role to database:\n{}", e))
+                            .await?;
+                    }
+                };
             }
-        } else if e.as_inner_ref().emoji == ReactionType::from(CROSS_EMOJI) {
-            msg.reply(ctx, "Aborted").await?;
-            return Ok(());
+            utils::YesOrNo::No => {
+                msg.reply(ctx, "Aborted").await?;
+                return Ok(());
+            }
         }
     } else {
         msg.reply(ctx, "Timed out").await?;

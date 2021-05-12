@@ -28,7 +28,7 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
     for t in tiers {
         let t = Arc::new(t);
         let m = t.clone().get_discord_roles().await?;
-        tier_roles.push((t,m));
+        tier_roles.push((t, m));
     }
 
     // List tiers with more roles first.It feels more inclusive =D
@@ -122,11 +122,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         })
         .await?;
 
-    msg.react(ctx, CHECK_EMOJI).await?;
-    msg.react(ctx, CROSS_EMOJI).await?;
-
     utils::send_yes_or_no(ctx, &msg).await?;
-
     match utils::await_yes_or_no(ctx, &msg, Some(author_id)).await {
         None => {
             msg.reply(ctx, "Timed out").await?;
@@ -142,7 +138,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     }
 
     let new_tier = db::NewTier {
-        name: String::from(tier_name)
+        name: String::from(tier_name),
     };
     let tier = match new_tier.add().await {
         Err(e) => {
@@ -193,16 +189,16 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
     let roles = tier.clone().get_discord_roles().await?;
     let trainings = tier.clone().get_trainings().await?;
 
-    let (created, open, closed, started, finished) =
-        trainings
-            .iter()
-            .fold((0u32, 0u32, 0u32, 0u32, 0u32), |(cr, o, cl, s, f), t| match t.state {
-                db::TrainingState::Created => (cr + 1, o, cl, s, f),
-                db::TrainingState::Open => (cr, o + 1, cl, s, f),
-                db::TrainingState::Closed => (cr, o, cl + 1, s, f),
-                db::TrainingState::Started => (cr, o, cl, s + 1, f),
-                db::TrainingState::Finished => (cr, o, cl, s, f + 1),
-            });
+    let (created, open, closed, started, finished) = trainings.iter().fold(
+        (0u32, 0u32, 0u32, 0u32, 0u32),
+        |(cr, o, cl, s, f), t| match t.state {
+            db::TrainingState::Created => (cr + 1, o, cl, s, f),
+            db::TrainingState::Open => (cr, o + 1, cl, s, f),
+            db::TrainingState::Closed => (cr, o, cl + 1, s, f),
+            db::TrainingState::Started => (cr, o, cl, s + 1, f),
+            db::TrainingState::Finished => (cr, o, cl, s, f + 1),
+        },
+    );
 
     let msg = msg.channel_id.send_message(ctx, |m| {
         m.embed( |e| {
@@ -243,11 +239,14 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
         t.set_tier(None).await?;
     }
     match Arc::try_unwrap(tier) {
-        Ok(t) => { t.delete().await?; },
+        Ok(t) => {
+            t.delete().await?;
+        }
         Err(_) => {
-            msg.reply(ctx, "Dangling reference to tier. Failed to delete =(").await?; 
+            msg.reply(ctx, "Dangling reference to tier. Failed to delete =(")
+                .await?;
             return Ok(());
-        },
+        }
     };
 
     msg.reply(ctx, "Tier removed").await?;

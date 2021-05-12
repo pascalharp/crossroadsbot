@@ -7,8 +7,8 @@ use serenity::framework::standard::{
     macros::{command, group},
     Args, CommandResult,
 };
-use tracing::{error, info};
 use std::sync::Arc;
+use tracing::{error, info};
 
 #[group]
 #[commands(register)]

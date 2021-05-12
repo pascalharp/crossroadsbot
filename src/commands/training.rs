@@ -2,7 +2,7 @@ use super::{
     ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT,
     GREEN_CIRCLE_EMOJI, RED_CIRCLE_EMOJI, RUNNING_EMOJI, WARNING_EMOJI,
 };
-use crate::db;
+use crate::{db, utils};
 use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Moscow, Paris};
 use serenity::collector::reaction_collector::ReactionAction;
@@ -11,13 +11,13 @@ use serenity::framework::standard::{
     ArgError, Args, CommandResult,
 };
 use serenity::futures::prelude::*;
+use serenity::futures::stream;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
-use serenity::futures::stream;
 
 #[group]
 #[prefix = "training"]
@@ -302,7 +302,6 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             title: String::from(training_name),
             date: training_time,
             tier_id: training_tier_id,
-
         };
         let training = match new_training.add().await {
             Err(e) => {
@@ -383,7 +382,8 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 // Ignores deactivated roles
                 r.role().await.ok()
             })
-            .collect().await
+            .collect()
+            .await
     };
 
     let (tier, tier_roles) = {
@@ -392,10 +392,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             None => (None, None),
             Some(t) => {
                 let t = Arc::new(t);
-                (
-                    Some(t.clone()),
-                    Some(t.clone().get_discord_roles().await?)
-                )
+                (Some(t.clone()), Some(t.clone().get_discord_roles().await?))
             }
         }
     };
@@ -508,9 +505,7 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
 async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -> CommandResult {
     let author_id = msg.author.id;
-    let trainings = {
-        db::Training::by_state(state.clone()).await?
-    };
+    let trainings = { db::Training::by_state(state.clone()).await? };
 
     // An embed can only have 25 fields. So partition the training to be sent
     // over multiple messages if needed
@@ -539,27 +534,15 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -
             })
         }).await?;
 
-        msg.react(ctx, CHECK_EMOJI).await?;
-        msg.react(ctx, CROSS_EMOJI).await?;
-
-        let react = msg
-            .await_reaction(ctx)
-            .author_id(author_id)
-            .timeout(DEFAULT_TIMEOUT)
-            .filter(|r| {
-                r.emoji == ReactionType::from(CHECK_EMOJI)
-                    || r.emoji == ReactionType::from(CROSS_EMOJI)
-            });
-
-        match react.await {
-            Some(r) => {
-                if r.as_inner_ref().emoji != ReactionType::from(CHECK_EMOJI) {
-                    msg.reply(ctx, "Aborted").await?;
-                    return Ok(());
-                }
-            }
+        utils::send_yes_or_no(ctx, &msg).await?;
+        match utils::await_yes_or_no(ctx, &msg, Some(author_id)).await {
             None => {
                 msg.reply(ctx, "Timed out").await?;
+                return Ok(());
+            }
+            Some(utils::YesOrNo::Yes) => (),
+            Some(utils::YesOrNo::No) => {
+                msg.reply(ctx, "Aborted").await?;
                 return Ok(());
             }
         }

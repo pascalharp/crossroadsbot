@@ -72,9 +72,9 @@ pub async fn add_user(discord_id: u64, gw2_id: &str) -> QueryResult<User> {
 impl User {
     pub async fn get_signups(self: Arc<User>) -> QueryResult<Vec<Signup>> {
         let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            Signup::belonging_to(self.as_ref()).load(&pool.get().unwrap())
-        }).await.unwrap()
+        task::spawn_blocking(move || Signup::belonging_to(self.as_ref()).load(&pool.get().unwrap()))
+            .await
+            .unwrap()
     }
 
     pub async fn update_gw2_id(self: Arc<User>, gw2_id: &str) -> QueryResult<User> {
@@ -84,30 +84,35 @@ impl User {
             diesel::update(users::table.find(self.id))
                 .set(users::gw2_id.eq(gw2_id))
                 .get_result(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 }
 
 /* -- Training -- */
 
 impl Training {
-
     pub async fn by_state(state: TrainingState) -> QueryResult<Vec<Training>> {
         let pool = POOL.clone();
-        task::spawn_blocking( move || {
+        task::spawn_blocking(move || {
             trainings::table
                 .filter(trainings::state.eq(state))
                 .load::<Training>(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     pub async fn by_id(id: i32) -> QueryResult<Training> {
         let pool = POOL.clone();
-        task::spawn_blocking( move || {
+        task::spawn_blocking(move || {
             trainings::table
                 .filter(trainings::id.eq(id))
                 .first::<Training>(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     pub async fn set_state(&self, state: TrainingState) -> QueryResult<Training> {
@@ -117,7 +122,9 @@ impl Training {
             diesel::update(trainings::table.find(training_id))
                 .set(trainings::state.eq(state))
                 .get_result(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     pub async fn set_tier(&self, tier: Option<i32>) -> QueryResult<Training> {
@@ -127,14 +134,16 @@ impl Training {
             diesel::update(trainings::table.find(training_id))
                 .set(trainings::tier_id.eq(tier))
                 .get_result(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     pub async fn get_signups(self: Arc<Training>) -> QueryResult<Vec<Signup>> {
         let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            Signup::belonging_to(self.as_ref()).load(&pool.get().unwrap())
-        }).await.unwrap()
+        task::spawn_blocking(move || Signup::belonging_to(self.as_ref()).load(&pool.get().unwrap()))
+            .await
+            .unwrap()
     }
 
     pub async fn add_role(&self, role_id: i32) -> QueryResult<TrainingRole> {
@@ -147,14 +156,18 @@ impl Training {
             diesel::insert_into(training_roles::table)
                 .values(&training_role)
                 .get_result(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     pub async fn get_roles(self: Arc<Training>) -> QueryResult<Vec<TrainingRole>> {
         let pool = POOL.clone();
         task::spawn_blocking(move || {
             TrainingRole::belonging_to(self.as_ref()).load(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     pub async fn get_tier(&self) -> QueryResult<Option<Tier>> {
@@ -173,18 +186,22 @@ impl Training {
                 Err(e) => Err(e),
                 Ok(t) => Ok(Some(t)),
             }
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 }
 
 impl NewTraining {
     pub async fn add(self: NewTraining) -> QueryResult<Training> {
         let pool = POOL.clone();
-        task::spawn_blocking( move || {
+        task::spawn_blocking(move || {
             diesel::insert_into(trainings::table)
                 .values(&self)
                 .get_result(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 }
 
@@ -198,7 +215,9 @@ impl Signup {
             trainings::table
                 .filter(trainings::id.eq(training_id))
                 .first::<Training>(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 }
 
@@ -209,14 +228,15 @@ impl NewSignup {
             diesel::insert_into(signups::table)
                 .values(&self)
                 .get_result(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 }
 
 /* -- Role -- */
 
 impl Role {
-
     /// Deactivates the role but keeps it in database
     pub async fn deactivate(self) -> QueryResult<Role> {
         let pool = POOL.clone();
@@ -224,7 +244,9 @@ impl Role {
             diesel::update(roles::table.find(self.id))
                 .set(roles::active.eq(false))
                 .get_result(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     /// Loads all active roles
@@ -234,7 +256,9 @@ impl Role {
             roles::table
                 .filter(roles::active.eq(true))
                 .load::<Role>(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     /// Loads the current active role associated with provided emoji
@@ -245,7 +269,9 @@ impl Role {
                 .filter(roles::active.eq(true))
                 .filter(roles::emoji.eq(emoji as i64))
                 .first::<Role>(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     /// Loads the current active role with specified repr
@@ -256,7 +282,9 @@ impl Role {
                 .filter(roles::active.eq(true))
                 .filter(roles::repr.eq(repr))
                 .first::<Role>(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 }
 
@@ -267,10 +295,11 @@ impl NewRole {
             diesel::insert_into(roles::table)
                 .values(&self)
                 .get_result(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 }
-
 
 // --- TrainingRole ---
 
@@ -285,7 +314,9 @@ impl TrainingRole {
                 .filter(roles::active.eq(true))
                 .filter(roles::id.eq(role_id))
                 .first::<Role>(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     /// Like role() but also loads deactivated roles
@@ -296,18 +327,19 @@ impl TrainingRole {
             roles::table
                 .filter(roles::id.eq(role_id))
                 .first::<Role>(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 }
 
 // --- Tier ---
 impl Tier {
-
     pub async fn all() -> QueryResult<Vec<Tier>> {
         let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            tiers::table.load::<Tier>(&pool.get().unwrap())
-        }).await.unwrap()
+        task::spawn_blocking(move || tiers::table.load::<Tier>(&pool.get().unwrap()))
+            .await
+            .unwrap()
     }
 
     pub async fn by_name(name: String) -> QueryResult<Tier> {
@@ -316,54 +348,65 @@ impl Tier {
             tiers::table
                 .filter(tiers::name.eq(name))
                 .first::<Tier>(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     pub async fn add_discord_role(&self, discord_id: u64) -> QueryResult<TierMapping> {
         let pool = POOL.clone();
         let new_tier_mapping = NewTierMapping {
-                tier_id: self.id,
-                discord_role_id: discord_id as i64,
-            };
+            tier_id: self.id,
+            discord_role_id: discord_id as i64,
+        };
 
         task::spawn_blocking(move || {
             diesel::insert_into(tier_mappings::table)
                 .values(&new_tier_mapping)
                 .get_result(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     pub async fn delete(self) -> QueryResult<usize> {
         let pool = POOL.clone();
         task::spawn_blocking(move || {
             diesel::delete(tiers::table.filter(tiers::id.eq(self.id))).execute(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     pub async fn get_discord_roles(self: Arc<Tier>) -> QueryResult<Vec<TierMapping>> {
         let pool = POOL.clone();
         task::spawn_blocking(move || {
             TierMapping::belonging_to(self.as_ref()).load(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 
     pub async fn get_trainings(self: Arc<Tier>) -> QueryResult<Vec<Training>> {
         let pool = POOL.clone();
         task::spawn_blocking(move || {
             Training::belonging_to(self.as_ref()).load(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 }
 
 impl NewTier {
-
     pub async fn add(self) -> QueryResult<Tier> {
         let pool = POOL.clone();
         task::spawn_blocking(move || {
             diesel::insert_into(tiers::table)
                 .values(&self)
                 .get_result(&pool.get().unwrap())
-        }).await.unwrap()
+        })
+        .await
+        .unwrap()
     }
 }
 
@@ -374,7 +417,10 @@ impl TierMapping {
         let pool = POOL.clone();
         let id = self.id;
         task::spawn_blocking(move || {
-            diesel::delete(tier_mappings::table.filter(tier_mappings::id.eq(id))).execute(&pool.get().unwrap())
-        }).await.unwrap()
+            diesel::delete(tier_mappings::table.filter(tier_mappings::id.eq(id)))
+                .execute(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
     }
 }
