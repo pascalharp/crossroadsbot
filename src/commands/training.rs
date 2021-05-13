@@ -387,11 +387,11 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     };
 
     let (tier, tier_roles) = {
-        let tier = training.get_tier().await?;
+        let tier = training.get_tier().await;
         match tier {
             None => (None, None),
             Some(t) => {
-                let t = Arc::new(t);
+                let t = Arc::new(t?);
                 (Some(t.clone()), Some(t.clone().get_discord_roles().await?))
             }
         }

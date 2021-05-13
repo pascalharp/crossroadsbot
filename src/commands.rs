@@ -52,9 +52,9 @@ impl TypeMapKey for LogginConfigData {
 }
 
 // --- Conversation ---
-pub struct Conversation<'a> {
+pub struct Conversation {
     lock: Arc<DashSet<UserId>>,
-    pub user: &'a User,
+    pub user: User,
     pub chan: PrivateChannel,
     pub msg: Message,
 }
@@ -64,6 +64,9 @@ pub enum ConversationError {
     ConversationLocked,
     NoDmChannel,
     DmBlocked,
+    TimedOut,
+    Canceled,
+    Other(String),
 }
 
 impl fmt::Display for ConversationError {
@@ -73,18 +76,21 @@ impl fmt::Display for ConversationError {
             ConversationError::NoDmChannel => write!(f, "Unable to load DM channel for user"),
             ConversationError::DmBlocked => {
                 write!(f, "Unable to send message to private DM channel")
-            }
+            },
+            ConversationError::TimedOut => { write!(f, "Conversation timed out") },
+            ConversationError::Canceled => { write!(f, "Conversation canceled") },
+            ConversationError::Other(s) => { write!(f, "{}", s) },
         }
     }
 }
 
 impl Error for ConversationError {}
 
-impl<'a> Conversation<'a> {
+impl Conversation {
     pub async fn start(
-        ctx: &'a Context,
-        user: &'a User,
-    ) -> Result<Conversation<'a>, ConversationError> {
+        ctx: & Context,
+        user: & User,
+    ) -> Result<Conversation, ConversationError> {
         let lock = {
             let data_read = ctx.data.read().await;
             data_read.get::<ConversationLock>().unwrap().clone()
@@ -103,7 +109,7 @@ impl<'a> Conversation<'a> {
             }
         };
 
-        // Send inital message channel
+        // Send initial message to channel
         let msg = match chan.send_message(ctx, |m| m.content("Loading ...")).await {
             Ok(m) => m,
             Err(_) => {
@@ -114,7 +120,7 @@ impl<'a> Conversation<'a> {
 
         Ok(Conversation {
             lock,
-            user: &user,
+            user: user.clone(),
             chan,
             msg,
         })
@@ -124,6 +130,13 @@ impl<'a> Conversation<'a> {
     pub async fn timeout_msg(self, ctx: &Context) -> serenity::Result<Message> {
         self.chan
             .send_message(&ctx.http, |m| m.content("Conversation timed out"))
+            .await
+    }
+
+    // Consumes the conversation
+    pub async fn canceled_msg(self, ctx: &Context) -> serenity::Result<Message> {
+        self.chan
+            .send_message(&ctx.http, |m| m.content("Conversation got canceled"))
             .await
     }
 
@@ -157,7 +170,7 @@ impl<'a> Conversation<'a> {
     }
 }
 
-impl<'a> Drop for Conversation<'a> {
+impl Drop for Conversation {
     fn drop(&mut self) {
         self.lock.remove(&self.user.id);
     }

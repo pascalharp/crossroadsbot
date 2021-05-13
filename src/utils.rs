@@ -1,14 +1,23 @@
-use crate::commands::{CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT};
+use crate::commands::{ConfigValuesData, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT};
+use crate::db;
 use serenity::{
+    prelude::*,
     client::bridge::gateway::ShardMessenger,
     collector::reaction_collector::ReactionAction,
     http::CacheHttp,
     model::{
         channel::{Message, Reaction, ReactionType},
-        id::UserId,
+        user::User,
+        id::{UserId, RoleId},
     },
-    Result,
 };
+use std::{
+    sync::Arc,
+    collections::{HashMap,HashSet},
+    iter::FromIterator,
+};
+
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub enum YesOrNo {
     Yes,
@@ -55,4 +64,68 @@ pub async fn await_yes_or_no<'a>(
             _ => return None,
         },
     }
+}
+
+/// Verifies if the discord user has the required tier for a training
+pub async fn verify_tier(ctx: &Context, training: &db::Training, user: &User) -> Result<bool> {
+    let tier = training.get_tier().await;
+    let tier_mappings = match tier {
+        None => return Ok(true),
+        Some(t) => {
+            Arc::new(t?).get_discord_roles().await?
+        }
+    };
+    let roles_set = {
+        let guild = ctx.data.read().await.get::<ConfigValuesData>().unwrap().main_guild_id;
+        let roles = guild.member(ctx, user.id).await?.roles;
+        HashSet::<RoleId>::from_iter(roles)
+    };
+
+    let passed = tier_mappings
+        .iter()
+        .any(|t| {
+            roles_set.contains(&RoleId::from(t.discord_role_id as u64))
+        });
+    Ok(passed)
+}
+
+/// Looks at the user permissions and filters out trainings the user has not sufficient permissions
+/// for
+pub async fn filter_trainings(ctx: &Context, trainings: Vec<db::Training>, user: &User) -> Result<Vec<db::Training>> {
+    let roles = {
+        let guild = ctx.data.read().await.get::<ConfigValuesData>().unwrap().main_guild_id;
+        guild.member(ctx, user.id).await?.roles
+    };
+
+    let tiers = db::Tier::all().await?;
+
+    let mut tier_map: HashMap<i32, Vec<db::TierMapping>> = HashMap::new();
+
+    for t in tiers {
+        let t = Arc::new(t);
+        let discord_roles = t.clone().get_discord_roles().await?;
+        tier_map.insert(t.id, discord_roles);
+    }
+
+    Ok(trainings.into_iter().filter( |tier| {
+        match tier.tier_id {
+            None => true,
+            Some(id) => {
+                match tier_map.get(&id) {
+                    None => false,
+                    Some(tm_vec) => tm_vec.iter().any( |tm| {
+                        roles.iter().any(|r| { *r == (tm.discord_role_id as u64) })
+                    }),
+                }
+            }
+        }
+    }).collect())
+}
+
+pub fn format_training_slim(t: &db::Training) -> String {
+    String::from(format!(
+        "Name: `{}`\nDate `{} UTC`",
+        t.title,
+        t.date,
+    ))
 }

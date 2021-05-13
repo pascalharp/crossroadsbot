@@ -4,5 +4,6 @@ CREATE TABLE signups (
 	user_id INTEGER NOT NULL,
 	training_id INTEGER NOT NULL,
 	FOREIGN KEY(training_id) REFERENCES trainings(id),
-	FOREIGN KEY(user_id) REFERENCES users(id)
+	FOREIGN KEY(user_id) REFERENCES users(id),
+	UNIQUE (user_id, training_id)
 )

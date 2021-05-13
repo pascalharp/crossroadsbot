@@ -113,6 +113,18 @@ impl Training {
         .unwrap()
     }
 
+    pub async fn by_id_and_state(id: i32, state: TrainingState) -> QueryResult<Training> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            trainings::table
+                .filter(trainings::id.eq(id))
+                .filter(trainings::state.eq(state))
+                .first::<Training>(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
     pub async fn set_state(&self, state: TrainingState) -> QueryResult<Training> {
         let training_id = self.id;
         let pool = POOL.clone();
@@ -123,6 +135,22 @@ impl Training {
         })
         .await
         .unwrap()
+    }
+
+    pub async fn get_tier(&self) -> Option<QueryResult<Tier>> {
+        match self.tier_id {
+            None => None,
+            Some(id) => {
+                let pool = POOL.clone();
+                Some(
+                    task::spawn_blocking(move || {
+                        tiers::table
+                            .filter(tiers::id.eq(id))
+                            .first::<Tier>(&pool.get().unwrap())
+                    }).await.unwrap()
+                )
+            }
+        }
     }
 
     pub async fn set_tier(&self, tier: Option<i32>) -> QueryResult<Training> {
@@ -167,27 +195,6 @@ impl Training {
         .await
         .unwrap()
     }
-
-    pub async fn get_tier(&self) -> QueryResult<Option<Tier>> {
-        let tier_id = match self.tier_id {
-            None => return Ok(None),
-            Some(t) => t,
-        };
-
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            let tier = tiers::table
-                .filter(tiers::id.eq(tier_id))
-                .get_result::<Tier>(&pool.get().unwrap());
-
-            match tier {
-                Err(e) => Err(e),
-                Ok(t) => Ok(Some(t)),
-            }
-        })
-        .await
-        .unwrap()
-    }
 }
 
 impl NewTraining {
@@ -213,6 +220,20 @@ impl Signup {
             trainings::table
                 .filter(trainings::id.eq(training_id))
                 .first::<Training>(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
+    pub async fn by_user_and_training(t: &Training, u: &User) -> QueryResult<Signup> {
+        let training_id = t.id;
+        let user_id = u.id;
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            signups::table
+                .filter(signups::user_id.eq(user_id))
+                .filter(signups::training_id.eq(training_id))
+                .first::<Signup>(&pool.get().unwrap())
         })
         .await
         .unwrap()
