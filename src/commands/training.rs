@@ -1,5 +1,5 @@
 use super::{
-    ConfigValuesData, ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT,
+    ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT,
     GREEN_CIRCLE_EMOJI, RED_CIRCLE_EMOJI, RUNNING_EMOJI, WARNING_EMOJI,
 };
 use crate::{db, utils};
@@ -18,6 +18,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
+use crate::utils::{RoleEmoji, role_emojis};
 
 #[group]
 #[prefix = "training"]
@@ -25,41 +26,6 @@ use std::{
 pub struct Training;
 
 type BoxResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-
-struct RoleEmoji {
-    role: db::models::Role,
-    emoji: Emoji,
-}
-
-// --- Helper functions ---
-/// Returns a Hashmap of of Emojis and Roles that overlap with EmojiId as key
-async fn role_emojis(
-    ctx: &Context,
-    roles: Vec<db::Role>,
-) -> BoxResult<HashMap<EmojiId, RoleEmoji>> {
-    let mut map = HashMap::new();
-    let emojis_guild_id = ctx
-        .data
-        .read()
-        .await
-        .get::<ConfigValuesData>()
-        .unwrap()
-        .emoji_guild_id;
-    let emoji_guild = Guild::get(ctx, emojis_guild_id).await?;
-    let emojis = emoji_guild.emojis;
-
-    for r in roles {
-        if let Some(e) = emojis.get(&EmojiId::from(r.emoji as u64)) {
-            let role_emoji = RoleEmoji {
-                role: r,
-                emoji: e.clone(),
-            };
-            map.insert(e.id, role_emoji);
-        }
-    }
-
-    Ok(map)
-}
 
 // Helper function to  update add_training embed message
 async fn update_add_training(

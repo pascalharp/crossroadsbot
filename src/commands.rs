@@ -1,6 +1,10 @@
 use dashmap::DashSet;
 use serenity::{
-    collector::message_collector::*,
+    client::bridge::gateway::ShardMessenger,
+    collector::{
+        message_collector::*,
+        reaction_collector::*,
+    },
     framework::standard::{
         help_commands,
         macros::{check, help},
@@ -167,6 +171,23 @@ impl Conversation {
             .channel_id(self.chan.id)
             .timeout(DEFAULT_TIMEOUT)
             .await
+    }
+
+    /// Awaits a reaction on the conversation message. Returns the Collector
+    /// to further modify it. eg with a filter
+    pub fn await_reaction<'a>(&self, shard_messenger: &'a impl AsRef<ShardMessenger>) -> CollectReaction<'a> {
+        self.msg
+            .await_reaction(shard_messenger)
+            .author_id(self.user.id)
+            .timeout(DEFAULT_TIMEOUT)
+    }
+
+    /// Same as await_reaction but returns a Stream
+    pub fn await_reactions<'a>(&self, shard_messenger: &'a impl AsRef<ShardMessenger>) -> ReactionCollectorBuilder<'a> {
+        self.msg
+            .await_reactions(shard_messenger)
+            .author_id(self.user.id)
+            .timeout(DEFAULT_TIMEOUT)
     }
 }
 

@@ -1,15 +1,24 @@
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 
-use crate::commands::{Conversation, ConversationError, CHECK_EMOJI, ENVELOP_EMOJI, DIZZY_EMOJI};
+use crate::commands::{
+    ConfigValuesData, Conversation, ConversationError, CHECK_EMOJI, CROSS_EMOJI, DIZZY_EMOJI,
+    ENVELOP_EMOJI,
+};
 use crate::db;
 use crate::utils;
 use regex::Regex;
-use serenity::framework::standard::{
-    macros::{command, group},
-    ArgError, Args, CommandResult,
+use serenity::{
+    framework::standard::{
+        macros::{command, group},
+        ArgError, Args, CommandResult,
+    },
+    futures::future,
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 use tracing::info;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -65,7 +74,7 @@ pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
     Ok(())
 }
 
-pub async fn select_training(ctx: &Context, conv: &mut Conversation) -> Result<i32> {
+async fn select_training(ctx: &Context, conv: &mut Conversation) -> Result<i32> {
     conv.msg
         .edit(ctx, |m| m.content("Loading possible trainings ..."))
         .await?;
@@ -247,14 +256,21 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             Ok(c) => {
                 msg.react(ctx, ENVELOP_EMOJI).await?;
                 c
-            },
+            }
             Err(e) => {
                 msg.reply(ctx, e).await?;
-                return Ok(())
+                return Ok(());
             }
         };
         match join_training(ctx, &mut conv, training_id).await {
-            Ok(s) => s,
+            Ok(s) => {
+                conv.msg
+                    .edit(ctx, |m| {
+                        m.content(format!("Signed up for training with id: {}", s.training_id))
+                    })
+                    .await?;
+                s
+            }
             Err(e) => {
                 if let Some(ce) = e.downcast_ref::<ConversationError>() {
                     match ce {
@@ -268,15 +284,36 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 conv.msg
                     .edit(ctx, |m| m.content("Unexpected error"))
                     .await?;
-                conv.msg
-                    .react(ctx, DIZZY_EMOJI)
-                    .await?;
+                conv.msg.react(ctx, DIZZY_EMOJI).await?;
                 return Err(e.into());
             }
         }
     };
 
-    // TODO handle roles
+    let training = Arc::new(signup.get_training().await?);
+    // training role mapping
+    let training_roles = training.clone().get_roles().await?;
+    // The actual roles. ignoring deactivated ones (or db load errors in general)
+    let roles: Vec<db::Role> = future::join_all(training_roles.iter().map(|tr| tr.role()))
+        .await
+        .into_iter()
+        .filter_map(|r| r.ok())
+        .collect();
+
+    {
+        let mut conv = Conversation::start(ctx, &user_discord).await?; // TODO error
+                                                                       // Create sets for selected and unselected
+        let mut selected: HashSet<&db::Role> = HashSet::with_capacity(roles.len());
+        let mut unselected: HashSet<&db::Role> = HashSet::with_capacity(roles.len());
+        for r in &roles {
+            unselected.insert(r);
+        }
+
+        utils::select_roles(ctx, &mut conv, selected, unselected).await?;
+        // TODO handler error
+    }
+
+    // TODO save selected roles in db
 
     Ok(())
 }

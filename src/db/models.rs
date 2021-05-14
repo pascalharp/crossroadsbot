@@ -100,7 +100,7 @@ pub struct NewTraining {
     pub tier_id: Option<i32>,
 }
 
-#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
+#[derive(Identifiable, Queryable, Associations, Hash, PartialEq, Eq, Debug)]
 #[table_name = "roles"]
 pub struct Role {
     pub id: i32,
