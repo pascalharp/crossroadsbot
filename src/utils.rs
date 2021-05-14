@@ -271,7 +271,6 @@ pub async fn select_roles<'a>(
     let emb = select_roles_embed(&re_map, &selected, true);
     conv.msg
         .edit(ctx, |m| {
-            m.content("");
             m.embed(|e| {
                 e.0 = emb.0;
                 e
@@ -307,7 +306,6 @@ pub async fn select_roles<'a>(
             .await?;
 
         let react = reactor.next().await;
-        println!("{:?}",react);
 
         let react = match react {
             None => {
