@@ -128,6 +128,13 @@ pub struct SignupRole {
     pub role_id: i32,
 }
 
+#[derive(Insertable, Debug)]
+#[table_name = "signup_roles"]
+pub struct NewSignupRole {
+    pub signup_id: i32,
+    pub role_id: i32,
+}
+
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
 #[belongs_to(Training)]
 #[belongs_to(Role)]

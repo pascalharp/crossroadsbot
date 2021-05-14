@@ -300,20 +300,66 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         .filter_map(|r| r.ok())
         .collect();
 
-    {
+    let selected_roles = {
         let mut conv = Conversation::start(ctx, &user_discord).await?; // TODO error
-                                                                       // Create sets for selected and unselected
-        let mut selected: HashSet<&db::Role> = HashSet::with_capacity(roles.len());
+        conv.msg.edit(ctx, |m| {
+            m.content(format!("Select your roles for: __{}__", training.title))
+        }).await?;
+        // Create sets for selected and unselected
+        let selected: HashSet<&db::Role> = HashSet::with_capacity(roles.len());
         let mut unselected: HashSet<&db::Role> = HashSet::with_capacity(roles.len());
         for r in &roles {
             unselected.insert(r);
         }
 
-        utils::select_roles(ctx, &mut conv, selected, unselected).await?;
-        // TODO handler error
-    }
+        match utils::select_roles(ctx, &mut conv, selected, unselected).await {
+            Ok((selected, _ )) => selected,
+            Err(e) => {
+                if let Some(e) = e.downcast_ref::<ConversationError>() {
+                    match e {
+                        ConversationError::TimedOut => {
+                            conv.timeout_msg(ctx).await?;
+                            return Ok(());
+                        },
+                        ConversationError::Canceled => {
+                            conv.canceled_msg(ctx).await?;
+                            return Ok(());
+                        },
+                        _ => (),
+                    }
+                }
+                return Err(e.into());
+            }
+        }
+    };
 
-    // TODO save selected roles in db
+    let mut conv = Conversation::start(ctx, &user_discord).await?;
+    conv.msg.edit(ctx, |m| {
+        m.content("Saving roles...")
+    }).await?;
+
+    let futs = selected_roles
+        .iter()
+        .map(|r| {
+            let new_signup_role = db::NewSignupRole {
+                role_id: r.id,
+                signup_id: signup.id
+            };
+            new_signup_role.add()
+        });
+    match future::try_join_all(futs).await {
+        Ok(_) => {
+            conv.msg.edit(ctx, |m| {
+                m.content(format!("Roles saved {}", CHECK_EMOJI))
+            }).await?;
+        },
+        Err(e) => {
+            conv.msg.edit(ctx, |m| {
+                m.content(format!("An unexpected error occurred while saving roles {}", DIZZY_EMOJI))
+            }).await?;
+            return Err(e.into());
+        }
+    }
 
     Ok(())
 }

@@ -240,6 +240,19 @@ impl Signup {
     }
 }
 
+impl NewSignupRole {
+    pub async fn add(self) -> QueryResult<SignupRole> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            diesel::insert_into(signup_roles::table)
+                .values(self)
+                .get_result::<SignupRole>(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+}
+
 impl NewSignup {
     pub async fn add(self) -> QueryResult<Signup> {
         let pool = POOL.clone();
