@@ -24,7 +24,7 @@ use tracing::info;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[group]
-#[commands(register, join)]
+#[commands(register, join, list)]
 struct Signup;
 
 #[command]
@@ -361,5 +361,53 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         }
     }
 
+    Ok(())
+}
+
+#[command]
+#[description = "Lists all active trainings you are currently signed up for"]
+#[example = ""]
+#[usage = ""]
+#[num_args(0)]
+pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
+
+    let discord_user = &msg.author;
+    let user = Arc::new(db::User::get(*discord_user.id.as_u64()).await?);
+
+    let signups = user.clone().active_signups().await?;
+
+    if signups.is_empty() {
+        let mut conv = Conversation::start(ctx, &discord_user).await?;
+        conv.msg.edit(ctx, |m| {
+            m.content("No active signup found")
+        }).await?;
+        return Ok(())
+    }
+
+    let mut conv = Conversation::start(ctx, &discord_user).await?;
+    conv.msg.edit(ctx, |m| { m.content(format!("Loading {} active signups", signups.len())) }).await?;
+    msg.react(ctx, ENVELOP_EMOJI).await?;
+    for (s, t) in signups {
+        let signup_id = s.id;
+        let roles = s.get_roles().await?;
+        let roles = roles
+            .iter()
+            .map(|(_,r)| r )
+            .collect::<Vec<_>>();
+        let emb = utils::training_base_embed(&t);
+        conv.chan.send_message(ctx, |m| {
+            m.embed(|e| {
+                e.0 = emb.0;
+                e.field("**Signup Id**", &signup_id, true);
+                e.field("Your selected roles", "------------------", false);
+                e.fields( roles
+                    .iter()
+                    .map(|r| {
+                        (&r.repr, &r.title, true)
+                    }));
+                e
+            })
+        }).await?;
+    }
     Ok(())
 }

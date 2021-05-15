@@ -68,7 +68,21 @@ impl User {
         .unwrap()
     }
 
-    pub async fn get_signups(self: Arc<User>) -> QueryResult<Vec<Signup>> {
+    pub async fn active_signups(self: Arc<User>) -> QueryResult<Vec<(Signup, Training)>> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            Signup::belonging_to(self.as_ref())
+                .inner_join(trainings::table)
+                .filter(trainings::state.eq(TrainingState::Open))
+                .or_filter(trainings::state.eq(TrainingState::Closed))
+                .or_filter(trainings::state.eq(TrainingState::Started))
+                .load(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
+    pub async fn get_all_signups(self: Arc<User>) -> QueryResult<Vec<Signup>> {
         let pool = POOL.clone();
         task::spawn_blocking(move || Signup::belonging_to(self.as_ref()).load(&pool.get().unwrap()))
             .await
@@ -220,6 +234,17 @@ impl Signup {
             trainings::table
                 .filter(trainings::id.eq(training_id))
                 .first::<Training>(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
+    pub async fn get_roles(self) -> QueryResult<Vec<(SignupRole, Role)>> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            SignupRole::belonging_to(&self)
+                .inner_join(roles::table)
+                .load(&pool.get().unwrap())
         })
         .await
         .unwrap()

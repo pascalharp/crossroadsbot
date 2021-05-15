@@ -227,7 +227,7 @@ async fn admin_rol_check(
 }
 
 #[help]
-#[individual_command_tip = "Hello!\n\n\
+#[individual_command_tip = "Hello! This is a list of all Crossroads Inn Bot commands\n\
 If you want more information about a specific command, just pass the command as argument."]
 #[command_not_found_text = "Could not find: `{}`."]
 #[max_levenshtein_distance(3)]
