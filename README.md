@@ -6,7 +6,11 @@
 Following a non config file approach required tokens and paths are passed to the application with
 environment variables. To not pollute your environment while developing check out the [.env
 file](#mardown-header-.env-file) section below
-
+## Docker Compose setup
+Copy *docker-compose.yml.example* to *docker-compose.yml* like so: `cp docker-compose.yml.example
+docker-compose.yml`. Then edit *docker-compose.yml* and fill the missing fields with your
+discord bot token and your discord guild and role id's. At last start the bot and the postgres
+database in detached mode with `docker-compose up -d`.
 ## Environment variables
 ### DATABASE\_URL
 URL to postgres database.\
