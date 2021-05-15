@@ -2,7 +2,7 @@ use serenity::model::prelude::*;
 use serenity::prelude::*;
 
 use crate::commands::{
-    ConfigValuesData, Conversation, ConversationError, CHECK_EMOJI, CROSS_EMOJI, DIZZY_EMOJI,
+    Conversation, ConversationError, CHECK_EMOJI, DIZZY_EMOJI,
     ENVELOP_EMOJI,
 };
 use crate::db;
@@ -24,7 +24,7 @@ use tracing::info;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[group]
-#[commands(register, join, list)]
+#[commands(register, join, list, leave, edit)]
 struct Signup;
 
 #[command]
@@ -177,7 +177,7 @@ pub async fn join_training(
     };
 
     // Check if signup already exist
-    match db::Signup::by_user_and_training(&training, &user_db).await {
+    match db::Signup::by_user_and_training(&user_db, &training).await {
         Ok(_) => {
             return Err(Box::new(ConversationError::Other(String::from(
                 "Already signed up for this training",
@@ -200,10 +200,11 @@ pub async fn join_training(
 }
 
 #[command]
-#[description = "Join a training. Optionally provide training id and roles to speed up sign up process"]
-#[example = "103 pdps cdps"]
-#[usage = "[ training_id [ roles ... ] ]"]
+#[description = "Join a training. Optionally provide training id"]
+#[example = "103"]
+#[usage = "[ training_id ]"]
 #[min_args(0)]
+#[max_args(1)]
 pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     // check user first
     let user_discord = &msg.author;
@@ -372,7 +373,19 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
 
     let discord_user = &msg.author;
-    let user = Arc::new(db::User::get(*discord_user.id.as_u64()).await?);
+    let user = match db::User::get(*discord_user.id.as_u64()).await {
+        Ok(u) => u,
+        Err(diesel::NotFound) => {
+            msg.reply(ctx, "User not found. Please use the register command first")
+                .await?;
+            return Ok(());
+        }
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
+    };
+    let user = Arc::new(user);
 
     let signups = user.clone().active_signups().await?;
 
@@ -385,10 +398,11 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
     }
 
     let mut conv = Conversation::start(ctx, &discord_user).await?;
-    conv.msg.edit(ctx, |m| { m.content(format!("Loading {} active signups", signups.len())) }).await?;
+    conv.msg.edit(ctx, |m| { m.content(format!("Loading {} active signup(s)", signups.len())) }).await?;
     msg.react(ctx, ENVELOP_EMOJI).await?;
     for (s, t) in signups {
         let signup_id = s.id;
+        let s = Arc::new(s);
         let roles = s.get_roles().await?;
         let roles = roles
             .iter()
@@ -410,4 +424,200 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
         }).await?;
     }
     Ok(())
+}
+
+#[command]
+#[description = "Leave a training you have already signed up up for. Only possible if the training is still open for sign ups"]
+#[example = "103"]
+#[usage = "training_id"]
+#[num_args(1)]
+pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+
+    let discord_user = &msg.author;
+    let user = match db::User::get(*discord_user.id.as_u64()).await {
+        Ok(u) => u,
+        Err(diesel::NotFound) => {
+            msg.reply(ctx, "User not found. Please use the register command first")
+                .await?;
+            return Ok(());
+        }
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
+    };
+
+    let training_id = match args.single_quoted::<i32>() {
+        Ok(i) => i,
+        Err(_) => {
+            msg.reply(ctx, "Failed to parse trainings id").await?;
+            return Ok(());
+        }
+    };
+
+    let training = match db::Training::by_id_and_state(training_id, db::TrainingState::Open).await {
+        Ok(t) => t,
+        Err(diesel::NotFound) => {
+            msg.reply(ctx, "No open training with that id found").await?;
+            return Ok(());
+        },
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
+    };
+
+    let signup = match db::Signup::by_user_and_training(&user, &training).await {
+        Ok(s) => s,
+        Err(diesel::NotFound) => {
+            msg.reply(ctx, "No sign up found").await?;
+            return Ok(());
+        },
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
+    };
+
+    match signup.remove().await {
+        Ok(1) => {
+            msg.react(ctx, CHECK_EMOJI).await?;
+            return Ok(())
+        },
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        },
+        Ok(_) => {
+            msg.react(ctx, CHECK_EMOJI).await?;
+            return Err("Multiple entries deleted but expected only one".into());
+        }
+    }
+}
+
+#[command]
+#[description = "Edit your sign up"]
+#[example = "103"]
+#[usage = "training_id"]
+#[num_args(1)]
+pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let discord_user = &msg.author;
+    let user = match db::User::get(*discord_user.id.as_u64()).await {
+        Ok(u) => u,
+        Err(diesel::NotFound) => {
+            msg.reply(ctx, "User not found. Please use the register command first")
+                .await?;
+            return Ok(());
+        }
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
+    };
+
+    let training_id = match args.single_quoted::<i32>() {
+        Ok(i) => i,
+        Err(_) => {
+            msg.reply(ctx, "Failed to parse trainings id").await?;
+            return Ok(());
+        }
+    };
+
+    let training = match db::Training::by_id_and_state(training_id, db::TrainingState::Open).await {
+        Ok(t) => Arc::new(t),
+        Err(diesel::NotFound) => {
+            msg.reply(ctx, "No open training with that id found").await?;
+            return Ok(());
+        },
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
+    };
+
+    let signup = match db::Signup::by_user_and_training(&user, &training.clone()).await {
+        Ok(s) => Arc::new(s),
+        Err(diesel::NotFound) => {
+            msg.reply(ctx, "No sign up found").await?;
+            return Ok(());
+        },
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
+    };
+
+    let mut conv = Conversation::start(ctx, &discord_user).await?;
+
+    let training_roles = training.clone().get_roles().await?;
+    let roles = future::try_join_all(
+        training_roles.iter().map(|r| r.role())
+    ).await?;
+
+    let mut selected: HashSet<&db::Role> = HashSet::new();
+    let mut unselected: HashSet<&db::Role> = HashSet::new();
+
+    match signup.clone().get_roles().await {
+        Ok(v) => {
+            // this seems rather inefficient. Consider rework
+            let set = v.into_iter().map(|(_,r)| {r}).collect::<HashSet<_>>();
+            for r in &roles {
+                if set.contains(r) {
+                    selected.insert(r);
+                } else {
+                    unselected.insert(r);
+                }
+            }
+        },
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
+    };
+
+    let selected = match utils::select_roles(ctx, &mut conv, selected, unselected).await {
+        Ok((s,_)) => s,
+        Err(e) => {
+            if let Some(e) = e.downcast_ref::<ConversationError>() {
+                match e {
+                    ConversationError::Canceled => {
+                        conv.canceled_msg(ctx).await?;
+                        return Ok(());
+                    },
+                    ConversationError::TimedOut => {
+                        conv.timeout_msg(ctx).await?;
+                        return Ok(());
+                    },
+                    _ => ()
+                }
+            }
+            conv.chan.send_message(ctx, |m| { m.content("Unexpected error") }).await?;
+            return Err(e.into());
+        }
+    };
+
+    signup.clone().clear_roles().await?;
+
+    match future::try_join_all(
+        selected.iter().map( |r| {
+            let new_signup_role = db::NewSignupRole {
+                role_id: r.id,
+                signup_id: signup.id,
+            };
+            new_signup_role.add()
+        })
+    ).await {
+        Ok(_) => {
+            conv.chan.send_message(ctx, |m| {
+                m.content(format!("Roles changed {}",CHECK_EMOJI))
+            }).await?;
+            return Ok(());
+        },
+        Err(e) => {
+            conv.chan.send_message(ctx, |m| {
+                m.content("Unexpected error")
+            }).await?;
+            return Err(e.into());
+        }
+    }
 }

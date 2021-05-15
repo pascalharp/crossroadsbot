@@ -161,7 +161,9 @@ impl Training {
                         tiers::table
                             .filter(tiers::id.eq(id))
                             .first::<Tier>(&pool.get().unwrap())
-                    }).await.unwrap()
+                    })
+                    .await
+                    .unwrap(),
                 )
             }
         }
@@ -239,10 +241,10 @@ impl Signup {
         .unwrap()
     }
 
-    pub async fn get_roles(self) -> QueryResult<Vec<(SignupRole, Role)>> {
+    pub async fn get_roles(self: Arc<Signup>) -> QueryResult<Vec<(SignupRole, Role)>> {
         let pool = POOL.clone();
         task::spawn_blocking(move || {
-            SignupRole::belonging_to(&self)
+            SignupRole::belonging_to(self.as_ref())
                 .inner_join(roles::table)
                 .load(&pool.get().unwrap())
         })
@@ -250,7 +252,17 @@ impl Signup {
         .unwrap()
     }
 
-    pub async fn by_user_and_training(t: &Training, u: &User) -> QueryResult<Signup> {
+    pub async fn clear_roles(self: Arc<Signup>) -> QueryResult<usize> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            diesel::delete(SignupRole::belonging_to(self.as_ref()))
+                .execute(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
+    pub async fn by_user_and_training(u: &User, t: &Training) -> QueryResult<Signup> {
         let training_id = t.id;
         let user_id = u.id;
         let pool = POOL.clone();
@@ -259,6 +271,16 @@ impl Signup {
                 .filter(signups::user_id.eq(user_id))
                 .filter(signups::training_id.eq(training_id))
                 .first::<Signup>(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
+    pub async fn remove(self) -> QueryResult<usize> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            diesel::delete(signups::table.filter(signups::id.eq(self.id)))
+                .execute(&pool.get().unwrap())
         })
         .await
         .unwrap()
