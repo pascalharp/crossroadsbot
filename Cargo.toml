@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 diesel = { version = "1.4.0", features = ["postgres", "chrono", "r2d2"] }
 diesel-derive-enum = { version = "1.1.1", features = ["postgres"] }
+diesel_migrations = { version = "1.4.0" }
 lazy_static = { version = "1.4.0" }
 dotenv = { version = "0.15.0" }
 chrono = { version = "0.4" }
@@ -19,6 +20,3 @@ tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.2" }
 dashmap = { version = "4.0.2" }
 regex = { version = "1.4.6" }
-
-[dev-dependencies]
-diesel_migrations = { version = "1.4.0" }

@@ -1,0 +1,26 @@
+services:
+  bot:
+    build: .
+    restart: always
+    network_mode: "service:db"
+    environment:
+      - DISCORD_TOKEN=
+      - DATABASE_URL=postgres://crossroads_user:crossroads_pwd@127.0.0.1/crossroads_db
+      - MAIN_GUILD_ID=
+      - EMOJI_GUILD_ID=
+      - ADMIN_ROLE_ID=
+      - SQUADMAKER_ROLE_ID=
+      - RUST_LOG=info
+    depends_on:
+      - db
+  postgresql:
+    image: "postgres"
+    restart: always
+    environment:
+      - POSTGRES_USER=root
+      - POSTGRES_PASSWORD=password
+      - APP_DB_USER=crossroads_user
+      - APP_DB_PASS=crossroads_pwd
+      - APP_DB_NAME=crossroads_db
+    volumes:
+      - ./docker_db:/docker-entrypoint-initdb.d/

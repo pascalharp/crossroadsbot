@@ -27,6 +27,11 @@ lazy_static! {
     };
 }
 
+/// Retrieves an Arc from the connection pool
+pub fn get_connection() -> Pool<ConnectionManager<PgConnection>> {
+    POOL.clone()
+}
+
 pub async fn pool_test() -> QueryResult<Vec<Role>> {
     let pool = POOL.clone();
     task::spawn_blocking(move || {

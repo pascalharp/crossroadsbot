@@ -14,6 +14,11 @@ use std::sync::Arc;
 use tracing::{error, info};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
+#[macro_use]
+extern crate diesel_migrations;
+use diesel_migrations::embed_migrations;
+embed_migrations!("migrations/");
+
 struct Handler;
 
 #[async_trait]
@@ -127,9 +132,10 @@ async fn main() {
 
     tracing::subscriber::set_global_default(subscriber).expect("Failed to start the logger");
 
-    // Make a quick check to the database TODO raplace later with updating migrations
+    // Run migrations on the database
     {
-        print!("{:?}", db::pool_test().await);
+        let pool = db::get_connection();
+        embedded_migrations::run(&pool.get().unwrap()).expect("Failed to run migrations");
     }
 
     let token = env::var("DISCORD_TOKEN").expect("discord token not set");
