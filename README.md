@@ -27,13 +27,8 @@ The discord guild the bot will load and use custom emojis from.
 The discord role id for MAIN\_GUILD\_ID that has access to all commands
 ### SQUADMAKER\_ROLE\_ID
 The discord role id for MAIN\_GUILD\_ID that has access selected commands
-
-## Environment variables (dev only)
-### TEST\_BASE\_URL
-Base URL for database tests. The postgres user has to have permissions to create new databases since
-every test creates a new databse, runs all migrations on them, executes the tests and finally
-removes the databse again.\
-Example: *TEST\_BASE\_URL=postgres:://username:password@localhost*
+### RUST\_LOG
+Amount of LOG verbosity. Options are: `warn, info, debug`
 
 ## .env file
 A *.env* file can be placed in the root directory of the project that will be sourced when the
@@ -47,6 +42,4 @@ EMOJI_GUILD_ID=111222333444555666
 ADMIN_ROLE_ID=666777888999000111
 SQUADMAKER_ROLE_ID=666777888999000111
 RUST_LOG=info
-
-TEST_BASE_URL=postgres://username:password@localhost
 ```
