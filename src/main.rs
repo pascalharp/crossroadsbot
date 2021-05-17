@@ -1,5 +1,9 @@
-use crossroadsbot::commands;
-use crossroadsbot::db;
+use crossroadsbot::{
+    commands,
+    db,
+    data::*,
+    utils::DIZZY_EMOJI,
+};
 use dashmap::DashSet;
 use dotenv::dotenv;
 use serenity::{
@@ -46,7 +50,7 @@ async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result:
                 ctx.data
                     .read()
                     .await
-                    .get::<commands::LogginConfigData>()
+                    .get::<LogginConfigData>()
                     .unwrap()
                     .clone()
                     .read()
@@ -75,7 +79,7 @@ async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result:
                 ctx.data
                     .read()
                     .await
-                    .get::<commands::LogginConfigData>()
+                    .get::<LogginConfigData>()
                     .unwrap()
                     .clone()
                     .read()
@@ -115,7 +119,7 @@ async fn dispatch_error_hook(ctx: &Context, msg: &Message, error: DispatchError)
             msg.reply(ctx, &s).await.ok();
         }
         _ => {
-            msg.react(ctx, commands::DIZZY_EMOJI).await.ok();
+            msg.react(ctx, DIZZY_EMOJI).await.ok();
         }
     }
 }
@@ -188,14 +192,14 @@ async fn main() {
 
     {
         let mut data = client.data.write().await;
-        data.insert::<commands::ConversationLock>(Arc::new(DashSet::new()));
-        data.insert::<commands::ConfigValuesData>(Arc::new(commands::ConfigValues {
-            main_guild_id: main_guild_id,
-            admin_role_id: admin_role_id,
-            squadmaker_role_id: squadmaker_role_id,
-            emoji_guild_id: emoji_guild_id,
+        data.insert::<ConversationLock>(Arc::new(DashSet::new()));
+        data.insert::<ConfigValuesData>(Arc::new(ConfigValues {
+            main_guild_id,
+            admin_role_id,
+            squadmaker_role_id,
+            emoji_guild_id,
         }));
-        data.insert::<commands::LogginConfigData>(Arc::new(RwLock::new(commands::LogginConfig {
+        data.insert::<LogginConfigData>(Arc::new(RwLock::new(LogginConfig {
             info: None,
             error: None,
         })));

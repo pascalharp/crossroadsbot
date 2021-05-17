@@ -1,8 +1,8 @@
-use super::{
-    ADMIN_ROLE_CHECK, CHECK_EMOJI, CROSS_EMOJI, DEFAULT_TIMEOUT,
-    GREEN_CIRCLE_EMOJI, RED_CIRCLE_EMOJI, RUNNING_EMOJI, WARNING_EMOJI,
+use super::ADMIN_ROLE_CHECK;
+use crate::{
+    db,
+    utils::{self, *}
 };
-use crate::{db, utils};
 use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Moscow, Paris};
 use serenity::collector::reaction_collector::ReactionAction;

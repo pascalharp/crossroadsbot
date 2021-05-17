@@ -1,5 +1,9 @@
-use crate::commands::*;
-use crate::db;
+use crate::{
+    commands::*,
+    conversation::*,
+    db,
+    data::*,
+};
 use serenity::{
     prelude::*,
     client::bridge::gateway::ShardMessenger,
@@ -18,12 +22,23 @@ use serenity::{
 use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Moscow, Paris};
 use std::{
+    time::Duration,
     sync::Arc,
     collections::{HashMap,HashSet},
     iter::FromIterator,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60 * 3);
+pub const CHECK_EMOJI: char = '✅';
+pub const CROSS_EMOJI: char = '❌';
+pub const ENVELOP_EMOJI: char = '✉';
+pub const WARNING_EMOJI: char = '⚠';
+pub const DIZZY_EMOJI: char = '😵';
+pub const RUNNING_EMOJI: char = '🏃';
+pub const GREEN_CIRCLE_EMOJI: char = '🟢';
+pub const RED_CIRCLE_EMOJI: char = '🔴';
 
 pub enum YesOrNo {
     Yes,

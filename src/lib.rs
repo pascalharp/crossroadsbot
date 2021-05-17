@@ -5,5 +5,7 @@ extern crate lazy_static;
 extern crate serenity;
 
 pub mod commands;
+pub mod conversation;
 pub mod db;
+pub mod data;
 pub mod utils;

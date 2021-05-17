@@ -1,12 +1,9 @@
-use serenity::model::prelude::*;
+use crate::{
+    conversation::*,
+    utils::{self, *},
+    db,
+};use serenity::model::prelude::*;
 use serenity::prelude::*;
-
-use crate::commands::{
-    Conversation, ConversationError, CHECK_EMOJI, DIZZY_EMOJI,
-    ENVELOP_EMOJI,
-};
-use crate::db;
-use crate::utils;
 use regex::Regex;
 use serenity::{
     framework::standard::{
@@ -80,6 +77,9 @@ async fn select_training(ctx: &Context, conv: &mut Conversation) -> Result<i32> 
         .await?;
 
     let trainings = db::Training::by_state(db::TrainingState::Open).await?;
+    if trainings.is_empty() {
+        return Err(ConversationError::Other(String::from("No trainings available")).into());
+    }
     let trainings = utils::filter_trainings(ctx, trainings, &conv.user).await?;
     let trainings: HashMap<i32, db::Training> = trainings.into_iter().map(|t| (t.id, t)).collect();
     conv.msg
@@ -230,16 +230,12 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 Ok(t) => t,
                 Err(e) => {
                     if let Some(ce) = e.downcast_ref::<ConversationError>() {
-                        match ce {
-                            ConversationError::TimedOut => {
-                                conv.timeout_msg(ctx).await?;
-                                return Ok(());
-                            }
-                            ConversationError::Canceled => {
-                                conv.canceled_msg(ctx).await?;
-                                return Ok(());
-                            }
-                            _ => return Err(e),
+                        if ce.is_init_err() {
+                            msg.reply(ctx, ce).await?;
+                            return Ok(());
+                        } else {
+                            conv.finish_with_msg(ctx, e).await?;
+                            return Ok(());
                         }
                     }
                     return Err(e);
@@ -303,9 +299,11 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 
     let selected_roles = {
         let mut conv = Conversation::start(ctx, &user_discord).await?; // TODO error
-        conv.msg.edit(ctx, |m| {
-            m.content(format!("Select your roles for: __{}__", training.title))
-        }).await?;
+        conv.msg
+            .edit(ctx, |m| {
+                m.content(format!("Select your roles for: __{}__", training.title))
+            })
+            .await?;
         // Create sets for selected and unselected
         let selected: HashSet<&db::Role> = HashSet::with_capacity(roles.len());
         let mut unselected: HashSet<&db::Role> = HashSet::with_capacity(roles.len());
@@ -314,18 +312,18 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         }
 
         match utils::select_roles(ctx, &mut conv, selected, unselected).await {
-            Ok((selected, _ )) => selected,
+            Ok((selected, _)) => selected,
             Err(e) => {
                 if let Some(e) = e.downcast_ref::<ConversationError>() {
                     match e {
                         ConversationError::TimedOut => {
                             conv.timeout_msg(ctx).await?;
                             return Ok(());
-                        },
+                        }
                         ConversationError::Canceled => {
                             conv.canceled_msg(ctx).await?;
                             return Ok(());
-                        },
+                        }
                         _ => (),
                     }
                 }
@@ -335,29 +333,30 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     };
 
     let mut conv = Conversation::start(ctx, &user_discord).await?;
-    conv.msg.edit(ctx, |m| {
-        m.content("Saving roles...")
-    }).await?;
+    conv.msg.edit(ctx, |m| m.content("Saving roles...")).await?;
 
-    let futs = selected_roles
-        .iter()
-        .map(|r| {
-            let new_signup_role = db::NewSignupRole {
-                role_id: r.id,
-                signup_id: signup.id
-            };
-            new_signup_role.add()
-        });
+    let futs = selected_roles.iter().map(|r| {
+        let new_signup_role = db::NewSignupRole {
+            role_id: r.id,
+            signup_id: signup.id,
+        };
+        new_signup_role.add()
+    });
     match future::try_join_all(futs).await {
         Ok(_) => {
-            conv.msg.edit(ctx, |m| {
-                m.content(format!("Roles saved {}", CHECK_EMOJI))
-            }).await?;
-        },
+            conv.msg
+                .edit(ctx, |m| m.content(format!("Roles saved {}", CHECK_EMOJI)))
+                .await?;
+        }
         Err(e) => {
-            conv.msg.edit(ctx, |m| {
-                m.content(format!("An unexpected error occurred while saving roles {}", DIZZY_EMOJI))
-            }).await?;
+            conv.msg
+                .edit(ctx, |m| {
+                    m.content(format!(
+                        "An unexpected error occurred while saving roles {}",
+                        DIZZY_EMOJI
+                    ))
+                })
+                .await?;
             return Err(e.into());
         }
     }
@@ -371,7 +370,6 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 #[usage = ""]
 #[num_args(0)]
 pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-
     let discord_user = &msg.author;
     let user = match db::User::get(*discord_user.id.as_u64()).await {
         Ok(u) => u,
@@ -391,37 +389,36 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
 
     if signups.is_empty() {
         let mut conv = Conversation::start(ctx, &discord_user).await?;
-        conv.msg.edit(ctx, |m| {
-            m.content("No active signup found")
-        }).await?;
-        return Ok(())
+        conv.msg
+            .edit(ctx, |m| m.content("No active signup found"))
+            .await?;
+        return Ok(());
     }
 
     let mut conv = Conversation::start(ctx, &discord_user).await?;
-    conv.msg.edit(ctx, |m| { m.content(format!("Loading {} active signup(s)", signups.len())) }).await?;
+    conv.msg
+        .edit(ctx, |m| {
+            m.content(format!("Loading {} active signup(s)", signups.len()))
+        })
+        .await?;
     msg.react(ctx, ENVELOP_EMOJI).await?;
     for (s, t) in signups {
         let signup_id = s.id;
         let s = Arc::new(s);
         let roles = s.get_roles().await?;
-        let roles = roles
-            .iter()
-            .map(|(_,r)| r )
-            .collect::<Vec<_>>();
+        let roles = roles.iter().map(|(_, r)| r).collect::<Vec<_>>();
         let emb = utils::training_base_embed(&t);
-        conv.chan.send_message(ctx, |m| {
-            m.embed(|e| {
-                e.0 = emb.0;
-                e.field("**Signup Id**", &signup_id, true);
-                e.field("Your selected roles", "------------------", false);
-                e.fields( roles
-                    .iter()
-                    .map(|r| {
-                        (&r.repr, &r.title, true)
-                    }));
-                e
+        conv.chan
+            .send_message(ctx, |m| {
+                m.embed(|e| {
+                    e.0 = emb.0;
+                    e.field("**Signup Id**", &signup_id, true);
+                    e.field("Your selected roles", "------------------", false);
+                    e.fields(roles.iter().map(|r| (&r.repr, &r.title, true)));
+                    e
+                })
             })
-        }).await?;
+            .await?;
     }
     Ok(())
 }
@@ -432,7 +429,6 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
 #[usage = "training_id"]
 #[num_args(1)]
 pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-
     let discord_user = &msg.author;
     let user = match db::User::get(*discord_user.id.as_u64()).await {
         Ok(u) => u,
@@ -458,9 +454,10 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
     let training = match db::Training::by_id_and_state(training_id, db::TrainingState::Open).await {
         Ok(t) => t,
         Err(diesel::NotFound) => {
-            msg.reply(ctx, "No open training with that id found").await?;
+            msg.reply(ctx, "No open training with that id found")
+                .await?;
             return Ok(());
-        },
+        }
         Err(e) => {
             msg.reply(ctx, "Unexpected error").await?;
             return Err(e.into());
@@ -472,7 +469,7 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
         Err(diesel::NotFound) => {
             msg.reply(ctx, "No sign up found").await?;
             return Ok(());
-        },
+        }
         Err(e) => {
             msg.reply(ctx, "Unexpected error").await?;
             return Err(e.into());
@@ -482,12 +479,12 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
     match signup.remove().await {
         Ok(1) => {
             msg.react(ctx, CHECK_EMOJI).await?;
-            return Ok(())
-        },
+            return Ok(());
+        }
         Err(e) => {
             msg.reply(ctx, "Unexpected error").await?;
             return Err(e.into());
-        },
+        }
         Ok(_) => {
             msg.react(ctx, CHECK_EMOJI).await?;
             return Err("Multiple entries deleted but expected only one".into());
@@ -526,9 +523,10 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     let training = match db::Training::by_id_and_state(training_id, db::TrainingState::Open).await {
         Ok(t) => Arc::new(t),
         Err(diesel::NotFound) => {
-            msg.reply(ctx, "No open training with that id found").await?;
+            msg.reply(ctx, "No open training with that id found")
+                .await?;
             return Ok(());
-        },
+        }
         Err(e) => {
             msg.reply(ctx, "Unexpected error").await?;
             return Err(e.into());
@@ -540,7 +538,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         Err(diesel::NotFound) => {
             msg.reply(ctx, "No sign up found").await?;
             return Ok(());
-        },
+        }
         Err(e) => {
             msg.reply(ctx, "Unexpected error").await?;
             return Err(e.into());
@@ -550,9 +548,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     let mut conv = Conversation::start(ctx, &discord_user).await?;
 
     let training_roles = training.clone().get_roles().await?;
-    let roles = future::try_join_all(
-        training_roles.iter().map(|r| r.role())
-    ).await?;
+    let roles = future::try_join_all(training_roles.iter().map(|r| r.role())).await?;
 
     let mut selected: HashSet<&db::Role> = HashSet::new();
     let mut unselected: HashSet<&db::Role> = HashSet::new();
@@ -560,7 +556,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     match signup.clone().get_roles().await {
         Ok(v) => {
             // this seems rather inefficient. Consider rework
-            let set = v.into_iter().map(|(_,r)| {r}).collect::<HashSet<_>>();
+            let set = v.into_iter().map(|(_, r)| r).collect::<HashSet<_>>();
             for r in &roles {
                 if set.contains(r) {
                     selected.insert(r);
@@ -568,7 +564,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                     unselected.insert(r);
                 }
             }
-        },
+        }
         Err(e) => {
             msg.reply(ctx, "Unexpected error").await?;
             return Err(e.into());
@@ -576,47 +572,49 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     };
 
     let selected = match utils::select_roles(ctx, &mut conv, selected, unselected).await {
-        Ok((s,_)) => s,
+        Ok((s, _)) => s,
         Err(e) => {
             if let Some(e) = e.downcast_ref::<ConversationError>() {
                 match e {
                     ConversationError::Canceled => {
                         conv.canceled_msg(ctx).await?;
                         return Ok(());
-                    },
+                    }
                     ConversationError::TimedOut => {
                         conv.timeout_msg(ctx).await?;
                         return Ok(());
-                    },
-                    _ => ()
+                    }
+                    _ => (),
                 }
             }
-            conv.chan.send_message(ctx, |m| { m.content("Unexpected error") }).await?;
+            conv.chan
+                .send_message(ctx, |m| m.content("Unexpected error"))
+                .await?;
             return Err(e.into());
         }
     };
 
     signup.clone().clear_roles().await?;
 
-    match future::try_join_all(
-        selected.iter().map( |r| {
-            let new_signup_role = db::NewSignupRole {
-                role_id: r.id,
-                signup_id: signup.id,
-            };
-            new_signup_role.add()
-        })
-    ).await {
+    match future::try_join_all(selected.iter().map(|r| {
+        let new_signup_role = db::NewSignupRole {
+            role_id: r.id,
+            signup_id: signup.id,
+        };
+        new_signup_role.add()
+    }))
+    .await
+    {
         Ok(_) => {
-            conv.chan.send_message(ctx, |m| {
-                m.content(format!("Roles changed {}",CHECK_EMOJI))
-            }).await?;
+            conv.chan
+                .send_message(ctx, |m| m.content(format!("Roles changed {}", CHECK_EMOJI)))
+                .await?;
             return Ok(());
-        },
+        }
         Err(e) => {
-            conv.chan.send_message(ctx, |m| {
-                m.content("Unexpected error")
-            }).await?;
+            conv.chan
+                .send_message(ctx, |m| m.content("Unexpected error"))
+                .await?;
             return Err(e.into());
         }
     }
