@@ -1,7 +1,7 @@
 use super::ADMIN_ROLE_CHECK;
 use crate::{
     db,
-    utils::{self, *}
+    utils::{self, *},
 };
 use serenity::framework::standard::{
     macros::{command, group},

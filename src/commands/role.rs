@@ -1,9 +1,8 @@
 use super::ADMIN_ROLE_CHECK;
 use crate::{
-    conversation::*,
+    data::ConfigValuesData,
     db,
     utils::{self, *},
-    data::ConfigValuesData,
 };
 use serenity::framework::standard::{
     macros::{command, group},

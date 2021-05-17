@@ -1,9 +1,4 @@
-use crossroadsbot::{
-    commands,
-    db,
-    data::*,
-    utils::DIZZY_EMOJI,
-};
+use crossroadsbot::{commands, data::*, db, utils::DIZZY_EMOJI};
 use dashmap::DashSet;
 use dotenv::dotenv;
 use serenity::{

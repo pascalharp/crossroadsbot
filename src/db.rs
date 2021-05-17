@@ -196,7 +196,7 @@ impl Training {
     pub async fn add_role(&self, role_id: i32) -> QueryResult<TrainingRole> {
         let training_role = NewTrainingRole {
             training_id: self.id,
-            role_id: role_id,
+            role_id,
         };
         let pool = POOL.clone();
         task::spawn_blocking(move || {
@@ -260,8 +260,7 @@ impl Signup {
     pub async fn clear_roles(self: Arc<Signup>) -> QueryResult<usize> {
         let pool = POOL.clone();
         task::spawn_blocking(move || {
-            diesel::delete(SignupRole::belonging_to(self.as_ref()))
-                .execute(&pool.get().unwrap())
+            diesel::delete(SignupRole::belonging_to(self.as_ref())).execute(&pool.get().unwrap())
         })
         .await
         .unwrap()

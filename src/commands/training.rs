@@ -1,7 +1,8 @@
 use super::ADMIN_ROLE_CHECK;
+use crate::utils::{role_emojis, RoleEmoji};
 use crate::{
     db,
-    utils::{self, *}
+    utils::{self, *},
 };
 use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Moscow, Paris};
@@ -18,7 +19,6 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
-use crate::utils::{RoleEmoji, role_emojis};
 
 #[group]
 #[prefix = "training"]

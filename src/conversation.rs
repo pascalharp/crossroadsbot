@@ -1,20 +1,12 @@
-use crate::{
-    utils::*,
-    data::*
-};
+use crate::{data::*, utils::*};
 use dashmap::DashSet;
 use serenity::{
     client::bridge::gateway::ShardMessenger,
     collector::{message_collector::*, reaction_collector::*},
-    framework::standard::{
-        help_commands,
-        macros::{check, help},
-        Args, CommandGroup, CommandOptions, CommandResult, HelpOptions, Reason,
-    },
     model::prelude::*,
     prelude::*,
 };
-use std::{collections::HashSet, error::Error, fmt, sync::Arc, time::Duration};
+use std::{error::Error, fmt, sync::Arc};
 
 pub struct Conversation {
     lock: Arc<DashSet<UserId>>,
@@ -187,4 +179,3 @@ impl Drop for Conversation {
         self.lock.remove(&self.user.id);
     }
 }
-

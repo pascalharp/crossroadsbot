@@ -1,8 +1,6 @@
 use crate::data::*;
-use dashmap::DashSet;
+
 use serenity::{
-    client::bridge::gateway::ShardMessenger,
-    collector::{message_collector::*, reaction_collector::*},
     framework::standard::{
         help_commands,
         macros::{check, help},
@@ -11,7 +9,7 @@ use serenity::{
     model::prelude::*,
     prelude::*,
 };
-use std::{collections::HashSet, error::Error, fmt, sync::Arc, time::Duration};
+use std::collections::HashSet;
 
 // --- Checks ---
 #[check]

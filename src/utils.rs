@@ -1,31 +1,26 @@
-use crate::{
-    commands::*,
-    conversation::*,
-    db,
-    data::*,
-};
+use crate::{conversation::*, data::*, db};
+use chrono::{DateTime, Utc};
+use chrono_tz::Europe::{London, Moscow, Paris};
 use serenity::{
-    prelude::*,
+    builder::CreateEmbed,
     client::bridge::gateway::ShardMessenger,
     collector::reaction_collector::*,
+    futures::StreamExt,
     http::CacheHttp,
     model::{
         channel::{Message, Reaction, ReactionType},
-        user::User,
-        id::{UserId, RoleId, EmojiId},
-        guild::{Guild, Emoji},
+        guild::{Emoji, Guild},
+        id::{EmojiId, RoleId, UserId},
         misc::Mention,
+        user::User,
     },
-    builder::CreateEmbed,
-    futures::StreamExt,
+    prelude::*,
 };
-use chrono::{DateTime, Utc};
-use chrono_tz::Europe::{London, Moscow, Paris};
 use std::{
-    time::Duration,
-    sync::Arc,
-    collections::{HashMap,HashSet},
+    collections::{HashMap, HashSet},
     iter::FromIterator,
+    sync::Arc,
+    time::Duration,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -96,10 +91,7 @@ pub struct RoleEmoji {
 pub type RoleEmojiMap = HashMap<EmojiId, RoleEmoji>;
 
 /// Returns a Hashmap of of Emojis and Roles that overlap with EmojiId as key
-pub async fn role_emojis(
-    ctx: &Context,
-    roles: Vec<db::Role>,
-) -> Result<RoleEmojiMap> {
+pub async fn role_emojis(ctx: &Context, roles: Vec<db::Role>) -> Result<RoleEmojiMap> {
     let mut map = HashMap::new();
     let emojis_guild_id = ctx
         .data
@@ -129,29 +121,41 @@ pub async fn verify_tier(ctx: &Context, training: &db::Training, user: &User) ->
     let tier = training.get_tier().await;
     let tier_mappings = match tier {
         None => return Ok(true),
-        Some(t) => {
-            Arc::new(t?).get_discord_roles().await?
-        }
+        Some(t) => Arc::new(t?).get_discord_roles().await?,
     };
     let roles_set = {
-        let guild = ctx.data.read().await.get::<ConfigValuesData>().unwrap().main_guild_id;
+        let guild = ctx
+            .data
+            .read()
+            .await
+            .get::<ConfigValuesData>()
+            .unwrap()
+            .main_guild_id;
         let roles = guild.member(ctx, user.id).await?.roles;
         HashSet::<RoleId>::from_iter(roles)
     };
 
     let passed = tier_mappings
         .iter()
-        .any(|t| {
-            roles_set.contains(&RoleId::from(t.discord_role_id as u64))
-        });
+        .any(|t| roles_set.contains(&RoleId::from(t.discord_role_id as u64)));
     Ok(passed)
 }
 
 /// Looks at the user permissions and filters out trainings the user has not sufficient permissions
 /// for
-pub async fn filter_trainings(ctx: &Context, trainings: Vec<db::Training>, user: &User) -> Result<Vec<db::Training>> {
+pub async fn filter_trainings(
+    ctx: &Context,
+    trainings: Vec<db::Training>,
+    user: &User,
+) -> Result<Vec<db::Training>> {
     let roles = {
-        let guild = ctx.data.read().await.get::<ConfigValuesData>().unwrap().main_guild_id;
+        let guild = ctx
+            .data
+            .read()
+            .await
+            .get::<ConfigValuesData>()
+            .unwrap()
+            .main_guild_id;
         guild.member(ctx, user.id).await?.roles
     };
 
@@ -165,27 +169,22 @@ pub async fn filter_trainings(ctx: &Context, trainings: Vec<db::Training>, user:
         tier_map.insert(t.id, discord_roles);
     }
 
-    Ok(trainings.into_iter().filter( |tier| {
-        match tier.tier_id {
+    Ok(trainings
+        .into_iter()
+        .filter(|tier| match tier.tier_id {
             None => true,
-            Some(id) => {
-                match tier_map.get(&id) {
-                    None => false,
-                    Some(tm_vec) => tm_vec.iter().any( |tm| {
-                        roles.iter().any(|r| { *r == (tm.discord_role_id as u64) })
-                    }),
-                }
-            }
-        }
-    }).collect())
+            Some(id) => match tier_map.get(&id) {
+                None => false,
+                Some(tm_vec) => tm_vec
+                    .iter()
+                    .any(|tm| roles.iter().any(|r| *r == (tm.discord_role_id as u64))),
+            },
+        })
+        .collect())
 }
 
 pub fn format_training_slim(t: &db::Training) -> String {
-    String::from(format!(
-        "Name: `{}`\nDate `{} UTC`",
-        t.title,
-        t.date,
-    ))
+    String::from(format!("Name: `{}`\nDate `{} UTC`", t.title, t.date,))
 }
 
 // Embed helpers
@@ -222,9 +221,7 @@ fn select_roles_embed(
 
 const TRAINING_TIME_FMT: &str = "%a, %B %Y at %H:%M %Z";
 // Does not display roles
-pub fn training_base_embed(
-    training: &db::Training,
-) -> CreateEmbed {
+pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
     let mut e = CreateEmbed::default();
     let utc = DateTime::<Utc>::from_utc(training.date, Utc);
     e.description(format!(
@@ -380,7 +377,8 @@ pub async fn select_roles<'a>(
             name: _,
         } = &react.emoji
         {
-            if let Some(role) = er_map.get(&id) { // Should never fail
+            if let Some(role) = er_map.get(&id) {
+                // Should never fail
                 // if able to remove from selected add to unselected
                 if selected.remove(role) {
                     unselected.insert(role);

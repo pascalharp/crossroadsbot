@@ -1,10 +1,11 @@
 use crate::{
     conversation::*,
-    utils::{self, *},
     db,
-};use serenity::model::prelude::*;
-use serenity::prelude::*;
+    utils::{self, *},
+};
 use regex::Regex;
+use serenity::model::prelude::*;
+use serenity::prelude::*;
 use serenity::{
     framework::standard::{
         macros::{command, group},
