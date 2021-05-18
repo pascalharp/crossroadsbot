@@ -1,7 +1,6 @@
 use crate::{
     conversation::*,
-    db,
-    embeds,
+    db, embeds,
     utils::{self, *},
 };
 use regex::Regex;

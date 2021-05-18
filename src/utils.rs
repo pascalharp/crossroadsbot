@@ -1,6 +1,5 @@
 use crate::{conversation::*, data::*, db, embeds::*};
 
-
 use serenity::{
     client::bridge::gateway::ShardMessenger,
     collector::reaction_collector::*,

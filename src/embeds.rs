@@ -1,15 +1,9 @@
-use crate::{
-    db,
-    utils::*,
-};
+use crate::{db, utils::*};
 use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Moscow, Paris};
 use serenity::{
     builder::CreateEmbed,
-    model::{
-        guild::Emoji,
-        misc::Mention,
-    },
+    model::{guild::Emoji, misc::Mention},
 };
 use std::collections::{HashMap, HashSet};
 

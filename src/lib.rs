@@ -8,5 +8,5 @@ pub mod commands;
 pub mod conversation;
 pub mod data;
 pub mod db;
-pub mod utils;
 pub mod embeds;
+pub mod utils;
