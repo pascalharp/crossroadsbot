@@ -7,18 +7,11 @@ use chrono_tz::Europe::{London, Moscow, Paris};
 use serenity::{
     builder::CreateEmbed,
     model::{
-        channel::{Message, Reaction, ReactionType},
         guild::Emoji,
-        id::{EmojiId, RoleId, UserId},
         misc::Mention,
-        user::User,
     },
-    prelude::*,
 };
-use std::{
-    collections::{HashMap, HashSet},
-    time::Duration,
-};
+use std::collections::{HashMap, HashSet};
 
 // Embed helpers
 pub fn select_roles_embed(

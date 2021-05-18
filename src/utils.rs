@@ -1,8 +1,7 @@
 use crate::{conversation::*, data::*, db, embeds::*};
-use chrono::{DateTime, Utc};
-use chrono_tz::Europe::{London, Moscow, Paris};
+
+
 use serenity::{
-    builder::CreateEmbed,
     client::bridge::gateway::ShardMessenger,
     collector::reaction_collector::*,
     futures::StreamExt,
@@ -11,7 +10,6 @@ use serenity::{
         channel::{Message, Reaction, ReactionType},
         guild::{Emoji, Guild},
         id::{EmojiId, RoleId, UserId},
-        misc::Mention,
         user::User,
     },
     prelude::*,
