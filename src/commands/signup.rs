@@ -1,6 +1,7 @@
 use crate::{
     conversation::*,
     db,
+    embeds,
     utils::{self, *},
 };
 use regex::Regex;
@@ -408,7 +409,7 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
         let s = Arc::new(s);
         let roles = s.get_roles().await?;
         let roles = roles.iter().map(|(_, r)| r).collect::<Vec<_>>();
-        let emb = utils::training_base_embed(&t);
+        let emb = embeds::training_base_embed(&t);
         conv.chan
             .send_message(ctx, |m| {
                 m.embed(|e| {
