@@ -31,6 +31,7 @@ pub const DIZZY_EMOJI: char = '😵';
 pub const RUNNING_EMOJI: char = '🏃';
 pub const GREEN_CIRCLE_EMOJI: char = '🟢';
 pub const RED_CIRCLE_EMOJI: char = '🔴';
+pub const CONSTRUCTION_SITE_EMOJI: char = '🚧';
 
 pub enum YesOrNo {
     Yes,

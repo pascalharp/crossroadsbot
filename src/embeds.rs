@@ -47,10 +47,11 @@ pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
     e.description(format!(
         "{} {}",
         match training.state {
+            db::TrainingState::Created => CONSTRUCTION_SITE_EMOJI,
             db::TrainingState::Open => GREEN_CIRCLE_EMOJI,
             db::TrainingState::Closed => RED_CIRCLE_EMOJI,
             db::TrainingState::Started => RUNNING_EMOJI,
-            _ => ' ',
+            db::TrainingState::Finished => CROSS_EMOJI,
         },
         training.title
     ));

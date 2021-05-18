@@ -1,10 +1,12 @@
 use super::ADMIN_ROLE_CHECK;
 use crate::{
-    conversation, db, embeds,
+    conversation,
+    db,
     utils::{self, *},
 };
 use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Moscow, Paris};
+use serenity::collector::reaction_collector::ReactionAction;
 use serenity::framework::standard::{
     macros::{command, group},
     ArgError, Args, CommandResult,
@@ -14,7 +16,7 @@ use serenity::futures::stream;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     sync::Arc,
 };
 
@@ -23,12 +25,69 @@ use std::{
 #[commands(list, show, add, set)]
 pub struct Training;
 
+type BoxResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+// Helper function to  update add_training embed message
+async fn update_add_training(
+    ctx: &Context,
+    msg: &mut Message,
+    role_emojis: &HashMap<EmojiId, RoleEmoji>,
+    selected: &HashSet<EmojiId>,
+    training_name: &str,
+    training_time: &chrono::NaiveDateTime,
+    training_tier: &Option<db::Tier>,
+) -> BoxResult<()> {
+    msg.edit(ctx, |m| {
+        m.embed(|e| {
+            e.description("New Training");
+            e.field(
+                "Details",
+                format!(
+                    "{}\n{}\n{}",
+                    training_name,
+                    training_time,
+                    match training_tier {
+                        Some(t) => t.name.clone(),
+                        None => String::from("none"),
+                    }
+                ),
+                false,
+            );
+
+            for (k, v) in role_emojis.iter() {
+                e.field(
+                    format!(
+                        "{} {}",
+                        if selected.contains(k) {
+                            CHECK_EMOJI
+                        } else {
+                            CROSS_EMOJI
+                        },
+                        v.role.repr
+                    ),
+                    format!("{} {}", Mention::from(&v.emoji), v.role.title),
+                    true,
+                );
+            }
+            e.footer(|f| {
+                f.text(format!(
+                    "Select roles. Use {} to finish and {} to abort",
+                    CHECK_EMOJI, CROSS_EMOJI
+                ))
+            });
+            e
+        })
+    })
+    .await?;
+
+    Ok(())
+}
+
 #[command]
 #[checks(admin_role)]
 #[usage = "training_name %Y-%m-%dT%H:%M:%S% training_tier [ role_identifier... ]"]
 #[example = "\"Beginner Training\" 2021-05-11T19:00:00 none pdps cdps banners"]
 #[min_args(3)]
-#[only_in(guild)]
 pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let discord_user = &msg.author;
     let training_name = args.single_quoted::<String>()?;
@@ -79,17 +138,23 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         }
     }
 
-    let mut conv = match conversation::Conversation::start(ctx, discord_user).await {
-        Ok(c) => c,
-        Err(e) => {
-            msg.reply(ctx, e).await?;
-            return Ok(());
-        }
-    };
-
-    conv.msg
-        .edit(ctx, |m| m.content("Loading roles..."))
+    let mut msg = msg
+        .channel_id
+        .send_message(ctx, |m| {
+            m.embed(|e| {
+                e.description("New Training");
+                e.field(
+                    "Details",
+                    format!("{}\n{}", training_name, training_time),
+                    false,
+                );
+                e.footer(|f| f.text("Loading roles ..."));
+                e
+            })
+        })
         .await?;
+
+    let mut conv = conversation::Conversation::start(ctx, discord_user);
     // Get roles and turn them into a HashMap with Emojis
     let roles = db::Role::all().await?;
     // Keep track of what roles are selected by EmojiId
@@ -102,57 +167,6 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             selected.insert(r);
         } else {
             unselected.insert(r);
-        }
-    }
-
-    conv.msg
-        .edit(ctx, |m| m.content("Select roles for new training"))
-        .await?;
-
-    let selected = match utils::select_roles(ctx, &mut conv, selected, unselected).await {
-        Ok((s, _)) => s,
-        Err(e) => {
-            if let Some(e) = e.downcast_ref::<conversation::ConversationError>() {
-                conv.chan.send_message(ctx, |m| m.content(e)).await?;
-                return Ok(());
-            } else {
-                conv.chan
-                    .send_message(ctx, |m| m.content("Unexpected Error"))
-                    .await?;
-                return Err(e.into());
-            }
-        }
-    };
-
-    let confirm_msg = conv.chan
-        .send_message(ctx, |m| {
-            m.content(format!("{} created a new training", Mention::from(discord_user)));
-            m.embed(|e| {
-                e.field("Title", &training_name, true);
-                e.field("Tier", training_tier.as_ref().map_or("none", |t| &t.name), true);
-                e.field("Date", &training_time, true);
-                e.field("Roles", "------------", false);
-                e.fields(selected.iter().map(|r| (r.repr.clone(), r.title.clone(), true)));
-                e
-            });
-            m
-        })
-        .await?;
-
-    utils::send_yes_or_no(ctx, &confirm_msg).await?;
-    match utils::await_yes_or_no(ctx, &confirm_msg, Some(discord_user.id)).await {
-        None => {
-            conv.timeout_msg(ctx).await?;
-            return Ok(());
-        },
-        Some(s) => {
-            match s {
-                utils::YesOrNo::Yes => (),
-                utils::YesOrNo::No => {
-                    conv.canceled_msg(ctx).await?;
-                    return Ok(());
-                }
-            }
         }
     }
 
@@ -175,27 +189,28 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             Ok(t) => t,
         };
 
-        for r in &selected {
-            match training.add_role(r.id).await {
-                Err(e) => {
-                    msg.reply(ctx, format!("{}", e)).await?;
-                    return Ok(());
-                }
-                _ => (),
-            };
+        for r in re.values() {
+            if selected.contains(&r.emoji.id) {
+                match training.add_role(r.role.id).await {
+                    Err(e) => {
+                        msg.reply(ctx, format!("{}", e)).await?;
+                        return Ok(());
+                    }
+                    _ => (),
+                };
+            }
         }
         training
     };
 
-    let emb = embeds::training_base_embed(&training);
     msg.channel_id
         .send_message(ctx, |m| {
-            m.allowed_mentions(|a| a.empty_parse());
-            m.content(format!("{} created a new training", Mention::from(discord_user)));
             m.embed(|e| {
-                e.0 = emb.0;
-                e.field("Roles", "-----", false);
-                e.fields(selected.into_iter().map(|r| (r.repr.clone(), r.title.clone(), true)));
+                e.description("Training added");
+                e.field("Name", training.title, false);
+                e.field("Id", training.id, false);
+                e.field("Date", training.date, false);
+                e.field("State", training.state, false);
                 e
             });
             m
