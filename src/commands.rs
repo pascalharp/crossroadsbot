@@ -40,6 +40,35 @@ async fn admin_rol_check(
     }
 }
 
+// --- Checks ---
+#[check]
+#[name = "squadmaker_role"]
+async fn squadmaker_rol_check(
+    ctx: &Context,
+    msg: &Message,
+    _: &mut Args,
+    _: &CommandOptions,
+) -> Result<(), Reason> {
+    let (g, r) = {
+        let config = ctx
+            .data
+            .read()
+            .await
+            .get::<ConfigValuesData>()
+            .unwrap()
+            .clone();
+        (config.main_guild_id, config.squadmaker_role_id)
+    };
+
+    match msg.author.has_role(ctx, g, r).await {
+        Ok(b) => match b {
+            true => Ok(()),
+            false => Err(Reason::Log(String::from("No permissions"))),
+        },
+        Err(_) => Err(Reason::Unknown),
+    }
+}
+
 #[help]
 #[individual_command_tip = "Hello! This is a list of all Crossroads Inn Bot commands\n\
 If you want more information about a specific command, just pass the command as argument."]
