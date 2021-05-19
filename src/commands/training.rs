@@ -1,4 +1,4 @@
-use super::ADMIN_ROLE_CHECK;
+use super::SQUADMAKER_ROLE_CHECK;
 use crate::{
     conversation, db, embeds,
     utils::{self, *},
@@ -13,15 +13,18 @@ use serenity::futures::prelude::*;
 use serenity::futures::stream;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 #[group]
 #[prefix = "training"]
-#[commands(list, show, add, set)]
+#[commands(list, show, add, set, info)]
 pub struct Training;
 
 #[command]
-#[checks(admin_role)]
+#[checks(squadmaker_role)]
 #[usage = "training_name %Y-%m-%dT%H:%M:%S% training_tier [ role_identifier... ]"]
 #[example = "\"Beginner Training\" 2021-05-11T19:00:00 none pdps cdps banners"]
 #[min_args(3)]
@@ -261,7 +264,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     }
 
     let roles: Vec<db::Role> = {
-        let stream = stream::iter(training.clone().get_roles().await?);
+        let stream = stream::iter(training.clone().get_training_roles().await?);
         stream
             .filter_map(|r| async move {
                 // Ignores deactivated roles
@@ -351,7 +354,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 }
 
 #[command]
-#[checks(admin_role)]
+#[checks(squadmaker_role)]
 #[description = "sets the training with the specified id to the specified state"]
 #[example = "19832 started"]
 #[usage = "training_id ( created | open | closed | started | finished )"]
@@ -474,7 +477,7 @@ async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
 }
 
 #[command("created")]
-#[checks(admin_role)]
+#[checks(squadmaker_role)]
 async fn list_created(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
     list_by_state(ctx, msg, db::TrainingState::Created).await
 }
@@ -495,7 +498,77 @@ async fn list_started(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
 }
 
 #[command("finished")]
-#[checks(admin_role)]
+#[checks(squadmaker_role)]
 async fn list_finished(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
     list_by_state(ctx, msg, db::TrainingState::Finished).await
+}
+
+#[command]
+#[checks(squadmaker_role)]
+#[description = "lists information about the amount of sign ups and selected roles"]
+#[example = "123"]
+#[usage = "training_id"]
+#[num_args(1)]
+pub async fn info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let training_id = match args.single_quoted::<i32>() {
+        Ok(id) => id,
+        Err(_) => {
+            msg.reply(ctx, "Failed to parse training id").await?;
+            return Ok(());
+        }
+    };
+
+    let training = match db::Training::by_id(training_id).await {
+        Ok(t) => Arc::new(t),
+        Err(diesel::NotFound) => {
+            msg.reply(ctx, "Training not found").await?;
+            return Ok(());
+        }
+        Err(_) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Ok(());
+        }
+    };
+
+    let signups = training
+        .clone()
+        .get_signups()
+        .await?
+        .into_iter()
+        .map(|s| Arc::new(s))
+        .collect::<Vec<_>>();
+
+    let mut roles = training
+        .clone()
+        .all_roles()
+        .await?
+        .into_iter()
+        .map(|(_, r)| (r, 0))
+        .collect::<HashMap<db::Role, u32>>();
+
+    let signed_up_roles = future::try_join_all(signups.iter().map(|s| s.clone().get_roles()))
+        .await?
+        .into_iter()
+        .flatten()
+        .map(|(_, r)| r)
+        .collect::<Vec<_>>();
+
+    for sr in signed_up_roles {
+        roles.entry(sr).and_modify(|e| { *e += 1 });
+    }
+
+    let embed = embeds::training_base_embed(training.as_ref());
+
+    msg.channel_id.send_message(ctx, |m| {
+        m.embed(|e| {
+            e.0 = embed.0;
+            e.field("Total sign ups",format!("**{}**",signups.len()),false);
+            e.fields( roles.iter().map(|(role, count)| {
+                (format!("Role: {}",role.repr), format!("Count: {}", count), true)
+            }));
+            e
+        })
+    }).await?;
+
+    Ok(())
 }

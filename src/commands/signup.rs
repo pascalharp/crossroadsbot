@@ -290,7 +290,7 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 
     let training = Arc::new(signup.get_training().await?);
     // training role mapping
-    let training_roles = training.clone().get_roles().await?;
+    let training_roles = training.clone().get_training_roles().await?;
     // The actual roles. ignoring deactivated ones (or db load errors in general)
     let roles: Vec<db::Role> = future::join_all(training_roles.iter().map(|tr| tr.role()))
         .await
@@ -548,7 +548,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 
     let mut conv = Conversation::start(ctx, &discord_user).await?;
 
-    let training_roles = training.clone().get_roles().await?;
+    let training_roles = training.clone().get_training_roles().await?;
     let roles = future::try_join_all(training_roles.iter().map(|r| r.role())).await?;
 
     let mut selected: HashSet<&db::Role> = HashSet::new();

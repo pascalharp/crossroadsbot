@@ -208,10 +208,33 @@ impl Training {
         .unwrap()
     }
 
-    pub async fn get_roles(self: Arc<Training>) -> QueryResult<Vec<TrainingRole>> {
+    pub async fn get_training_roles(self: Arc<Training>) -> QueryResult<Vec<TrainingRole>> {
         let pool = POOL.clone();
         task::spawn_blocking(move || {
             TrainingRole::belonging_to(self.as_ref()).load(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
+    pub async fn all_roles(self: Arc<Training>) -> QueryResult<Vec<(TrainingRole, Role)>> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            TrainingRole::belonging_to(self.as_ref())
+                .inner_join(roles::table)
+                .load(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
+    pub async fn active_roles(self: Arc<Training>) -> QueryResult<Vec<(TrainingRole, Role)>> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            TrainingRole::belonging_to(self.as_ref())
+                .inner_join(roles::table)
+                .filter(roles::active.eq(true))
+                .load(&pool.get().unwrap())
         })
         .await
         .unwrap()
