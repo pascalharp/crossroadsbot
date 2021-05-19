@@ -354,7 +354,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 #[checks(admin_role)]
 #[description = "sets the training with the specified id to the specified state"]
 #[example = "19832 started"]
-#[usage = "training_id ( created | published | closed | started | finished )"]
+#[usage = "training_id ( created | open | closed | started | finished )"]
 #[num_args(2)]
 pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let training_id = match args.single::<i32>() {
@@ -466,10 +466,10 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -
 #[command]
 #[description = "List trainings. Lists published trainings by default"]
 #[usage = "[ training_state ]"]
-#[sub_commands(list_created, list_published, list_closed, list_started, list_finished)]
-#[num_args(1)]
+#[sub_commands(list_created, list_open, list_closed, list_started, list_finished)]
+#[max_args(1)]
 async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    msg.reply(ctx, "Not a training state").await?;
+    msg.reply(ctx, "No training state provided. Possible training states: created, open, closed, started, finished").await?;
     Ok(())
 }
 
@@ -480,7 +480,7 @@ async fn list_created(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
 }
 
 #[command("open")]
-async fn list_published(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
+async fn list_open(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
     list_by_state(ctx, msg, db::TrainingState::Open).await
 }
 
@@ -490,7 +490,6 @@ async fn list_closed(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
 }
 
 #[command("started")]
-#[checks(admin_role)]
 async fn list_started(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
     list_by_state(ctx, msg, db::TrainingState::Started).await
 }
