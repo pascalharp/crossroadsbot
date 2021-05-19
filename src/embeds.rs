@@ -39,7 +39,7 @@ pub fn select_roles_embed(
     e
 }
 
-const TRAINING_TIME_FMT: &str = "%a, %B %Y at %H:%M %Z";
+const TRAINING_TIME_FMT: &str = "%a, %v at %H:%M %Z";
 // Does not display roles
 pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
     let mut e = CreateEmbed::default();
