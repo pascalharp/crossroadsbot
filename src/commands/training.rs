@@ -13,10 +13,7 @@ use serenity::futures::prelude::*;
 use serenity::futures::stream;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
-use std::{
-    collections::HashSet,
-    sync::Arc,
-};
+use std::{collections::HashSet, sync::Arc};
 
 #[group]
 #[prefix = "training"]
@@ -124,15 +121,33 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         }
     };
 
-    let confirm_msg = conv.chan
+    let confirm_msg = conv
+        .chan
         .send_message(ctx, |m| {
-            m.content(format!("{} created a new training", Mention::from(discord_user)));
+            m.content(format!(
+                "{} created a new training",
+                Mention::from(discord_user)
+            ));
             m.embed(|e| {
                 e.field("Title", &training_name, true);
-                e.field("Tier", training_tier.as_ref().map_or("none", |t| &t.name), true);
+                e.field(
+                    "Tier",
+                    training_tier.as_ref().map_or("none", |t| &t.name),
+                    true,
+                );
                 e.field("Date", &training_time, true);
                 e.field("Roles", "------------", false);
-                e.fields(selected.iter().map(|r| (r.repr.clone(), r.title.clone(), true)));
+                e.fields(
+                    selected
+                        .iter()
+                        .map(|r| (r.repr.clone(), r.title.clone(), true)),
+                );
+                e.footer(|f| {
+                    f.text(format!(
+                        "Confirm new training with {} or {} to abort",
+                        CHECK_EMOJI, CROSS_EMOJI
+                    ))
+                });
                 e
             });
             m
@@ -144,16 +159,14 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         None => {
             conv.timeout_msg(ctx).await?;
             return Ok(());
-        },
-        Some(s) => {
-            match s {
-                utils::YesOrNo::Yes => (),
-                utils::YesOrNo::No => {
-                    conv.canceled_msg(ctx).await?;
-                    return Ok(());
-                }
-            }
         }
+        Some(s) => match s {
+            utils::YesOrNo::Yes => (),
+            utils::YesOrNo::No => {
+                conv.canceled_msg(ctx).await?;
+                return Ok(());
+            }
+        },
     }
 
     // Do all the database stuff
@@ -187,15 +200,24 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         training
     };
 
+    confirm_msg.reply(ctx, "Training added").await?;
+
     let emb = embeds::training_base_embed(&training);
     msg.channel_id
         .send_message(ctx, |m| {
             m.allowed_mentions(|a| a.empty_parse());
-            m.content(format!("{} created a new training", Mention::from(discord_user)));
+            m.content(format!(
+                "{} created a new training",
+                Mention::from(discord_user)
+            ));
             m.embed(|e| {
                 e.0 = emb.0;
                 e.field("Roles", "-----", false);
-                e.fields(selected.into_iter().map(|r| (r.repr.clone(), r.title.clone(), true)));
+                e.fields(
+                    selected
+                        .into_iter()
+                        .map(|r| (r.repr.clone(), r.title.clone(), true)),
+                );
                 e
             });
             m
