@@ -1,6 +1,6 @@
 use crate::{db, utils::*};
 use chrono::{DateTime, Utc};
-use chrono_tz::Europe::{London, Moscow, Paris};
+use chrono_tz::Europe::{London, Paris};
 use serenity::{
     builder::CreateEmbed,
     model::{guild::Emoji, misc::Mention},
@@ -58,11 +58,10 @@ pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
     e.field(
         "**Date**",
         format!(
-            "{}\n{}\n{}\n{}",
+            "{}\n{}\n{}",
             utc.format(TRAINING_TIME_FMT),
             utc.with_timezone(&London).format(TRAINING_TIME_FMT),
             utc.with_timezone(&Paris).format(TRAINING_TIME_FMT),
-            utc.with_timezone(&Moscow).format(TRAINING_TIME_FMT),
         ),
         false,
     );
