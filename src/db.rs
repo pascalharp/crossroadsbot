@@ -121,6 +121,18 @@ impl Training {
         .unwrap()
     }
 
+    pub async fn amount_by_state(state: TrainingState) -> QueryResult<i64> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            trainings::table
+                .filter(trainings::state.eq(state))
+                .count()
+                .get_result(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
     pub async fn by_id(id: i32) -> QueryResult<Training> {
         let pool = POOL.clone();
         task::spawn_blocking(move || {

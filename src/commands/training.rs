@@ -9,14 +9,14 @@ use serenity::framework::standard::{
     macros::{command, group},
     ArgError, Args, CommandResult,
 };
-use serenity::futures::prelude::*;
-use serenity::futures::stream;
+use serenity::futures::{prelude::*, stream};
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
+use tokio::try_join;
 
 #[group]
 #[prefix = "training"]
@@ -466,41 +466,70 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -
     Ok(())
 }
 
-#[command]
-#[description = "List trainings. Lists published trainings by default"]
-#[usage = "[ training_state ]"]
-#[sub_commands(list_created, list_open, list_closed, list_started, list_finished)]
-#[max_args(1)]
-async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    msg.reply(ctx, "No training state provided. Possible training states: created, open, closed, started, finished").await?;
+async fn list_amounts(ctx: &Context, msg: &Message) -> CommandResult {
+    let (created, open, closed, started, finished) = match try_join!(
+        db::Training::amount_by_state(db::TrainingState::Created),
+        db::Training::amount_by_state(db::TrainingState::Open),
+        db::Training::amount_by_state(db::TrainingState::Closed),
+        db::Training::amount_by_state(db::TrainingState::Started),
+        db::Training::amount_by_state(db::TrainingState::Finished),
+    ) {
+        Ok(ok) => ok,
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error loading trainings").await?;
+            return Err(e.into());
+        }
+    };
+
+    let total = created + open + closed + started + finished;
+    let active = open + closed + started;
+
+    msg.channel_id.send_message(ctx, |m| {
+        m.embed( |e| {
+            e.description("Amount of trainings");
+            e.field("Total and listed per state",
+                format!("`{}`\n`{}`\n\n`{}`\n`{}`\n`{}`\n`{}`\n`{}`\n",
+                    format!("Total    : {}", total),
+                    format!("Active*  : {}", active),
+                    format!("Created  : {}", created),
+                    format!("Open     : {}", open),
+                    format!("Closed   : {}", closed),
+                    format!("Started  : {}", started),
+                    format!("Finished : {}", finished),
+                ),
+                false);
+            e.footer( |f| {
+                f.text("For more details pass the state. For example: training list open\n*(Active = Open + Closed + Started)")
+            });
+            e
+        })
+    }).await?;
     Ok(())
 }
 
-#[command("created")]
+#[command]
+#[description = "List trainings. Lists published trainings by default"]
+#[usage = "[ training_state ]"]
 #[checks(squadmaker_role)]
-async fn list_created(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, db::TrainingState::Created).await
-}
+#[max_args(1)]
+async fn list(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let state: Option<db::TrainingState> = match args.single_quoted::<db::TrainingState>() {
+        Ok(s) => Some(s),
+        Err(ArgError::Eos) => None,
+        Err(_) => {
+            msg.reply(
+                ctx,
+                "Failed to parse state. Make sure its a valid training state",
+            )
+            .await?;
+            return Ok(());
+        }
+    };
 
-#[command("open")]
-async fn list_open(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, db::TrainingState::Open).await
-}
-
-#[command("closed")]
-async fn list_closed(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, db::TrainingState::Closed).await
-}
-
-#[command("started")]
-async fn list_started(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, db::TrainingState::Started).await
-}
-
-#[command("finished")]
-#[checks(squadmaker_role)]
-async fn list_finished(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    list_by_state(ctx, msg, db::TrainingState::Finished).await
+    match state {
+        Some(s) => return list_by_state(ctx, msg, s).await,
+        None => return list_amounts(ctx, msg).await,
+    }
 }
 
 #[command]
@@ -554,21 +583,27 @@ pub async fn info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         .collect::<Vec<_>>();
 
     for sr in signed_up_roles {
-        roles.entry(sr).and_modify(|e| { *e += 1 });
+        roles.entry(sr).and_modify(|e| *e += 1);
     }
 
     let embed = embeds::training_base_embed(training.as_ref());
 
-    msg.channel_id.send_message(ctx, |m| {
-        m.embed(|e| {
-            e.0 = embed.0;
-            e.field("Total sign ups",format!("**{}**",signups.len()),false);
-            e.fields( roles.iter().map(|(role, count)| {
-                (format!("Role: {}",role.repr), format!("Count: {}", count), true)
-            }));
-            e
+    msg.channel_id
+        .send_message(ctx, |m| {
+            m.embed(|e| {
+                e.0 = embed.0;
+                e.field("Total sign ups", format!("**{}**", signups.len()), false);
+                e.fields(roles.iter().map(|(role, count)| {
+                    (
+                        format!("Role: {}", role.repr),
+                        format!("Count: {}", count),
+                        true,
+                    )
+                }));
+                e
+            })
         })
-    }).await?;
+        .await?;
 
     Ok(())
 }
