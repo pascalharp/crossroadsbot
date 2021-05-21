@@ -1,18 +1,21 @@
 use super::SQUADMAKER_ROLE_CHECK;
 use crate::{
-    conversation, db, embeds,
+    conversation, data, db, embeds,
     utils::{self, *},
 };
 use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Moscow, Paris};
+use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serenity::framework::standard::{
     macros::{command, group},
     ArgError, Args, CommandResult,
 };
 use serenity::futures::{prelude::*, stream};
+use serenity::http::AttachmentType;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 use std::{
+    borrow::Cow,
     collections::{HashMap, HashSet},
     sync::Arc,
 };
@@ -20,7 +23,7 @@ use tokio::try_join;
 
 #[group]
 #[prefix = "training"]
-#[commands(list, show, add, set, info)]
+#[commands(list, show, add, set, info, download)]
 pub struct Training;
 
 #[command]
@@ -602,6 +605,198 @@ pub async fn info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 }));
                 e
             })
+        })
+        .await?;
+
+    Ok(())
+}
+
+struct SignupCsv {
+    user: db::User,
+    member: Member,
+    training: Arc<db::Training>,
+    roles: Vec<db::Role>,
+}
+
+impl Serialize for SignupCsv {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("Signup", 5)?;
+        state.serialize_field("Gw2 Account", &self.user.gw2_id)?;
+        state.serialize_field("Discord Account", &self.member.user.tag())?;
+        state.serialize_field("Discord Ping", &Mention::from(&self.member).to_string())?;
+        state.serialize_field("Training Name", &self.training.title)?;
+        let role_str: String = self
+            .roles
+            .iter()
+            .map(|r| r.repr.clone())
+            .collect::<Vec<_>>()
+            .join(", ");
+        state.serialize_field("Roles", &role_str)?;
+        state.end()
+    }
+}
+
+#[command]
+#[checks(squadmaker_role)]
+#[description = "download the file into a csv"]
+#[example = "123"]
+#[usage = "training_id"]
+#[min_args(1)]
+pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+
+    let guild_id = match ctx.data.read().await.get::<data::ConfigValuesData>() {
+        Some(conf) => conf.main_guild_id,
+        None => {
+            msg.reply(
+                ctx,
+                "Configuration not found. Main guild could not be loaded",
+            )
+            .await?;
+            return Ok(());
+        }
+    };
+
+    let mut log: Vec<String> = vec![];
+    let mut signup_csv: Vec<SignupCsv> = vec![];
+
+    let training_id = match args.single_quoted::<i32>() {
+        Ok(id) => id,
+        Err(_) => {
+            msg.reply(ctx, "Failed to parse trainings id").await?;
+            return Ok(());
+        }
+    };
+
+    let training = match db::Training::by_id(training_id).await {
+        Ok(t) => Arc::new(t),
+        Err(diesel::NotFound) => {
+            msg.reply(ctx, format!("No training found with id {}", training_id))
+                .await?;
+            return Ok(());
+        }
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
+    };
+
+    let signups = match training.clone().get_signups().await {
+        Ok(s) => s,
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error loading signups").await?;
+            return Err(e.into());
+        }
+    };
+
+
+
+    let guild = match PartialGuild::get(ctx, guild_id).await {
+        Ok(g) => g,
+        Err(e) => {
+            msg.reply(ctx, "Error loading guild information").await?;
+            return Err(e.into());
+        }
+    };
+
+
+    for s in signups {
+        let user = match s.get_user().await {
+            Ok(u) => u,
+            Err(_) => {
+                log.push(String::from(format!(
+                    "Error loading user entry for signup with id {}. Skipped",
+                    s.id
+                )));
+                continue;
+            }
+        };
+
+        let s = Arc::new(s);
+        let roles = match s.clone().get_roles().await {
+            Ok(v) => v.into_iter().map(|(_, r)| r).collect::<Vec<db::Role>>(),
+            Err(_) => {
+                log.push(String::from(format!(
+                    "Error loading roles for signup with id {}. Skipped",
+                    s.id
+                )));
+                continue;
+            }
+        };
+
+        if roles.is_empty() {
+            log.push(String::from(format!(
+                "No roles selected signup with id {}. Skipped",
+                s.id
+            )));
+            continue;
+        }
+
+        let member = match guild.member(ctx, user.discord_id()).await {
+            Ok(du) => du,
+            Err(_) => {
+                log.push(String::from(format!(
+                    "Did not find user with id {} in discord guild. Skipped",
+                    user.discord_id()
+                )));
+                continue;
+            }
+        };
+
+        let training = training.clone();
+
+        signup_csv.push(SignupCsv {
+            user,
+            member,
+            training,
+            roles,
+        });
+    }
+
+    let mut wtr = csv::Writer::from_writer(vec![]);
+
+    for s in signup_csv {
+        if let Err(e) = wtr.serialize(s) {
+            msg.reply(ctx, "Error converting to csv").await?;
+            return Err(e.into());
+        }
+    }
+
+    let wtr_inner = match wtr.into_inner() {
+        Ok(w) => w,
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
+    };
+
+    let bytes_csv = match String::from_utf8(wtr_inner) {
+        Ok(s) => s.into_bytes(),
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
+    };
+
+    let file = AttachmentType::Bytes {
+        data: Cow::from(bytes_csv),
+        filename: String::from(format!("{}_{}.csv", training.title, training.date)),
+    };
+
+    msg.channel_id
+        .send_message(ctx, |m| {
+            m.content(format!(
+                "Log:\n ```\n{}\n```",
+                if log.is_empty() {
+                    "No errors".to_string()
+                } else {
+                    log.join("\n")
+                }
+            ));
+            m.add_file(file);
+            m
         })
         .await?;
 

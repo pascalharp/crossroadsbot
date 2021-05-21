@@ -281,6 +281,18 @@ impl Signup {
         .unwrap()
     }
 
+    pub async fn get_user(&self) -> QueryResult<User> {
+        let user_id = self.user_id;
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            users::table
+                .filter(users::id.eq(user_id))
+                .first::<User>(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
     pub async fn get_roles(self: Arc<Signup>) -> QueryResult<Vec<(SignupRole, Role)>> {
         let pool = POOL.clone();
         task::spawn_blocking(move || {
