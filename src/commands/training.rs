@@ -646,7 +646,6 @@ impl Serialize for SignupCsv {
 #[usage = "training_id"]
 #[min_args(1)]
 pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-
     let guild_id = match ctx.data.read().await.get::<data::ConfigValuesData>() {
         Some(conf) => conf.main_guild_id,
         None => {
@@ -659,40 +658,6 @@ pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
         }
     };
 
-    let mut log: Vec<String> = vec![];
-    let mut signup_csv: Vec<SignupCsv> = vec![];
-
-    let training_id = match args.single_quoted::<i32>() {
-        Ok(id) => id,
-        Err(_) => {
-            msg.reply(ctx, "Failed to parse trainings id").await?;
-            return Ok(());
-        }
-    };
-
-    let training = match db::Training::by_id(training_id).await {
-        Ok(t) => Arc::new(t),
-        Err(diesel::NotFound) => {
-            msg.reply(ctx, format!("No training found with id {}", training_id))
-                .await?;
-            return Ok(());
-        }
-        Err(e) => {
-            msg.reply(ctx, "Unexpected error").await?;
-            return Err(e.into());
-        }
-    };
-
-    let signups = match training.clone().get_signups().await {
-        Ok(s) => s,
-        Err(e) => {
-            msg.reply(ctx, "Unexpected error loading signups").await?;
-            return Err(e.into());
-        }
-    };
-
-
-
     let guild = match PartialGuild::get(ctx, guild_id).await {
         Ok(g) => g,
         Err(e) => {
@@ -701,58 +666,93 @@ pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
         }
     };
 
+    let mut trainings: Vec<Arc<db::Training>> = Vec::with_capacity(args.len());
+    let mut log: Vec<String> = vec![];
+    let mut signup_csv: Vec<SignupCsv> = vec![];
 
-    for s in signups {
-        let user = match s.get_user().await {
-            Ok(u) => u,
+    for id in args.iter::<i32>() {
+        match id {
+            Ok(id) => {
+                match db::Training::by_id(id).await {
+                    Ok(t) => trainings.push(Arc::new(t)),
+                    Err(diesel::NotFound) => {
+                        msg.reply(ctx, format!("Training with id {} not found", id)).await?;
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        msg.reply(ctx, "Unexpected error loading training").await?;
+                        return Err(e.into());
+                    }
+                }
+            },
             Err(_) => {
-                log.push(String::from(format!(
-                    "Error loading user entry for signup with id {}. Skipped",
-                    s.id
-                )));
-                continue;
+                msg.reply(ctx, "Failed to parse training id").await?;
+                return Ok(());
             }
-        };
-
-        let s = Arc::new(s);
-        let roles = match s.clone().get_roles().await {
-            Ok(v) => v.into_iter().map(|(_, r)| r).collect::<Vec<db::Role>>(),
-            Err(_) => {
-                log.push(String::from(format!(
-                    "Error loading roles for signup with id {}. Skipped",
-                    s.id
-                )));
-                continue;
-            }
-        };
-
-        if roles.is_empty() {
-            log.push(String::from(format!(
-                "No roles selected signup with id {}. Skipped",
-                s.id
-            )));
-            continue;
         }
+    }
 
-        let member = match guild.member(ctx, user.discord_id()).await {
-            Ok(du) => du,
-            Err(_) => {
-                log.push(String::from(format!(
-                    "Did not find user with id {} in discord guild. Skipped",
-                    user.discord_id()
-                )));
-                continue;
+    for training in trainings {
+        let signups = match training.clone().get_signups().await {
+            Ok(s) => s,
+            Err(e) => {
+                msg.reply(ctx, "Unexpected error loading signups").await?;
+                return Err(e.into());
             }
         };
 
-        let training = training.clone();
+        for s in signups {
+            let user = match s.get_user().await {
+                Ok(u) => u,
+                Err(_) => {
+                    log.push(String::from(format!(
+                        "Error loading user entry for signup with id {}. Skipped",
+                        s.id
+                    )));
+                    continue;
+                }
+            };
 
-        signup_csv.push(SignupCsv {
-            user,
-            member,
-            training,
-            roles,
-        });
+            let s = Arc::new(s);
+            let roles = match s.clone().get_roles().await {
+                Ok(v) => v.into_iter().map(|(_, r)| r).collect::<Vec<db::Role>>(),
+                Err(_) => {
+                    log.push(String::from(format!(
+                        "Error loading roles for signup with id {}. Skipped",
+                        s.id
+                    )));
+                    continue;
+                }
+            };
+
+            if roles.is_empty() {
+                log.push(String::from(format!(
+                    "No roles selected signup with id {}. Skipped",
+                    s.id
+                )));
+                continue;
+            }
+
+            let member = match guild.member(ctx, user.discord_id()).await {
+                Ok(du) => du,
+                Err(_) => {
+                    log.push(String::from(format!(
+                        "Did not find user with id {} in discord guild. Skipped",
+                        user.discord_id()
+                    )));
+                    continue;
+                }
+            };
+
+            let training = training.clone();
+
+            signup_csv.push(SignupCsv {
+                user,
+                member,
+                training,
+                roles,
+            });
+        }
     }
 
     let mut wtr = csv::Writer::from_writer(vec![]);
@@ -782,7 +782,7 @@ pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
 
     let file = AttachmentType::Bytes {
         data: Cow::from(bytes_csv),
-        filename: String::from(format!("{}_{}.csv", training.title, training.date)),
+        filename: String::from("signups.csv"),
     };
 
     msg.channel_id
