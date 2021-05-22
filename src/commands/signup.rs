@@ -165,10 +165,10 @@ pub async fn join_training(
 
     // verify if tier requirements pass
     match utils::verify_tier(ctx, &training, &conv.user).await {
-        Ok(pass) => {
+        Ok((pass, tier)) => {
             if !pass {
                 return Err(Box::new(ConversationError::Other(String::from(
-                    "Tier requirement failed",
+                    format!("This training requires at least the following tier: {}", tier),
                 ))));
             }
         }

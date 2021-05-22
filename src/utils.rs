@@ -115,12 +115,13 @@ pub async fn role_emojis(ctx: &Context, roles: Vec<db::Role>) -> Result<RoleEmoj
 }
 
 /// Verifies if the discord user has the required tier for a training
-pub async fn verify_tier(ctx: &Context, training: &db::Training, user: &User) -> Result<bool> {
+pub async fn verify_tier(ctx: &Context, training: &db::Training, user: &User) -> Result<(bool, String)> {
     let tier = training.get_tier().await;
-    let tier_mappings = match tier {
-        None => return Ok(true),
-        Some(t) => Arc::new(t?).get_discord_roles().await?,
+    let tier = match tier {
+        None => return Ok((true, "none".to_string())),
+        Some(t) => Arc::new(t?),
     };
+    let tier_mappings = tier.clone().get_discord_roles().await?;
     let roles_set = {
         let guild = ctx
             .data
@@ -136,7 +137,7 @@ pub async fn verify_tier(ctx: &Context, training: &db::Training, user: &User) ->
     let passed = tier_mappings
         .iter()
         .any(|t| roles_set.contains(&RoleId::from(t.discord_role_id as u64)));
-    Ok(passed)
+    Ok((passed, tier.name.clone()))
 }
 
 /// Looks at the user permissions and filters out trainings the user has not sufficient permissions
