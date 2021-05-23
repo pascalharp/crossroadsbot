@@ -9,7 +9,10 @@ pub struct ConfigValues {
     pub emoji_guild_id: GuildId,
 }
 
-pub struct LogginConfig {
+pub static INFO_LOG_NAME: &str = "info_log";
+pub static ERROR_LOG_NAME: &str = "error_log";
+
+pub struct LogConfig {
     pub info: Option<ChannelId>,
     pub error: Option<ChannelId>,
 }
@@ -24,7 +27,7 @@ impl TypeMapKey for ConfigValuesData {
     type Value = Arc<ConfigValues>;
 }
 
-pub struct LogginConfigData;
-impl TypeMapKey for LogginConfigData {
-    type Value = Arc<RwLock<LogginConfig>>;
+pub struct LogConfigData;
+impl TypeMapKey for LogConfigData {
+    type Value = Arc<RwLock<LogConfig>>;
 }

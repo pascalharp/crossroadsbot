@@ -8,8 +8,11 @@ use serenity::{
     model::prelude::*,
     prelude::*,
 };
-use std::env;
-use std::sync::Arc;
+use std::{
+    env,
+    str::FromStr,
+    sync::Arc,
+};
 use tracing::{error, info};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
@@ -22,8 +25,35 @@ struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn ready(&self, _: Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
         info!("Connected as {}", ready.user.name);
+        info!("Refreshing config values");
+
+        let log_info = db::Config::load(String::from(INFO_LOG_NAME)).await.ok();
+        let log_error = db::Config::load(String::from(INFO_LOG_NAME)).await.ok();
+        let data_read = ctx.data.read().await;
+        let mut log_write = data_read.get::<LogConfigData>().unwrap().write().await;
+
+        match log_info {
+            None => info!("Log info not found in db. skipped"),
+            Some(info) => {
+                match ChannelId::from_str(&info.value) {
+                    Err(e) => error!("Failed to parse info channel id: {}", e),
+                    Ok(id) => log_write.info = Some(id),
+                }
+            }
+        }
+
+        match log_error {
+            None => info!("Log info not found in db. skipped"),
+            Some(error) => {
+                match ChannelId::from_str(&error.value) {
+                    Err(e) => error!("Failed to parse error channel id: {}", e),
+                    Ok(id) => log_write.error = Some(id),
+                }
+            }
+        }
+
     }
 
     async fn resume(&self, _: Context, _: ResumedEvent) {
@@ -34,18 +64,19 @@ impl EventHandler for Handler {
 #[hook]
 async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result: CommandResult) {
     let author = &msg.author;
+    let command = msg.content_safe(ctx).await;
     // Log to subscriber
     match command_result {
         Ok(()) => {
             info!(
                 "{}",
-                format!("{} used command {}: {}", author.id, command_name, "OK")
+                format!("{} used command {}: {}", author.id, msg.content, "OK")
             );
             let log_info = {
                 ctx.data
                     .read()
                     .await
-                    .get::<LogginConfigData>()
+                    .get::<LogConfigData>()
                     .unwrap()
                     .clone()
                     .read()
@@ -54,10 +85,11 @@ async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result:
             };
             if let Some(chan) = log_info {
                 chan.send_message(ctx, |m| {
+                    m.allowed_mentions(|m| m.empty_parse());
                     m.embed(|e| {
                         e.description("[INFO] Command used");
                         e.field("User", Mention::from(author), true);
-                        e.field("Command", command_name, true);
+                        e.field("Command", format!("`{}`", command), true);
                         e
                     })
                 })
@@ -74,7 +106,7 @@ async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result:
                 ctx.data
                     .read()
                     .await
-                    .get::<LogginConfigData>()
+                    .get::<LogConfigData>()
                     .unwrap()
                     .clone()
                     .read()
@@ -83,10 +115,11 @@ async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result:
             };
             if let Some(chan) = err_info {
                 chan.send_message(ctx, |m| {
+                    m.allowed_mentions(|m| m.empty_parse());
                     m.embed(|e| {
                         e.description("[ERROR] Command failed");
                         e.field("User", Mention::from(author), true);
-                        e.field("Command", command_name, true);
+                        e.field("Command", format!("`{}`", command), true);
                         e.field("Error", why, false);
                         e
                     })
@@ -194,7 +227,7 @@ async fn main() {
             squadmaker_role_id,
             emoji_guild_id,
         }));
-        data.insert::<LogginConfigData>(Arc::new(RwLock::new(LogginConfig {
+        data.insert::<LogConfigData>(Arc::new(RwLock::new(LogConfig {
             info: None,
             error: None,
         })));

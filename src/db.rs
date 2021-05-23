@@ -554,3 +554,31 @@ impl TierMapping {
         .unwrap()
     }
 }
+
+// Config
+impl Config {
+    pub async fn load(name: String) -> QueryResult<Config> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            config::table
+                .filter(config::name.eq(&name))
+                .first(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
+    pub async fn save(self) -> QueryResult<Config> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            diesel::insert_into(config::table)
+                .values(&self)
+                .on_conflict(config::name)
+                .do_update()
+                .set(config::value.eq(&self.value))
+                .get_result(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+}

@@ -1,5 +1,5 @@
 use crate::db::schema::{
-    roles, signup_roles, signups, tier_mappings, tiers, training_roles, trainings, users,
+    roles, signup_roles, signups, tier_mappings, tiers, training_roles, trainings, users, config,
 };
 use diesel_derive_enum::DbEnum;
 use std::{fmt, str};
@@ -179,4 +179,11 @@ pub struct TierMapping {
 pub struct NewTierMapping {
     pub tier_id: i32,
     pub discord_role_id: i64,
+}
+
+#[derive(Queryable, Insertable)]
+#[table_name = "config"]
+pub struct Config {
+    pub name: String,
+    pub value: String,
 }

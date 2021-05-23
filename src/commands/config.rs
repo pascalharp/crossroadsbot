@@ -1,5 +1,9 @@
 use super::ADMIN_ROLE_CHECK;
-use crate::utils::*;
+use crate::{
+    utils::*,
+    data::*,
+    db,
+};
 use serenity::framework::standard::{
     macros::{command, group},
     Args, CommandResult,
@@ -28,17 +32,31 @@ pub async fn set_log_info(ctx: &Context, msg: &Message, mut args: Args) -> Comma
         Ok(c) => c,
     };
 
+    // save in memory
     {
         let write_lock = ctx
             .data
             .read()
             .await
-            .get::<super::LogginConfigData>()
+            .get::<LogConfigData>()
             .unwrap()
             .clone();
         write_lock.write().await.info = Some(channel_id);
     }
 
+    // save to db
+    let conf = db::Config {
+        name: String::from(INFO_LOG_NAME),
+        value: channel_id.to_string(),
+    };
+
+    match conf.save().await {
+        Ok(_) => (),
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
+    }
     msg.react(ctx, CHECK_EMOJI).await?;
     Ok(())
 }
@@ -59,15 +77,30 @@ pub async fn set_log_error(ctx: &Context, msg: &Message, mut args: Args) -> Comm
         Ok(c) => c,
     };
 
+    // set in memory
     {
         let write_lock = ctx
             .data
             .read()
             .await
-            .get::<super::LogginConfigData>()
+            .get::<LogConfigData>()
             .unwrap()
             .clone();
         write_lock.write().await.error = Some(channel_id);
+    }
+
+    // save to db
+    let conf = db::Config {
+        name: String::from(ERROR_LOG_NAME),
+        value: channel_id.to_string(),
+    };
+
+    match conf.save().await {
+        Ok(_) => (),
+        Err(e) => {
+            msg.reply(ctx, "Unexpected error").await?;
+            return Err(e.into());
+        }
     }
 
     msg.react(ctx, CHECK_EMOJI).await?;
