@@ -727,7 +727,7 @@ pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
 
             if roles.is_empty() {
                 log.push(String::from(format!(
-                    "No roles selected signup with id {}. Skipped",
+                    "No roles selected for signup with id {}. Skipped",
                     s.id
                 )));
                 continue;
