@@ -10,3 +10,4 @@ pub mod data;
 pub mod db;
 pub mod embeds;
 pub mod utils;
+pub mod signup_board;

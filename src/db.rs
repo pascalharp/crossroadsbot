@@ -121,6 +121,19 @@ impl Training {
         .unwrap()
     }
 
+    pub async fn load_active() -> QueryResult<Vec<Training>> {
+        let pool = POOL.clone();
+        task::spawn_blocking(move || {
+            trainings::table
+                .filter(trainings::state.eq(TrainingState::Open))
+                .or_filter(trainings::state.eq(TrainingState::Closed))
+                .or_filter(trainings::state.eq(TrainingState::Started))
+                .load::<Training>(&pool.get().unwrap())
+        })
+        .await
+        .unwrap()
+    }
+
     pub async fn amount_by_state(state: TrainingState) -> QueryResult<i64> {
         let pool = POOL.clone();
         task::spawn_blocking(move || {

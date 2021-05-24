@@ -1,6 +1,7 @@
 use dashmap::DashSet;
 use serenity::{model::prelude::*, prelude::*};
 use std::sync::Arc;
+use crate::signup_board::SignupBoard;
 
 pub struct ConfigValues {
     pub main_guild_id: GuildId,
@@ -30,4 +31,9 @@ impl TypeMapKey for ConfigValuesData {
 pub struct LogConfigData;
 impl TypeMapKey for LogConfigData {
     type Value = Arc<RwLock<LogConfig>>;
+}
+
+pub struct SignupBoardData;
+impl TypeMapKey for SignupBoardData {
+    type Value = Arc<RwLock<SignupBoard>>;
 }

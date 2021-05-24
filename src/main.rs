@@ -1,4 +1,4 @@
-use crossroadsbot::{commands, data::*, db, utils::DIZZY_EMOJI};
+use crossroadsbot::{commands, data::*, signup_board::*, db, utils::DIZZY_EMOJI};
 use dashmap::DashSet;
 use dotenv::dotenv;
 use serenity::{
@@ -31,6 +31,7 @@ impl EventHandler for Handler {
 
         let log_info = db::Config::load(String::from(INFO_LOG_NAME)).await.ok();
         let log_error = db::Config::load(String::from(INFO_LOG_NAME)).await.ok();
+        let signup_board_category = db::Config::load(String::from(SIGNUP_BOARD_NAME)).await.ok();
         let data_read = ctx.data.read().await;
         let mut log_write = data_read.get::<LogConfigData>().unwrap().write().await;
 
@@ -50,6 +51,17 @@ impl EventHandler for Handler {
                 match ChannelId::from_str(&error.value) {
                     Err(e) => error!("Failed to parse error channel id: {}", e),
                     Ok(id) => log_write.error = Some(id),
+                }
+            }
+        }
+
+        let mut board_write = data_read.get::<SignupBoardData>().unwrap().write().await;
+        match signup_board_category {
+            None => info!("Signup board category not found in db. Skipped"),
+            Some(category) => {
+                match ChannelId::from_str(&category.value) {
+                    Err(e) => error!("Failed to parse signup board channel id: {}", e),
+                    Ok(id) => board_write.set_category_channel(id),
                 }
             }
         }
@@ -231,6 +243,7 @@ async fn main() {
             info: None,
             error: None,
         })));
+        data.insert::<SignupBoardData>(Arc::new(RwLock::new(SignupBoard::new())));
     }
 
     let shard_manager = client.shard_manager.clone();
