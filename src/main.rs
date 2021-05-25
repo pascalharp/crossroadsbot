@@ -1,4 +1,4 @@
-use crossroadsbot::{commands, data::*, signup_board::*, db, utils::DIZZY_EMOJI};
+use crossroadsbot::{commands, data::*, db, signup_board::*, utils::DIZZY_EMOJI};
 use dashmap::DashSet;
 use dotenv::dotenv;
 use serenity::{
@@ -8,11 +8,7 @@ use serenity::{
     model::prelude::*,
     prelude::*,
 };
-use std::{
-    env,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{env, str::FromStr, sync::Arc};
 use tracing::{error, info};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
@@ -37,35 +33,34 @@ impl EventHandler for Handler {
 
         match log_info {
             None => info!("Log info not found in db. skipped"),
-            Some(info) => {
-                match ChannelId::from_str(&info.value) {
-                    Err(e) => error!("Failed to parse info channel id: {}", e),
-                    Ok(id) => log_write.info = Some(id),
-                }
-            }
+            Some(info) => match ChannelId::from_str(&info.value) {
+                Err(e) => error!("Failed to parse info channel id: {}", e),
+                Ok(id) => log_write.info = Some(id),
+            },
         }
 
         match log_error {
             None => info!("Log info not found in db. skipped"),
-            Some(error) => {
-                match ChannelId::from_str(&error.value) {
-                    Err(e) => error!("Failed to parse error channel id: {}", e),
-                    Ok(id) => log_write.error = Some(id),
-                }
-            }
+            Some(error) => match ChannelId::from_str(&error.value) {
+                Err(e) => error!("Failed to parse error channel id: {}", e),
+                Ok(id) => log_write.error = Some(id),
+            },
         }
 
         let mut board_write = data_read.get::<SignupBoardData>().unwrap().write().await;
         match signup_board_category {
             None => info!("Signup board category not found in db. Skipped"),
-            Some(category) => {
-                match ChannelId::from_str(&category.value) {
-                    Err(e) => error!("Failed to parse signup board channel id: {}", e),
-                    Ok(id) => board_write.set_category_channel(id),
+            Some(category) => match ChannelId::from_str(&category.value) {
+                Err(e) => error!("Failed to parse signup board channel id: {}", e),
+                Ok(id) => {
+                    board_write.set_category_channel(id);
+                    info!("Resetting signup board");
+                    if let Err(e) = board_write.reset(&ctx).await {
+                        error!("Failed to reset signup board {}", e);
+                    }
                 }
-            }
+            },
         }
-
     }
 
     async fn resume(&self, _: Context, _: ResumedEvent) {

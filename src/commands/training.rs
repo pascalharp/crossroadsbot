@@ -389,6 +389,20 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     };
 
     training.set_state(state).await?;
+
+    // inform the SignupBoard
+    let board_lock = {
+        let read_lock = ctx.data.read().await;
+        read_lock.get::<data::SignupBoardData>().unwrap().clone()
+    };
+    let res ={
+        let mut board = board_lock.write().await;
+        board.update(ctx, training_id).await
+    };
+
+    if let Err(_) = res {
+        msg.reply(ctx, "State changed but error updating signup board").await?;
+    }
     msg.react(ctx, CHECK_EMOJI).await?;
 
     Ok(())

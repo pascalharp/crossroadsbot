@@ -1,7 +1,10 @@
 use crate::{data, db, embeds};
 use chrono::prelude::*;
 use serenity::{model::prelude::*, prelude::*};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 use tracing::{error, info};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -11,7 +14,7 @@ pub static SIGNUP_BOARD_NAME: &str = "signup_board";
 pub struct SignupBoard {
     category: Option<ChannelId>,
     date_channels: HashMap<NaiveDate, GuildChannel>,
-    msg_trainings: HashMap<MessageId, db::Training>,
+    msg_trainings: HashMap<MessageId, Arc<db::Training>>,
 }
 
 impl SignupBoard {
@@ -27,10 +30,114 @@ impl SignupBoard {
         self.category = Some(id);
     }
 
+    async fn post_training(&self, ctx: &Context, chan: ChannelId, training: Arc<db::Training>) -> Result<Message> {
+        let tier_roles = match training.get_tier().await {
+                None => None,
+                Some(t) => match t {
+                    Ok(ok) => {
+                        let tier = Arc::new(ok);
+                        let roles = match tier.clone().get_discord_roles().await {
+                            Ok(ok) => Arc::new(ok),
+                            Err(e) => {
+                                error!("Failed to load discord roles for tier {}", e);
+                                return Err(e.into());
+                            }
+                        };
+                        Some((tier, roles))
+                    }
+                    Err(e) => {
+                        error!("Failed to load tier for training {}", e);
+                        return Err(e.into());
+                    }
+                },
+            };
+
+            let mut embed = embeds::training_base_embed(&training);
+            embeds::training_embed_add_tier(&mut embed, &tier_roles, true);
+
+            let msg = match chan
+                .send_message(ctx, |m| {
+                    m.allowed_mentions(|a| a.empty_parse());
+                    m.embed(|e| {
+                        e.0 = embed.0;
+                        e
+                    })
+                })
+                .await
+            {
+                Ok(ok) => ok,
+                Err(e) => {
+                    info!("Failed send message {}", e);
+                    return Err(e.into());
+                }
+            };
+
+            Ok(msg)
+    }
+
+    // Checks if a channel for the date already exists and returns it
+    // or creates a new channel with the date
+    async fn get_channel(&mut self, ctx: &Context, training: Arc<db::Training>) -> Result<ChannelId> {
+
+        let category = match self.category {
+            Some(ok) => ok,
+            None => {
+                info!("Guild category for signup board not set");
+                return Err("Guild category for signup board not set".into());
+            }
+        };
+
+        let guild_id = match ctx.data.read().await.get::<data::ConfigValuesData>() {
+            Some(conf) => conf.main_guild_id,
+            None => {
+                error!("Failed to load configuration for guild id");
+                return Err("Failed to load configuration for guild id".into());
+            }
+        };
+
+        let guild = match PartialGuild::get(ctx, guild_id).await {
+            Ok(g) => g,
+            Err(e) => {
+                error!("Failed to load main guild information: {}", e);
+                return Err(e.into());
+            }
+        };
+
+        let date = training.date.date();
+        // If channel not exists create it
+        if !self.date_channels.contains_key(&date) {
+            let channel = match guild
+                .create_channel(ctx, |c| {
+                    c.name(date.format("%a, %v"));
+                    c.category(category);
+                    c
+                })
+                .await
+            {
+                Ok(ok) => ok,
+                Err(e) => {
+                    error!("Failed to create channel: {}", e);
+                    return Err(e.into());
+                }
+            };
+
+            self.date_channels.insert(date, channel);
+        }
+
+        // Retrieve channel
+        let channel = match self.date_channels.get(&date) {
+            None => {
+                return Err(format!("Expected to find channel for date: {}", date).to_string().into());
+            }
+            Some(s) => s,
+        };
+        Ok(channel.id.clone())
+    }
+
     // Fully resets all channels by deleting and recreating them not assume that
     // the current information in the SignupBoard struct is correct
     pub async fn reset(&mut self, ctx: &Context) -> Result<()> {
-        let category = match &self.category {
+        let category = match self.category {
             Some(ok) => ok,
             None => {
                 info!("Guild category for signup board not set");
@@ -64,7 +171,7 @@ impl SignupBoard {
 
         // Delete all channels in the category
         for chan in all_channels.values() {
-            if chan.category_id.map_or(false, |id| id.eq(category)) {
+            if chan.category_id.map_or(false, |id| id.eq(&category)) {
                 if let Err(e) = chan.delete(ctx).await {
                     error!("Failed to delete channel: {}", e);
                 }
@@ -88,51 +195,10 @@ impl SignupBoard {
 
         // Create channels for the dates
         for t in trainings {
-            let date = t.date.date();
-            // If channel not exists create it
-            if !self.date_channels.contains_key(&date) {
-                let channel = match guild
-                    .create_channel(ctx, |c| {
-                        c.name(date.format("%a, %v"));
-                        c.category(category);
-                        c
-                    })
-                    .await
-                {
-                    Ok(ok) => ok,
-                    Err(e) => {
-                        error!("Failed to create channel: {}", e);
-                        return Err(e.into());
-                    }
-                };
-
-                self.date_channels.insert(date, channel);
-            }
-            // Send training msg to channel
-            let channel = match self.date_channels.get(&date) {
-                None => continue, // We just checked if we have this channel
-                Some(s) => s,
-            };
-
-            let embed = embeds::training_base_embed(&t);
-            let msg = match channel
-                .send_message(ctx, |m| {
-                    m.allowed_mentions(|a| a.empty_parse());
-                    m.embed(|e| {
-                        e.0 = embed.0;
-                        e
-                    })
-                })
-                .await
-            {
-                Ok(ok) => ok,
-                Err(e) => {
-                    info!("Failed send message {}", e);
-                    return Err(e.into());
-                }
-            };
-
-            self.msg_trainings.insert(msg.id, t);
+            let training = Arc::new(t);
+            let channel = self.get_channel(ctx, training.clone()).await?;
+            let msg = self.post_training(ctx, channel, training.clone()).await?;
+            self.msg_trainings.insert(msg.id, training);
         }
 
         Ok(())
@@ -140,11 +206,45 @@ impl SignupBoard {
 
     // Updates training information. Creates new channel if needed and deletes channels
     // with no trainings left.
-    pub async fn update(&self) -> Result<()> {
-        let category = match &self.category {
-            Some(ok) => ok,
-            None => return Ok(()),
+    pub async fn update(&mut self, ctx: &Context, id: i32) -> Result<()> {
+
+        // Get the latest version from the db
+        let new_training = match db::Training::by_id(id).await {
+            Ok(ok) => Arc::new(ok),
+            Err(e) => {
+                error!("Failed to load training: {}", e);
+                return Err(e.into());
+            }
         };
+
+        // Look for training in current signup board
+        let curr_training = self
+            .msg_trainings
+            .iter_mut()
+            .find_map(|(m, t)| t.id.eq(&id).then(|| (m, t.clone())));
+
+        match curr_training {
+            None => {
+                // Training not on the board yet. Consider adding
+                match new_training.state {
+                    db::TrainingState::Open
+                    | db::TrainingState::Closed
+                    | db::TrainingState::Started => {
+                        //add to training board
+                        let channel = self.get_channel(ctx, new_training.clone()).await?;
+                        let msg = self.post_training(ctx, channel, new_training.clone()).await?;
+                        self.msg_trainings.insert(msg.id, new_training);
+                    }
+                    _ => (), //Nothing to do
+                }
+                ();
+            }
+            Some((msg, old)) => {
+                // Training already on board. Update or remove
+                // TODO
+                ();
+            }
+        }
 
         // TODO
 

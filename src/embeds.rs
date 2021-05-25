@@ -3,9 +3,12 @@ use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Paris};
 use serenity::{
     builder::CreateEmbed,
-    model::{guild::Emoji, misc::Mention},
+    model::{guild::Emoji, id::RoleId, misc::Mention},
 };
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 // Embed helpers
 pub fn select_roles_embed(
@@ -68,4 +71,29 @@ pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
     e.field("**State**", &training.state, true);
     e.field("**Training Id**", &training.id, true);
     e
+}
+
+// adds the required tiers to the embed field. Should only be used in
+// guild channels since pinging wont work in DM's
+pub fn training_embed_add_tier(
+    e: &mut CreateEmbed,
+    t: &Option<(Arc<db::Tier>, Arc<Vec<db::TierMapping>>)>,
+    inline: bool,
+) {
+    match t {
+        None => {
+            e.field("Tier: none", "Open for everyone", inline);
+        }
+        Some((tier, roles)) => {
+            e.field(
+                format!("Tier: {}", tier.name),
+                roles
+                    .iter()
+                    .map(|r| Mention::from(RoleId::from(r.discord_role_id as u64)).to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                inline,
+            );
+        }
+    }
 }
