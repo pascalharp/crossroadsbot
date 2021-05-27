@@ -66,6 +66,56 @@ impl EventHandler for Handler {
     async fn resume(&self, _: Context, _: ResumedEvent) {
         info!("Resumed");
     }
+
+    async fn reaction_add(&self, ctx: Context, added_reaction: Reaction) {
+        let user = added_reaction.user(&ctx).await;
+        let user = match user {
+            Err(_) => return,
+            Ok(u) => {
+                if u.bot { return }
+                else { u }
+            },
+        };
+
+        // Keep locks only as long as needed
+        let board_lock = {
+            let data_read = ctx.data.read().await;
+            data_read.get::<SignupBoardData>().unwrap().clone()
+        };
+        let board_action = {
+            let board = board_lock.read().await;
+            board.on_reaction(&added_reaction)
+        };
+        drop(board_lock);
+
+        let ctx = Arc::new(ctx);
+        match board_action {
+            SignupBoardAction::Ignore => return,
+            SignupBoardAction::None => {
+                tokio::task::spawn(async move {
+                    added_reaction.delete(&*ctx.clone()).await.ok();
+                });
+            },
+            SignupBoardAction::JoinSignup(training) => {
+                tokio::task::spawn(async move {
+                    added_reaction.delete(&*ctx.clone()).await.ok();
+                });
+                // TODO call training join conversation
+            },
+            SignupBoardAction::EditSignup(training) => {
+                tokio::task::spawn(async move {
+                    added_reaction.delete(&*ctx.clone()).await.ok();
+                });
+                // TODO call training edit conversation
+            },
+            SignupBoardAction::RemoveSignup(training) => {
+                tokio::task::spawn(async move {
+                    added_reaction.delete(&*ctx.clone()).await.ok();
+                });
+                // TODO call training delete conversation
+            }
+        }
+    }
 }
 
 #[hook]

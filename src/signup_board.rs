@@ -1,4 +1,4 @@
-use crate::{data, db, embeds};
+use crate::{data, db, embeds, utils};
 use chrono::prelude::*;
 use serenity::{
     prelude::*,
@@ -19,6 +19,14 @@ pub struct SignupBoard {
     category: Option<ChannelId>,
     date_channels: HashMap<NaiveDate, GuildChannel>,
     msg_trainings: HashMap<MessageId, Arc<db::Training>>,
+}
+
+pub enum SignupBoardAction {
+    Ignore,                             // if not on a SignupBoard msg
+    None,                               // if invalid emoji
+    JoinSignup(Arc<db::Training>),      // join
+    EditSignup(Arc<db::Training>),      // edit
+    RemoveSignup(Arc<db::Training>)     // remove
 }
 
 impl SignupBoard {
@@ -63,7 +71,9 @@ impl SignupBoard {
 
         let mut embed = embeds::training_base_embed(&training);
         embeds::training_embed_add_tier(&mut embed, &tier_roles, true);
+        embeds::training_embed_add_board_footer(&mut embed);
 
+        // post message
         let msg = match chan
             .send_message(ctx, |m| {
                 m.allowed_mentions(|a| a.empty_parse());
@@ -80,6 +90,11 @@ impl SignupBoard {
                 return Err(e.into());
             }
         };
+
+        // add reactions
+        msg.react(ctx, utils::CHECK_EMOJI).await?;
+        msg.react(ctx, utils::MEMO_EMOJI).await?;
+        msg.react(ctx, utils::CROSS_EMOJI).await?;
 
         Ok(msg)
     }
@@ -114,6 +129,7 @@ impl SignupBoard {
 
         let mut embed = embeds::training_base_embed(&training);
         embeds::training_embed_add_tier(&mut embed, &tier_roles, true);
+        embeds::training_embed_add_board_footer(&mut embed);
 
         match chan.edit_message(ctx, msg, |m| {
                 m.embed(|e| {
@@ -366,5 +382,23 @@ impl SignupBoard {
             }
         }
         Ok(())
+    }
+
+    // We can not do the whole logic in here or we would block the RWMutex
+    // So only return what step to take
+    pub fn on_reaction(&self, added_reaction: &Reaction) -> SignupBoardAction {
+        let training = match self.msg_trainings.get(&added_reaction.message_id) {
+            Some(t) => t.clone(),
+            None => return SignupBoardAction::Ignore,
+        };
+        if added_reaction.emoji == ReactionType::from(utils::CHECK_EMOJI) {
+            return SignupBoardAction::JoinSignup(training);
+        } else if added_reaction.emoji == ReactionType::from(utils::MEMO_EMOJI) {
+            return SignupBoardAction::EditSignup(training);
+        } else if added_reaction.emoji == ReactionType::from(utils::CROSS_EMOJI) {
+            return SignupBoardAction::RemoveSignup(training);
+        } else {
+            return SignupBoardAction::None;
+        }
     }
 }
