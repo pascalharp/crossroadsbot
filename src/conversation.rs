@@ -1,12 +1,16 @@
-use crate::{data::*, utils::*};
+use crate::{data::GLOB_COMMAND_PREFIX, data::*, db, utils::*};
 use dashmap::DashSet;
 use serenity::{
     client::bridge::gateway::ShardMessenger,
     collector::{message_collector::*, reaction_collector::*},
+    futures::future,
     model::prelude::*,
     prelude::*,
 };
-use std::{error::Error, fmt, sync::Arc};
+use std::{collections::HashSet, error::Error, fmt, sync::Arc};
+
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+type ConvResult = std::result::Result<Conversation, ConversationError>;
 
 pub struct Conversation {
     lock: Arc<DashSet<UserId>>,
@@ -62,7 +66,7 @@ impl ConversationError {
 impl Error for ConversationError {}
 
 impl Conversation {
-    pub async fn start(ctx: &Context, user: &User) -> Result<Conversation, ConversationError> {
+    pub async fn start(ctx: &Context, user: &User) -> ConvResult {
         let lock = {
             let data_read = ctx.data.read().await;
             data_read.get::<ConversationLock>().unwrap().clone()
@@ -178,4 +182,185 @@ impl Drop for Conversation {
     fn drop(&mut self) {
         self.lock.remove(&self.user.id);
     }
+}
+
+pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Result<()> {
+    let mut conv = Conversation::start(ctx, user).await?;
+
+    let db_user = match db::User::get(*user.id.as_u64()).await {
+        Ok(u) => u,
+        Err(diesel::NotFound) => {
+            conv.msg
+                .edit(ctx, |m| {
+                    m.content("");
+                    m.embed(|e| {
+                        e.description("Not yet registerd");
+                        e.field(
+                            "User not found. Use the register command first",
+                            "For more information type: __~help register__",
+                            false,
+                        )
+                    })
+                })
+                .await?;
+            return Ok(());
+        }
+        Err(e) => {
+            conv.msg.reply(ctx, "Unexpected error, Sorry =(").await?;
+            return Err(e.into());
+        }
+    };
+
+    // Get training with id
+    let training = match db::Training::by_id_and_state(training_id, db::TrainingState::Open).await {
+        Ok(t) => Arc::new(t),
+        Err(diesel::NotFound) => {
+            conv.msg
+                .edit(ctx, |m| {
+                    m.content(format!("No open training found with id {}", training_id))
+                })
+                .await?;
+            return Ok(());
+        }
+        Err(e) => {
+            conv.msg.reply(ctx, "Unexpected error, Sorry =(").await?;
+            return Err(e.into());
+        }
+    };
+
+    // verify if tier requirements pass
+    match verify_tier(ctx, &training, &conv.user).await {
+        Ok((pass, tier)) => {
+            if !pass {
+                conv.msg
+                    .edit(ctx, |m| {
+                        m.content("");
+                        m.embed(|e| {
+                            e.description("Tier requirement not fulfilled");
+                            e.field("Missing tier:", tier, false)
+                        })
+                    })
+                    .await?;
+                return Ok(());
+            }
+        }
+        Err(e) => {
+            conv.msg.reply(ctx, "Unexpected error, Sorry =(").await?;
+            return Err(e.into());
+        }
+    };
+
+    // Check if signup already exist
+    match db::Signup::by_user_and_training(&db_user, &training).await {
+        Ok(_) => {
+            conv.msg
+                .edit(ctx, |m| {
+                    m.content("");
+                    m.embed(|e| {
+                        e.description("Already signed up for this training");
+                        e.field(
+                            "You can edit your signup with:",
+                            format!("{}edit {}", GLOB_COMMAND_PREFIX, training.id),
+                            false,
+                        )
+                    })
+                })
+                .await?;
+            return Ok(());
+        }
+        Err(diesel::NotFound) => (), // This is what we want
+        Err(e) => {
+            conv.msg.reply(ctx, "Unexpected error, Sorry =(").await?;
+            return Err(e.into());
+        }
+    };
+
+    let new_signup = db::NewSignup {
+        training_id: training.id,
+        user_id: db_user.id,
+    };
+
+    // register new signup
+    let signup = match new_signup.add().await {
+        Ok(s) => s,
+        Err(e) => {
+            conv.msg.reply(ctx, "Unexpected error, Sorry =(").await?;
+            return Err(e.into());
+        }
+    };
+
+    conv.msg
+        .edit(ctx, |m| {
+            m.content(format!(
+                "You signed up for **{}**. Please select your roles:",
+                training.title
+            ))
+        })
+        .await?;
+
+    // training role mapping
+    let training_roles = training.clone().get_training_roles().await?;
+    // The actual roles. ignoring deactivated ones (or db load errors in general)
+    let roles: Vec<db::Role> = future::join_all(training_roles.iter().map(|tr| tr.role()))
+        .await
+        .into_iter()
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Create sets for selected and unselected
+    let selected: HashSet<&db::Role> = HashSet::with_capacity(roles.len());
+    let mut unselected: HashSet<&db::Role> = HashSet::with_capacity(roles.len());
+    for r in &roles {
+        unselected.insert(r);
+    }
+
+    let selected = match select_roles(ctx, &mut conv, selected, unselected).await {
+        Ok((selected, _)) => selected,
+        Err(e) => {
+            if let Some(e) = e.downcast_ref::<ConversationError>() {
+                match e {
+                    ConversationError::TimedOut => {
+                        conv.timeout_msg(ctx).await?;
+                        return Ok(());
+                    }
+                    ConversationError::Canceled => {
+                        conv.canceled_msg(ctx).await?;
+                        return Ok(());
+                    }
+                    _ => (),
+                }
+            }
+            return Err(e.into());
+        }
+    };
+
+    // Save roles
+    conv.msg.edit(ctx, |m| m.content("Saving roles...")).await?;
+    let futs = selected.iter().map(|r| {
+        let new_signup_role = db::NewSignupRole {
+            role_id: r.id,
+            signup_id: signup.id,
+        };
+        new_signup_role.add()
+    });
+    match future::try_join_all(futs).await {
+        Ok(r) => {
+            conv.msg
+                .edit(ctx, |m| {
+                    m.content("");
+                    m.embed(|e| {
+                        e.description("Successfully signed up");
+                        e.field(training.title.clone(), format!("Training id: {}", training.id), true);
+                        e.field("Roles", format!("{} role(s) added to your sign up", r.len()), true);
+                        e
+                    })
+                })
+                .await?;
+        }
+        Err(e) => {
+            conv.msg.reply(ctx, "Unexpected error, Sorry =(").await?;
+            return Err(e.into());
+        }
+    }
+    Ok(())
 }

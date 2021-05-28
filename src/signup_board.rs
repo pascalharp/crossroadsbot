@@ -8,6 +8,7 @@ use serenity::{
 use std::{
     collections::{HashMap},
     sync::Arc,
+    fmt,
 };
 use tracing::{error, info};
 
@@ -27,6 +28,26 @@ pub enum SignupBoardAction {
     JoinSignup(Arc<db::Training>),      // join
     EditSignup(Arc<db::Training>),      // edit
     RemoveSignup(Arc<db::Training>)     // remove
+}
+
+impl fmt::Display for SignupBoardAction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SignupBoardAction::Ignore => {
+                write!(f, "Ignored")
+            }
+            SignupBoardAction::None => write!(f, "None"),
+            SignupBoardAction::JoinSignup(t) => {
+                write!(f, "Join ({})", t.id)
+            }
+            SignupBoardAction::EditSignup(t) => {
+                write!(f, "Edit ({})", t.id)
+            }
+            SignupBoardAction::RemoveSignup(t) => {
+                write!(f, "Remove ({})", t.id)
+            }
+        }
+    }
 }
 
 impl SignupBoard {
@@ -71,7 +92,7 @@ impl SignupBoard {
 
         let mut embed = embeds::training_base_embed(&training);
         embeds::training_embed_add_tier(&mut embed, &tier_roles, true);
-        embeds::training_embed_add_board_footer(&mut embed);
+        embeds::training_embed_add_board_footer(&mut embed, &training.state);
 
         // post message
         let msg = match chan
@@ -92,9 +113,11 @@ impl SignupBoard {
         };
 
         // add reactions
-        msg.react(ctx, utils::CHECK_EMOJI).await?;
-        msg.react(ctx, utils::MEMO_EMOJI).await?;
-        msg.react(ctx, utils::CROSS_EMOJI).await?;
+        if db::TrainingState::Open == training.state {
+            msg.react(ctx, utils::CHECK_EMOJI).await?;
+            msg.react(ctx, utils::MEMO_EMOJI).await?;
+            msg.react(ctx, utils::CROSS_EMOJI).await?;
+        }
 
         Ok(msg)
     }
@@ -129,9 +152,9 @@ impl SignupBoard {
 
         let mut embed = embeds::training_base_embed(&training);
         embeds::training_embed_add_tier(&mut embed, &tier_roles, true);
-        embeds::training_embed_add_board_footer(&mut embed);
+        embeds::training_embed_add_board_footer(&mut embed, &training.state);
 
-        match chan.edit_message(ctx, msg, |m| {
+        let msg = match chan.edit_message(ctx, msg, |m| {
                 m.embed(|e| {
                     e.0 = embed.0;
                     e
@@ -139,12 +162,21 @@ impl SignupBoard {
             })
             .await
         {
-            Ok(_) => Ok(()),
+            Ok(m) => m,
             Err(e) => {
                 info!("Failed send message {}", e);
-                Err(e.into())
+                return Err(e.into())
             }
+        };
+
+        chan.message(ctx, &msg).await?.delete_reactions(ctx).await?;
+        if db::TrainingState::Open == training.state {        // add reactions
+            msg.react(ctx, utils::CHECK_EMOJI).await?;
+            msg.react(ctx, utils::MEMO_EMOJI).await?;
+            msg.react(ctx, utils::CROSS_EMOJI).await?;
         }
+
+        Ok(())
     }
 
     async fn remove_training(

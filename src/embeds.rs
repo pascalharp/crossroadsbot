@@ -98,13 +98,22 @@ pub fn training_embed_add_tier(
     }
 }
 
-pub fn training_embed_add_board_footer(e: &mut CreateEmbed) {
-    e.footer( |f| {
-        f.text(format!(
-            "{}\n{}\n{}",
-            format!("{} to signup", CHECK_EMOJI),
-            format!("{} to edit your signup", MEMO_EMOJI),
-            format!("{} to remove your signup", CROSS_EMOJI)
-        ))
-    });
+pub fn training_embed_add_board_footer(e: &mut CreateEmbed, ts: &db::TrainingState) {
+    match ts {
+        db::TrainingState::Open => {
+            e.footer( |f| {
+                f.text(format!(
+                    "{}\n{}\n{}",
+                    format!("{} to signup", CHECK_EMOJI),
+                    format!("{} to edit your signup", MEMO_EMOJI),
+                    format!("{} to remove your signup", CROSS_EMOJI)
+                ))
+            });
+        }
+        _ => {
+            e.footer( |f| {
+                f.text("Not open for signup")
+            });
+        }
+    }
 }
