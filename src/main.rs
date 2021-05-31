@@ -1,4 +1,4 @@
-use crossroadsbot::{commands, data::*, db, signup_board::*, utils::DIZZY_EMOJI, conversation};
+use crossroadsbot::{commands, conversation, data::*, db, signup_board::*, utils::DIZZY_EMOJI};
 use dashmap::DashSet;
 use dotenv::dotenv;
 use serenity::{
@@ -72,9 +72,12 @@ impl EventHandler for Handler {
         let user = match user {
             Err(_) => return,
             Ok(u) => {
-                if u.bot { return }
-                else { u }
-            },
+                if u.bot {
+                    return;
+                } else {
+                    u
+                }
+            }
         };
 
         // Keep locks only as long as needed
@@ -97,21 +100,21 @@ impl EventHandler for Handler {
                 tokio::task::spawn(async move {
                     added_reaction.delete(&*rm_ctx.clone()).await.ok();
                 });
-                return // Nothing to log. just a random emoji
-            },
+                return; // Nothing to log. just a random emoji
+            }
             SignupBoardAction::JoinSignup(training) => {
                 tokio::task::spawn(async move {
                     added_reaction.delete(&*rm_ctx.clone()).await.ok();
                 });
                 conversation::join_training(&*ctx, &user, training.id).await
-            },
+            }
             SignupBoardAction::EditSignup(training) => {
                 tokio::task::spawn(async move {
                     added_reaction.delete(&*rm_ctx.clone()).await.ok();
                 });
                 // TODO call training edit conversation
                 Ok(())
-            },
+            }
             SignupBoardAction::RemoveSignup(training) => {
                 tokio::task::spawn(async move {
                     added_reaction.delete(&*rm_ctx.clone()).await.ok();
@@ -121,62 +124,62 @@ impl EventHandler for Handler {
             }
         };
         match result {
-        Ok(()) => {
-            info!("Signup Board interaction: {}", board_action);
-            let log_info = {
-                ctx.data
-                    .read()
-                    .await
-                    .get::<LogConfigData>()
-                    .unwrap()
-                    .clone()
-                    .read()
-                    .await
-                    .info
-            };
-            if let Some(chan) = log_info {
-                chan.send_message(ctx, |m| {
-                    m.allowed_mentions(|m| m.empty_parse());
-                    m.embed(|e| {
-                        e.description("[INFO] Signup Board");
-                        e.field("User", Mention::from(&user), true);
-                        e.field("Interaction", board_action, true);
-                        e
+            Ok(()) => {
+                info!("Signup Board interaction: {}", board_action);
+                let log_info = {
+                    ctx.data
+                        .read()
+                        .await
+                        .get::<LogConfigData>()
+                        .unwrap()
+                        .clone()
+                        .read()
+                        .await
+                        .info
+                };
+                if let Some(chan) = log_info {
+                    chan.send_message(ctx, |m| {
+                        m.allowed_mentions(|m| m.empty_parse());
+                        m.embed(|e| {
+                            e.description("[INFO] Signup Board");
+                            e.field("User", Mention::from(&user), true);
+                            e.field("Interaction", board_action, true);
+                            e
+                        })
                     })
-                })
-                .await
-                .ok();
+                    .await
+                    .ok();
+                }
+            }
+            Err(why) => {
+                error!("Signup Board interaction: {}\nErr: {}", board_action, why);
+                let err_info = {
+                    ctx.data
+                        .read()
+                        .await
+                        .get::<LogConfigData>()
+                        .unwrap()
+                        .clone()
+                        .read()
+                        .await
+                        .error
+                };
+                if let Some(chan) = err_info {
+                    chan.send_message(ctx, |m| {
+                        m.allowed_mentions(|m| m.empty_parse());
+                        m.embed(|e| {
+                            e.description("[ERROR] Command failed");
+                            e.field("User", Mention::from(&user), true);
+                            e.field("Interaction", board_action, true);
+                            e.field("Error", why, false);
+                            e
+                        })
+                    })
+                    .await
+                    .ok();
+                }
             }
         }
-        Err(why) => {
-            error!("Signup Board interaction: {}\nErr: {}", board_action, why);
-            let err_info = {
-                ctx.data
-                    .read()
-                    .await
-                    .get::<LogConfigData>()
-                    .unwrap()
-                    .clone()
-                    .read()
-                    .await
-                    .error
-            };
-            if let Some(chan) = err_info {
-                chan.send_message(ctx, |m| {
-                    m.allowed_mentions(|m| m.empty_parse());
-                    m.embed(|e| {
-                        e.description("[ERROR] Command failed");
-                        e.field("User", Mention::from(&user), true);
-                        e.field("Interaction", board_action, true);
-                        e.field("Error", why, false);
-                        e
-                    })
-                })
-                .await
-                .ok();
-            }
-        }
-    }
     }
 }
 

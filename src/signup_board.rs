@@ -1,15 +1,7 @@
 use crate::{data, db, embeds, utils};
 use chrono::prelude::*;
-use serenity::{
-    prelude::*,
-    model::prelude::*,
-    futures::StreamExt,
-};
-use std::{
-    collections::{HashMap},
-    sync::Arc,
-    fmt,
-};
+use serenity::{futures::StreamExt, model::prelude::*, prelude::*};
+use std::{collections::HashMap, fmt, sync::Arc};
 use tracing::{error, info};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -23,11 +15,11 @@ pub struct SignupBoard {
 }
 
 pub enum SignupBoardAction {
-    Ignore,                             // if not on a SignupBoard msg
-    None,                               // if invalid emoji
-    JoinSignup(Arc<db::Training>),      // join
-    EditSignup(Arc<db::Training>),      // edit
-    RemoveSignup(Arc<db::Training>)     // remove
+    Ignore,                          // if not on a SignupBoard msg
+    None,                            // if invalid emoji
+    JoinSignup(Arc<db::Training>),   // join
+    EditSignup(Arc<db::Training>),   // edit
+    RemoveSignup(Arc<db::Training>), // remove
 }
 
 impl fmt::Display for SignupBoardAction {
@@ -154,7 +146,8 @@ impl SignupBoard {
         embeds::training_embed_add_tier(&mut embed, &tier_roles, true);
         embeds::training_embed_add_board_footer(&mut embed, &training.state);
 
-        let msg = match chan.edit_message(ctx, msg, |m| {
+        let msg = match chan
+            .edit_message(ctx, msg, |m| {
                 m.embed(|e| {
                     e.0 = embed.0;
                     e
@@ -165,12 +158,13 @@ impl SignupBoard {
             Ok(m) => m,
             Err(e) => {
                 info!("Failed send message {}", e);
-                return Err(e.into())
+                return Err(e.into());
             }
         };
 
         chan.message(ctx, &msg).await?.delete_reactions(ctx).await?;
-        if db::TrainingState::Open == training.state {        // add reactions
+        if db::TrainingState::Open == training.state {
+            // add reactions
             msg.react(ctx, utils::CHECK_EMOJI).await?;
             msg.react(ctx, utils::MEMO_EMOJI).await?;
             msg.react(ctx, utils::CROSS_EMOJI).await?;
@@ -199,14 +193,14 @@ impl SignupBoard {
                         found = true;
                         break;
                     }
-                },
+                }
                 Err(e) => return Err(e.into()),
             }
         }
 
         // if to remove. find HashMap Entry
         if !found {
-            let key = self.date_channels.iter().find_map( |(k,v)| {
+            let key = self.date_channels.iter().find_map(|(k, v)| {
                 if v.id == chan {
                     Some(k.clone())
                 } else {
@@ -222,8 +216,6 @@ impl SignupBoard {
 
         Ok(())
     }
-
-
 
     // Checks if a channel for the date already exists and returns it
     // or creates a new channel with the date
@@ -403,7 +395,8 @@ impl SignupBoard {
                     | db::TrainingState::Started => {
                         // update training
                         let channel = self.get_channel(ctx, new_training.clone()).await?;
-                        self.update_training(ctx, channel, msg, new_training.clone()).await?;
+                        self.update_training(ctx, channel, msg, new_training.clone())
+                            .await?;
                     }
                     _ => {
                         // remove training

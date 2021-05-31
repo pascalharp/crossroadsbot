@@ -116,7 +116,11 @@ pub async fn role_emojis(ctx: &Context, roles: Vec<db::Role>) -> Result<RoleEmoj
 }
 
 /// Verifies if the discord user has the required tier for a training
-pub async fn verify_tier(ctx: &Context, training: &db::Training, user: &User) -> Result<(bool, String)> {
+pub async fn verify_tier(
+    ctx: &Context,
+    training: &db::Training,
+    user: &User,
+) -> Result<(bool, String)> {
     let tier = training.get_tier().await;
     let tier = match tier {
         None => return Ok((true, "none".to_string())),

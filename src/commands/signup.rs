@@ -13,10 +13,7 @@ use serenity::{
     },
     futures::future,
 };
-use std::{
-    collections::HashSet,
-    sync::Arc,
-};
+use std::{collections::HashSet, sync::Arc};
 use tracing::info;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -79,7 +76,6 @@ pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
 #[min_args(0)]
 #[num_args(1)]
 pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-
     let training_id = match args.single_quoted::<i32>() {
         Ok(i) => i,
         Err(_) => {

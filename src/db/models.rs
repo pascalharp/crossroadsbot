@@ -1,5 +1,5 @@
 use crate::db::schema::{
-    roles, signup_roles, signups, tier_mappings, tiers, training_roles, trainings, users, config,
+    config, roles, signup_roles, signups, tier_mappings, tiers, training_roles, trainings, users,
 };
 use diesel_derive_enum::DbEnum;
 use std::{fmt, str};

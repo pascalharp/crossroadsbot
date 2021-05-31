@@ -1,7 +1,7 @@
+use crate::signup_board::SignupBoard;
 use dashmap::DashSet;
 use serenity::{model::prelude::*, prelude::*};
 use std::sync::Arc;
-use crate::signup_board::SignupBoard;
 
 pub static GLOB_COMMAND_PREFIX: &str = "~";
 

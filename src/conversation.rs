@@ -350,8 +350,16 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
                     m.content("");
                     m.embed(|e| {
                         e.description("Successfully signed up");
-                        e.field(training.title.clone(), format!("Training id: {}", training.id), true);
-                        e.field("Roles", format!("{} role(s) added to your sign up", r.len()), true);
+                        e.field(
+                            training.title.clone(),
+                            format!("Training id: {}", training.id),
+                            true,
+                        );
+                        e.field(
+                            "Roles",
+                            format!("{} role(s) added to your sign up", r.len()),
+                            true,
+                        );
                         e
                     })
                 })

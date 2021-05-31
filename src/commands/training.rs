@@ -395,13 +395,14 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         let read_lock = ctx.data.read().await;
         read_lock.get::<data::SignupBoardData>().unwrap().clone()
     };
-    let res ={
+    let res = {
         let mut board = board_lock.write().await;
         board.update(ctx, training_id).await
     };
 
     if let Err(_) = res {
-        msg.reply(ctx, "State changed but error updating signup board").await?;
+        msg.reply(ctx, "State changed but error updating signup board")
+            .await?;
     }
     msg.react(ctx, CHECK_EMOJI).await?;
 
@@ -686,17 +687,16 @@ pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
 
     for id in args.iter::<i32>() {
         match id {
-            Ok(id) => {
-                match db::Training::by_id(id).await {
-                    Ok(t) => trainings.push(Arc::new(t)),
-                    Err(diesel::NotFound) => {
-                        msg.reply(ctx, format!("Training with id {} not found", id)).await?;
-                        return Ok(());
-                    }
-                    Err(e) => {
-                        msg.reply(ctx, "Unexpected error loading training").await?;
-                        return Err(e.into());
-                    }
+            Ok(id) => match db::Training::by_id(id).await {
+                Ok(t) => trainings.push(Arc::new(t)),
+                Err(diesel::NotFound) => {
+                    msg.reply(ctx, format!("Training with id {} not found", id))
+                        .await?;
+                    return Ok(());
+                }
+                Err(e) => {
+                    msg.reply(ctx, "Unexpected error loading training").await?;
+                    return Err(e.into());
                 }
             },
             Err(_) => {
