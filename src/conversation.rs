@@ -116,6 +116,12 @@ impl Conversation {
             .await
     }
 
+    pub async fn unexpected_error(self, ctx: &Context) -> serenity::Result<Message> {
+        self.msg
+            .reply(&ctx.http, "Unexpected error, Sorry =(")
+            .await
+    }
+
     pub async fn finish_with_msg(
         self,
         ctx: &Context,
@@ -197,7 +203,10 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
                         e.description("Not yet registerd");
                         e.field(
                             "User not found. Use the register command first",
-                            "For more information type: __~help register__",
+                            format!(
+                                "For more information type: __{}help register__",
+                                GLOB_COMMAND_PREFIX
+                            ),
                             false,
                         )
                     })
@@ -206,7 +215,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
             return Ok(());
         }
         Err(e) => {
-            conv.msg.reply(ctx, "Unexpected error, Sorry =(").await?;
+            conv.unexpected_error(ctx).await?;
             return Err(e.into());
         }
     };
@@ -223,7 +232,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
             return Ok(());
         }
         Err(e) => {
-            conv.msg.reply(ctx, "Unexpected error, Sorry =(").await?;
+            conv.unexpected_error(ctx).await?;
             return Err(e.into());
         }
     };
@@ -245,7 +254,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
             }
         }
         Err(e) => {
-            conv.msg.reply(ctx, "Unexpected error, Sorry =(").await?;
+            conv.unexpected_error(ctx).await?;
             return Err(e.into());
         }
     };
@@ -270,7 +279,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
         }
         Err(diesel::NotFound) => (), // This is what we want
         Err(e) => {
-            conv.msg.reply(ctx, "Unexpected error, Sorry =(").await?;
+            conv.unexpected_error(ctx).await?;
             return Err(e.into());
         }
     };
@@ -284,7 +293,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
     let signup = match new_signup.add().await {
         Ok(s) => s,
         Err(e) => {
-            conv.msg.reply(ctx, "Unexpected error, Sorry =(").await?;
+            conv.unexpected_error(ctx).await?;
             return Err(e.into());
         }
     };
@@ -330,6 +339,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
                     _ => (),
                 }
             }
+            conv.unexpected_error(ctx).await?;
             return Err(e.into());
         }
     };
@@ -366,9 +376,155 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
                 .await?;
         }
         Err(e) => {
-            conv.msg.reply(ctx, "Unexpected error, Sorry =(").await?;
+            conv.unexpected_error(ctx).await?;
             return Err(e.into());
         }
     }
     Ok(())
+}
+
+pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result<()> {
+    let mut conv = Conversation::start(ctx, user).await?;
+
+    let db_user = match db::User::get(*user.id.as_u64()).await {
+        Ok(u) => u,
+        Err(diesel::NotFound) => {
+            conv.msg
+                .edit(ctx, |m| {
+                    m.content("");
+                    m.embed(|e| {
+                        e.description("Not yet registerd");
+                        e.field(
+                            "User not found. Use the register command first",
+                            format!(
+                                "For more information type: __{}help register__",
+                                GLOB_COMMAND_PREFIX
+                            ),
+                            false,
+                        )
+                    })
+                })
+                .await?;
+            return Ok(());
+        }
+        Err(e) => {
+            conv.unexpected_error(ctx).await?;
+            return Err(e.into());
+        }
+    };
+
+    let training = match db::Training::by_id_and_state(training_id, db::TrainingState::Open).await {
+        Ok(t) => Arc::new(t),
+        Err(diesel::NotFound) => {
+            conv.msg
+                .reply(
+                    ctx,
+                    format!("No open training with id {} found", training_id),
+                )
+                .await?;
+            return Ok(());
+        }
+        Err(e) => {
+            conv.unexpected_error(ctx).await?;
+            return Err(e.into());
+        }
+    };
+
+    let signup = match db::Signup::by_user_and_training(&db_user, &training.clone()).await {
+        Ok(s) => Arc::new(s),
+        Err(diesel::NotFound) => {
+            conv.msg.reply(ctx, "No sign up found").await?;
+            return Ok(());
+        }
+        Err(e) => {
+            conv.unexpected_error(ctx).await?;
+            return Err(e.into());
+        }
+    };
+
+    let training_roles = training.clone().get_training_roles().await?;
+    let roles = future::try_join_all(training_roles.iter().map(|r| r.role())).await?;
+
+    let mut selected: HashSet<&db::Role> = HashSet::new();
+    let mut unselected: HashSet<&db::Role> = HashSet::new();
+
+    match signup.clone().get_roles().await {
+        Ok(v) => {
+            // this seems rather inefficient. Consider rework
+            let set = v.into_iter().map(|(_, r)| r).collect::<HashSet<_>>();
+            for r in &roles {
+                if set.contains(r) {
+                    selected.insert(r);
+                } else {
+                    unselected.insert(r);
+                }
+            }
+        }
+        Err(e) => {
+            conv.unexpected_error(ctx).await?;
+            return Err(e.into());
+        }
+    };
+
+    let selected = match select_roles(ctx, &mut conv, selected, unselected).await {
+        Ok((selected, _)) => selected,
+        Err(e) => {
+            if let Some(e) = e.downcast_ref::<ConversationError>() {
+                match e {
+                    ConversationError::TimedOut => {
+                        conv.timeout_msg(ctx).await?;
+                        return Ok(());
+                    }
+                    ConversationError::Canceled => {
+                        conv.canceled_msg(ctx).await?;
+                        return Ok(());
+                    }
+                    _ => (),
+                }
+            }
+            conv.unexpected_error(ctx).await?;
+            return Err(e.into());
+        }
+    };
+
+    if let Err(e) = signup.clone().clear_roles().await {
+        conv.unexpected_error(ctx).await?;
+        return Err(e.into());
+    }
+
+    match future::try_join_all(selected.iter().map(|r| {
+        let new_signup_role = db::NewSignupRole {
+            role_id: r.id,
+            signup_id: signup.id,
+        };
+        new_signup_role.add()
+    }))
+    .await
+    {
+        Ok(_) => {
+            conv.msg
+                .edit(ctx, |m| {
+                    m.content("");
+                    m.embed(|e| {
+                        e.description(format!("{}", CHECK_EMOJI));
+                        e.field("Changed roles for training:", &training.title, false);
+                        e.field(
+                            "New roles:",
+                            selected
+                                .iter()
+                                .map(|r| r.repr.clone())
+                                .collect::<Vec<_>>()
+                                .join(", "),
+                            false,
+                        )
+                    })
+                })
+                .await?;
+            return Ok(());
+        }
+        Err(e) => {
+            conv.unexpected_error(ctx).await?;
+            return Err(e.into());
+        }
+    }
 }

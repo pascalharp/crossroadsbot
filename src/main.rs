@@ -112,8 +112,7 @@ impl EventHandler for Handler {
                 tokio::task::spawn(async move {
                     added_reaction.delete(&*rm_ctx.clone()).await.ok();
                 });
-                // TODO call training edit conversation
-                Ok(())
+                conversation::edit_signup(&*ctx, &user, training.id).await
             }
             SignupBoardAction::RemoveSignup(training) => {
                 tokio::task::spawn(async move {
