@@ -226,7 +226,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
         Err(diesel::NotFound) => {
             conv.msg
                 .edit(ctx, |m| {
-                    m.content(format!("No open training found with id {}", training_id))
+                    m.content(format!("No **open** training found with id {}", training_id))
                 })
                 .await?;
             return Ok(());
@@ -269,7 +269,12 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
                         e.description("Already signed up for this training");
                         e.field(
                             "You can edit your signup with:",
-                            format!("{}edit {}", GLOB_COMMAND_PREFIX, training.id),
+                            format!("`{}edit {}`", GLOB_COMMAND_PREFIX, training.id),
+                            false,
+                        );
+                        e.field(
+                            "You can remove your signup with:",
+                            format!("`{}leave {}`", GLOB_COMMAND_PREFIX, training.id),
                             false,
                         )
                     })
@@ -419,7 +424,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result
             conv.msg
                 .reply(
                     ctx,
-                    format!("No open training with id {} found", training_id),
+                    format!("No **open** training with id {} found", training_id),
                 )
                 .await?;
             return Ok(());
@@ -527,4 +532,98 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result
             return Err(e.into());
         }
     }
+}
+
+pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> Result<()> {
+    let mut conv = Conversation::start(ctx, user).await?;
+
+    let db_user = match db::User::get(*user.id.as_u64()).await {
+        Ok(u) => u,
+        Err(diesel::NotFound) => {
+            conv.msg
+                .edit(ctx, |m| {
+                    m.content("");
+                    m.embed(|e| {
+                        e.description("Not yet registerd");
+                        e.field(
+                            "User not found. Use the register command first",
+                            format!(
+                                "For more information type: __{}help register__",
+                                GLOB_COMMAND_PREFIX
+                            ),
+                            false,
+                        )
+                    })
+                })
+                .await?;
+            return Ok(());
+        }
+        Err(e) => {
+            conv.unexpected_error(ctx).await?;
+            return Err(e.into());
+        }
+    };
+
+    let training = match db::Training::by_id_and_state(training_id, db::TrainingState::Open).await {
+        Ok(t) => Arc::new(t),
+        Err(diesel::NotFound) => {
+            conv.msg
+                .reply(
+                    ctx,
+                    format!("No **open** training with id {} found", training_id),
+                )
+                .await?;
+            return Ok(());
+        }
+        Err(e) => {
+            conv.unexpected_error(ctx).await?;
+            return Err(e.into());
+        }
+    };
+
+    let signup = match db::Signup::by_user_and_training(&db_user, &training.clone()).await {
+        Ok(s) => s,
+        Err(diesel::NotFound) => {
+            conv.msg.edit(ctx, |m| {
+                m.content("");
+                m.embed(|e| {
+                    e.description(format!("{} No signup found", CROSS_EMOJI));
+                    e.field("You are not signed up for training:", &training.title, false);
+                    e.field(
+                        "If you want to join this training use:",
+                        format!("`{}join {}`", GLOB_COMMAND_PREFIX, training.id),
+                        false
+                    )
+
+                })
+            }).await?;
+            return Ok(());
+        }
+        Err(e) => {
+            conv.unexpected_error(ctx).await?;
+            return Err(e.into());
+        }
+    };
+
+    match signup.remove().await {
+        Ok(1) => (),
+        Ok(a) => {
+            conv.unexpected_error(ctx).await?;
+            return Err(format!("Unexpected amount of signups removed. Amount: {}", a).into());
+        }
+        Err(e) => {
+            conv.unexpected_error(ctx).await?;
+            return Err(e.into());
+        }
+    }
+
+    conv.msg.edit(ctx, |m| {
+        m.content("");
+        m.embed(|e| {
+            e.description(format!("{} Signup removed", CHECK_EMOJI));
+            e.field("Signup removed for training:", &training.title, false)
+        })
+    }).await?;
+
+    Ok(())
 }

@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tracing::info;
 
 #[group]
-#[commands(register, join, list, leave, edit)]
+#[commands(register, join, leave, edit, list)]
 struct Signup;
 
 #[command]
@@ -87,6 +87,58 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 }
 
 #[command]
+#[description = "Leave a training you have already signed up up for. Only possible if the training is still open for sign ups"]
+#[example = "103"]
+#[usage = "training_id"]
+#[num_args(1)]
+pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let training_id = match args.single_quoted::<i32>() {
+        Ok(i) => i,
+        Err(_) => {
+            msg.reply(ctx, "Failed to parse trainings id").await?;
+            return Ok(());
+        }
+    };
+
+    match remove_signup(ctx, &msg.author, training_id).await {
+        Ok(()) => return Ok(()),
+        Err(e) => {
+            if let Some(e) = e.downcast_ref::<ConversationError>() {
+                msg.reply(ctx, e).await?;
+                return Ok(());
+            }
+            return Err(e.into());
+        }
+    }
+}
+
+#[command]
+#[description = "Edit your sign up"]
+#[example = "103"]
+#[usage = "training_id"]
+#[num_args(1)]
+pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let training_id = match args.single_quoted::<i32>() {
+        Ok(i) => i,
+        Err(_) => {
+            msg.reply(ctx, "Failed to parse trainings id").await?;
+            return Ok(());
+        }
+    };
+
+    match edit_signup(ctx, &msg.author, training_id).await {
+        Ok(()) => return Ok(()),
+        Err(e) => {
+            if let Some(e) = e.downcast_ref::<ConversationError>() {
+                msg.reply(ctx, e).await?;
+                return Ok(());
+            }
+            return Err(e.into());
+        }
+    }
+}
+
+#[command]
 #[description = "Lists all active trainings you are currently signed up for"]
 #[example = ""]
 #[usage = ""]
@@ -143,99 +195,4 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
             .await?;
     }
     Ok(())
-}
-
-#[command]
-#[description = "Leave a training you have already signed up up for. Only possible if the training is still open for sign ups"]
-#[example = "103"]
-#[usage = "training_id"]
-#[num_args(1)]
-pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let discord_user = &msg.author;
-    let user = match db::User::get(*discord_user.id.as_u64()).await {
-        Ok(u) => u,
-        Err(diesel::NotFound) => {
-            msg.reply(ctx, "User not found. Please use the register command first")
-                .await?;
-            return Ok(());
-        }
-        Err(e) => {
-            msg.reply(ctx, "Unexpected error").await?;
-            return Err(e.into());
-        }
-    };
-
-    let training_id = match args.single_quoted::<i32>() {
-        Ok(i) => i,
-        Err(_) => {
-            msg.reply(ctx, "Failed to parse trainings id").await?;
-            return Ok(());
-        }
-    };
-
-    let training = match db::Training::by_id_and_state(training_id, db::TrainingState::Open).await {
-        Ok(t) => t,
-        Err(diesel::NotFound) => {
-            msg.reply(ctx, "No open training with that id found")
-                .await?;
-            return Ok(());
-        }
-        Err(e) => {
-            msg.reply(ctx, "Unexpected error").await?;
-            return Err(e.into());
-        }
-    };
-
-    let signup = match db::Signup::by_user_and_training(&user, &training).await {
-        Ok(s) => s,
-        Err(diesel::NotFound) => {
-            msg.reply(ctx, "No sign up found").await?;
-            return Ok(());
-        }
-        Err(e) => {
-            msg.reply(ctx, "Unexpected error").await?;
-            return Err(e.into());
-        }
-    };
-
-    match signup.remove().await {
-        Ok(1) => {
-            msg.react(ctx, CHECK_EMOJI).await?;
-            return Ok(());
-        }
-        Err(e) => {
-            msg.reply(ctx, "Unexpected error").await?;
-            return Err(e.into());
-        }
-        Ok(_) => {
-            msg.react(ctx, CHECK_EMOJI).await?;
-            return Err("Multiple entries deleted but expected only one".into());
-        }
-    }
-}
-
-#[command]
-#[description = "Edit your sign up"]
-#[example = "103"]
-#[usage = "training_id"]
-#[num_args(1)]
-pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let training_id = match args.single_quoted::<i32>() {
-        Ok(i) => i,
-        Err(_) => {
-            msg.reply(ctx, "Failed to parse trainings id").await?;
-            return Ok(());
-        }
-    };
-
-    match edit_signup(ctx, &msg.author, training_id).await {
-        Ok(()) => return Ok(()),
-        Err(e) => {
-            if let Some(e) = e.downcast_ref::<ConversationError>() {
-                msg.reply(ctx, e).await?;
-                return Ok(());
-            }
-            return Err(e.into());
-        }
-    }
 }

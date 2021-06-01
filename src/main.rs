@@ -26,7 +26,7 @@ impl EventHandler for Handler {
         info!("Refreshing config values");
 
         let log_info = db::Config::load(String::from(INFO_LOG_NAME)).await.ok();
-        let log_error = db::Config::load(String::from(INFO_LOG_NAME)).await.ok();
+        let log_error = db::Config::load(String::from(ERROR_LOG_NAME)).await.ok();
         let signup_board_category = db::Config::load(String::from(SIGNUP_BOARD_NAME)).await.ok();
         let data_read = ctx.data.read().await;
         let mut log_write = data_read.get::<LogConfigData>().unwrap().write().await;
@@ -118,8 +118,7 @@ impl EventHandler for Handler {
                 tokio::task::spawn(async move {
                     added_reaction.delete(&*rm_ctx.clone()).await.ok();
                 });
-                // TODO call training delete conversation
-                Ok(())
+                conversation::remove_signup(&*ctx, &user, training.id).await
             }
         };
         match result {
