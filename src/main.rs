@@ -1,4 +1,6 @@
-use crossroadsbot::{commands, conversation, data::*, db, signup_board::*, utils::DIZZY_EMOJI};
+use crossroadsbot::{
+    commands, conversation, data::*, db, log::*, signup_board::*, utils::DIZZY_EMOJI,
+};
 use dashmap::DashSet;
 use dotenv::dotenv;
 use serenity::{
@@ -120,63 +122,9 @@ impl EventHandler for Handler {
                 conversation::remove_signup(&*ctx, &user, training.id).await
             }
         };
-        match result {
-            Ok(ok) => {
-                info!("Signup Board interaction: {}", board_action);
-                let log_info = {
-                    ctx.data
-                        .read()
-                        .await
-                        .get::<LogConfigData>()
-                        .unwrap()
-                        .clone()
-                        .read()
-                        .await
-                        .info
-                };
-                if let Some(chan) = log_info {
-                    chan.send_message(ctx, |m| {
-                        m.allowed_mentions(|m| m.empty_parse());
-                        m.embed(|e| {
-                            e.description("[INFO] Signup Board");
-                            e.field("User", Mention::from(&user), true);
-                            e.field("Interaction", board_action, true);
-                            e.field("Result", ok, false)
-                        })
-                    })
-                    .await
-                    .ok();
-                }
-            }
-            Err(why) => {
-                error!("Signup Board interaction: {}\nErr: {}", board_action, why);
-                let err_info = {
-                    ctx.data
-                        .read()
-                        .await
-                        .get::<LogConfigData>()
-                        .unwrap()
-                        .clone()
-                        .read()
-                        .await
-                        .error
-                };
-                if let Some(chan) = err_info {
-                    chan.send_message(ctx, |m| {
-                        m.allowed_mentions(|m| m.empty_parse());
-                        m.embed(|e| {
-                            e.description("[ERROR] Command failed");
-                            e.field("User", Mention::from(&user), true);
-                            e.field("Interaction", board_action, true);
-                            e.field("Error", why, false);
-                            e
-                        })
-                    })
-                    .await
-                    .ok();
-                }
-            }
-        }
+        result
+            .log(&ctx, LogType::Interaction(&board_action), &user)
+            .await;
     }
 }
 

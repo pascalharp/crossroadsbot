@@ -1,4 +1,4 @@
-use crate::{db, utils::*, data::GLOB_COMMAND_PREFIX};
+use crate::{data::GLOB_COMMAND_PREFIX, db, utils::*};
 use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Paris};
 use serenity::{

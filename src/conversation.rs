@@ -1,4 +1,4 @@
-use crate::{data::GLOB_COMMAND_PREFIX, data::*, db, utils::*, embeds};
+use crate::{data::GLOB_COMMAND_PREFIX, data::*, db, embeds, log::LogResult, utils::*};
 use dashmap::DashSet;
 use serenity::{
     client::bridge::gateway::ShardMessenger,
@@ -189,13 +189,11 @@ impl Drop for Conversation {
     }
 }
 
-type Result = std::result::Result<String, Box<dyn std::error::Error + Send + Sync>>;
-
 static NOT_REGISTERED: &str = "User not registered";
 static NOT_OPEN: &str = "Training not found or not open";
 static NOT_SIGNED_UP: &str = "Not signup found for user";
 
-pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Result {
+pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogResult {
     let mut conv = Conversation::start(ctx, user).await?;
 
     let db_user = match db::User::get(*user.id.as_u64()).await {
@@ -225,7 +223,10 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
         Err(diesel::NotFound) => {
             conv.msg
                 .edit(ctx, |m| {
-                    m.content(format!("No **open** training found with id {}", training_id))
+                    m.content(format!(
+                        "No **open** training found with id {}",
+                        training_id
+                    ))
                 })
                 .await?;
             return Ok(NOT_OPEN.into());
@@ -387,7 +388,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
     Ok("Success".into())
 }
 
-pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result {
+pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogResult {
     let mut conv = Conversation::start(ctx, user).await?;
 
     let db_user = match db::User::get(*user.id.as_u64()).await {
@@ -431,19 +432,24 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result
     let signup = match db::Signup::by_user_and_training(&db_user, &training.clone()).await {
         Ok(s) => Arc::new(s),
         Err(diesel::NotFound) => {
-            conv.msg.edit(ctx, |m| {
-                m.content("");
-                m.embed(|e| {
-                    e.description(format!("{} No signup found", CROSS_EMOJI));
-                    e.field("You are not signed up for training:", &training.title, false);
-                    e.field(
-                        "If you want to join this training use:",
-                        format!("`{}join {}`", GLOB_COMMAND_PREFIX, training.id),
-                        false
-                    )
-
+            conv.msg
+                .edit(ctx, |m| {
+                    m.content("");
+                    m.embed(|e| {
+                        e.description(format!("{} No signup found", CROSS_EMOJI));
+                        e.field(
+                            "You are not signed up for training:",
+                            &training.title,
+                            false,
+                        );
+                        e.field(
+                            "If you want to join this training use:",
+                            format!("`{}join {}`", GLOB_COMMAND_PREFIX, training.id),
+                            false,
+                        )
+                    })
                 })
-            }).await?;
+                .await?;
             return Ok(NOT_SIGNED_UP.into());
         }
         Err(e) => {
@@ -539,7 +545,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result
     }
 }
 
-pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> Result {
+pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogResult {
     let mut conv = Conversation::start(ctx, user).await?;
 
     let db_user = match db::User::get(*user.id.as_u64()).await {
@@ -583,19 +589,24 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> Resu
     let signup = match db::Signup::by_user_and_training(&db_user, &training.clone()).await {
         Ok(s) => s,
         Err(diesel::NotFound) => {
-            conv.msg.edit(ctx, |m| {
-                m.content("");
-                m.embed(|e| {
-                    e.description(format!("{} No signup found", CROSS_EMOJI));
-                    e.field("You are not signed up for training:", &training.title, false);
-                    e.field(
-                        "If you want to join this training use:",
-                        format!("`{}join {}`", GLOB_COMMAND_PREFIX, training.id),
-                        false
-                    )
-
+            conv.msg
+                .edit(ctx, |m| {
+                    m.content("");
+                    m.embed(|e| {
+                        e.description(format!("{} No signup found", CROSS_EMOJI));
+                        e.field(
+                            "You are not signed up for training:",
+                            &training.title,
+                            false,
+                        );
+                        e.field(
+                            "If you want to join this training use:",
+                            format!("`{}join {}`", GLOB_COMMAND_PREFIX, training.id),
+                            false,
+                        )
+                    })
                 })
-            }).await?;
+                .await?;
             return Ok(NOT_SIGNED_UP.into());
         }
         Err(e) => {
@@ -616,13 +627,15 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> Resu
         }
     }
 
-    conv.msg.edit(ctx, |m| {
-        m.content("");
-        m.embed(|e| {
-            e.description(format!("{} Signup removed", CHECK_EMOJI));
-            e.field("Signup removed for training:", &training.title, false)
+    conv.msg
+        .edit(ctx, |m| {
+            m.content("");
+            m.embed(|e| {
+                e.description(format!("{} Signup removed", CHECK_EMOJI));
+                e.field("Signup removed for training:", &training.title, false)
+            })
         })
-    }).await?;
+        .await?;
 
     Ok("Success".into())
 }
