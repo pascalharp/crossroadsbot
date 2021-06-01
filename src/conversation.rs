@@ -1,4 +1,4 @@
-use crate::{data::GLOB_COMMAND_PREFIX, data::*, db, utils::*};
+use crate::{data::GLOB_COMMAND_PREFIX, data::*, db, utils::*, embeds};
 use dashmap::DashSet;
 use serenity::{
     client::bridge::gateway::ShardMessenger,
@@ -9,7 +9,6 @@ use serenity::{
 };
 use std::{collections::HashSet, error::Error, fmt, sync::Arc};
 
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 type ConvResult = std::result::Result<Conversation, ConversationError>;
 
 pub struct Conversation {
@@ -190,29 +189,29 @@ impl Drop for Conversation {
     }
 }
 
-pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Result<()> {
+type Result = std::result::Result<String, Box<dyn std::error::Error + Send + Sync>>;
+
+static NOT_REGISTERED: &str = "User not registered";
+static NOT_OPEN: &str = "Training not found or not open";
+static NOT_SIGNED_UP: &str = "Not signup found for user";
+
+pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Result {
     let mut conv = Conversation::start(ctx, user).await?;
 
     let db_user = match db::User::get(*user.id.as_u64()).await {
         Ok(u) => u,
         Err(diesel::NotFound) => {
+            let emb = embeds::not_registered_embed();
             conv.msg
                 .edit(ctx, |m| {
                     m.content("");
                     m.embed(|e| {
-                        e.description("Not yet registerd");
-                        e.field(
-                            "User not found. Use the register command first",
-                            format!(
-                                "For more information type: __{}help register__",
-                                GLOB_COMMAND_PREFIX
-                            ),
-                            false,
-                        )
+                        e.0 = emb.0;
+                        e
                     })
                 })
                 .await?;
-            return Ok(());
+            return Ok(NOT_REGISTERED.into());
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -229,7 +228,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
                     m.content(format!("No **open** training found with id {}", training_id))
                 })
                 .await?;
-            return Ok(());
+            return Ok(NOT_OPEN.into());
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -250,7 +249,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
                         })
                     })
                     .await?;
-                return Ok(());
+                return Ok("Tier requirement not fulfilled".into());
             }
         }
         Err(e) => {
@@ -280,7 +279,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
                     })
                 })
                 .await?;
-            return Ok(());
+            return Ok("Already signed up".into());
         }
         Err(diesel::NotFound) => (), // This is what we want
         Err(e) => {
@@ -335,11 +334,11 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
                 match e {
                     ConversationError::TimedOut => {
                         conv.timeout_msg(ctx).await?;
-                        return Ok(());
+                        return Ok("Timed out".into());
                     }
                     ConversationError::Canceled => {
                         conv.canceled_msg(ctx).await?;
-                        return Ok(());
+                        return Ok("Canceled".into());
                     }
                     _ => (),
                 }
@@ -385,32 +384,26 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> Resu
             return Err(e.into());
         }
     }
-    Ok(())
+    Ok("Success".into())
 }
 
-pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result<()> {
+pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result {
     let mut conv = Conversation::start(ctx, user).await?;
 
     let db_user = match db::User::get(*user.id.as_u64()).await {
         Ok(u) => u,
         Err(diesel::NotFound) => {
+            let emb = embeds::not_registered_embed();
             conv.msg
                 .edit(ctx, |m| {
                     m.content("");
                     m.embed(|e| {
-                        e.description("Not yet registerd");
-                        e.field(
-                            "User not found. Use the register command first",
-                            format!(
-                                "For more information type: __{}help register__",
-                                GLOB_COMMAND_PREFIX
-                            ),
-                            false,
-                        )
+                        e.0 = emb.0;
+                        e
                     })
                 })
                 .await?;
-            return Ok(());
+            return Ok(NOT_REGISTERED.into());
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -427,7 +420,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result
                     format!("No **open** training with id {} found", training_id),
                 )
                 .await?;
-            return Ok(());
+            return Ok(NOT_OPEN.into());
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -438,8 +431,20 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result
     let signup = match db::Signup::by_user_and_training(&db_user, &training.clone()).await {
         Ok(s) => Arc::new(s),
         Err(diesel::NotFound) => {
-            conv.msg.reply(ctx, "No sign up found").await?;
-            return Ok(());
+            conv.msg.edit(ctx, |m| {
+                m.content("");
+                m.embed(|e| {
+                    e.description(format!("{} No signup found", CROSS_EMOJI));
+                    e.field("You are not signed up for training:", &training.title, false);
+                    e.field(
+                        "If you want to join this training use:",
+                        format!("`{}join {}`", GLOB_COMMAND_PREFIX, training.id),
+                        false
+                    )
+
+                })
+            }).await?;
+            return Ok(NOT_SIGNED_UP.into());
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -478,11 +483,11 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result
                 match e {
                     ConversationError::TimedOut => {
                         conv.timeout_msg(ctx).await?;
-                        return Ok(());
+                        return Ok("Timed out".into());
                     }
                     ConversationError::Canceled => {
                         conv.canceled_msg(ctx).await?;
-                        return Ok(());
+                        return Ok("Canceled".into());
                     }
                     _ => (),
                 }
@@ -525,7 +530,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result
                     })
                 })
                 .await?;
-            return Ok(());
+            return Ok("Success".into());
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -534,29 +539,23 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> Result
     }
 }
 
-pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> Result<()> {
+pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> Result {
     let mut conv = Conversation::start(ctx, user).await?;
 
     let db_user = match db::User::get(*user.id.as_u64()).await {
         Ok(u) => u,
         Err(diesel::NotFound) => {
+            let emb = embeds::not_registered_embed();
             conv.msg
                 .edit(ctx, |m| {
                     m.content("");
                     m.embed(|e| {
-                        e.description("Not yet registerd");
-                        e.field(
-                            "User not found. Use the register command first",
-                            format!(
-                                "For more information type: __{}help register__",
-                                GLOB_COMMAND_PREFIX
-                            ),
-                            false,
-                        )
+                        e.0 = emb.0;
+                        e
                     })
                 })
                 .await?;
-            return Ok(());
+            return Ok(NOT_REGISTERED.into());
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -573,7 +572,7 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> Resu
                     format!("No **open** training with id {} found", training_id),
                 )
                 .await?;
-            return Ok(());
+            return Ok(NOT_OPEN.into());
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -597,7 +596,7 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> Resu
 
                 })
             }).await?;
-            return Ok(());
+            return Ok(NOT_SIGNED_UP.into());
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -625,5 +624,5 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> Resu
         })
     }).await?;
 
-    Ok(())
+    Ok("Success".into())
 }

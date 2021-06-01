@@ -93,8 +93,7 @@ impl EventHandler for Handler {
 
         let ctx = Arc::new(ctx);
         let rm_ctx = ctx.clone();
-        type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-        let result: Result<()> = match &board_action {
+        let result = match &board_action {
             SignupBoardAction::Ignore => return,
             SignupBoardAction::None => {
                 tokio::task::spawn(async move {
@@ -122,7 +121,7 @@ impl EventHandler for Handler {
             }
         };
         match result {
-            Ok(()) => {
+            Ok(ok) => {
                 info!("Signup Board interaction: {}", board_action);
                 let log_info = {
                     ctx.data
@@ -142,7 +141,7 @@ impl EventHandler for Handler {
                             e.description("[INFO] Signup Board");
                             e.field("User", Mention::from(&user), true);
                             e.field("Interaction", board_action, true);
-                            e
+                            e.field("Result", ok, false)
                         })
                     })
                     .await

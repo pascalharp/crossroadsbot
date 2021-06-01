@@ -24,7 +24,7 @@ pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
 
     if !re.is_match(&acc_name) {
         msg.reply(
-            &ctx.http,
+            ctx,
             "This does not look like a gw2 account name. Please try again",
         )
         .await?;
@@ -41,7 +41,7 @@ pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
                 "{}#{} updated gw2 account name from {} to {}",
                 &msg.author.name, &msg.author.discriminator, &user.gw2_id, &acc_name
             );
-            msg.react(&ctx.http, CHECK_EMOJI).await?;
+            msg.react(ctx, CHECK_EMOJI).await?;
         }
         // User does not exist. Create new one
         Err(diesel::result::Error::NotFound) => {
@@ -50,7 +50,7 @@ pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
                 "{}#{} registered for the first time with gw2 account name: {}",
                 &msg.author.name, &msg.author.discriminator, &acc_name
             );
-            msg.react(&ctx.http, CHECK_EMOJI).await?;
+            msg.react(ctx, CHECK_EMOJI).await?;
         }
         Err(e) => {
             msg.reply(ctx, "An unexpected error occurred").await?;
@@ -75,7 +75,7 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     };
 
     match join_training(ctx, &msg.author, training_id).await {
-        Ok(()) => return Ok(()),
+        Ok(_) => return Ok(()),
         Err(e) => {
             if let Some(e) = e.downcast_ref::<ConversationError>() {
                 msg.reply(ctx, e).await?;
@@ -101,7 +101,7 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
     };
 
     match remove_signup(ctx, &msg.author, training_id).await {
-        Ok(()) => return Ok(()),
+        Ok(_) => return Ok(()),
         Err(e) => {
             if let Some(e) = e.downcast_ref::<ConversationError>() {
                 msg.reply(ctx, e).await?;
@@ -127,7 +127,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     };
 
     match edit_signup(ctx, &msg.author, training_id).await {
-        Ok(()) => return Ok(()),
+        Ok(_) => return Ok(()),
         Err(e) => {
             if let Some(e) = e.downcast_ref::<ConversationError>() {
                 msg.reply(ctx, e).await?;

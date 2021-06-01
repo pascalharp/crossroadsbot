@@ -1,4 +1,4 @@
-use crate::{db, utils::*};
+use crate::{db, utils::*, data::GLOB_COMMAND_PREFIX};
 use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Paris};
 use serenity::{
@@ -114,4 +114,18 @@ pub fn training_embed_add_board_footer(e: &mut CreateEmbed, ts: &db::TrainingSta
             e.footer(|f| f.text("Not open for signup"));
         }
     }
+}
+
+pub fn not_registered_embed() -> CreateEmbed {
+    let mut e = CreateEmbed::default();
+    e.description("Not yet registerd");
+    e.field(
+        "User not found. Use the register command first",
+        format!(
+            "For more information type: __{}help register__",
+            GLOB_COMMAND_PREFIX
+        ),
+        false,
+    );
+    e
 }
