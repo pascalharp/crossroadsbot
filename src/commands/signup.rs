@@ -1,4 +1,4 @@
-use crate::{conversation::*, db, embeds, utils::*};
+use crate::{conversation::*, db, embeds, log::*, utils::*};
 use regex::Regex;
 use serenity::framework::standard::{
     macros::{command, group},
@@ -7,11 +7,35 @@ use serenity::framework::standard::{
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 use std::sync::Arc;
-use tracing::info;
 
 #[group]
 #[commands(register, join, leave, edit, list)]
 struct Signup;
+
+async fn _register(user: &User, gw2_acc: String) -> LogResult {
+    let re = Regex::new("^[a-zA-Z]{3,27}\\.[0-9]{4}$").unwrap();
+    if !re.is_match(&gw2_acc) {
+        return Ok("Invalid gw2 account name format".into());
+    }
+
+    let user_req = db::User::get(*user.id.as_u64()).await;
+    match user_req {
+        // User already exist. update account name
+        Ok(user) => {
+            let user = Arc::new(user);
+            user.clone().update_gw2_id(&gw2_acc).await?;
+            Ok("Gw2 account name updated".into())
+        }
+        // User does not exist. Create new one
+        Err(diesel::NotFound) => {
+            db::User::add(*user.id.as_u64(), gw2_acc.clone()).await?;
+            Ok("Gw2 account name registered".into())
+        }
+        Err(e) => {
+            return Err(e.into());
+        }
+    }
+}
 
 #[command]
 #[description = "Register or update your GW2 account name with the bot"]
@@ -20,43 +44,9 @@ struct Signup;
 #[num_args(1)]
 pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let acc_name = args.single::<String>()?;
-    let re = Regex::new("^[a-zA-Z]{3,27}\\.[0-9]{4}$").unwrap();
-
-    if !re.is_match(&acc_name) {
-        msg.reply(
-            ctx,
-            "This does not look like a gw2 account name. Please try again",
-        )
-        .await?;
-        return Ok(());
-    }
-
-    let user_req = db::User::get(*msg.author.id.as_u64()).await;
-    match user_req {
-        // User already exist. update account name
-        Ok(user) => {
-            let user = Arc::new(user);
-            user.clone().update_gw2_id(&acc_name).await?;
-            info!(
-                "{}#{} updated gw2 account name from {} to {}",
-                &msg.author.name, &msg.author.discriminator, &user.gw2_id, &acc_name
-            );
-            msg.react(ctx, CHECK_EMOJI).await?;
-        }
-        // User does not exist. Create new one
-        Err(diesel::result::Error::NotFound) => {
-            db::User::add(*msg.author.id.as_u64(), acc_name.clone()).await?;
-            info!(
-                "{}#{} registered for the first time with gw2 account name: {}",
-                &msg.author.name, &msg.author.discriminator, &acc_name
-            );
-            msg.react(ctx, CHECK_EMOJI).await?;
-        }
-        Err(e) => {
-            msg.reply(ctx, "An unexpected error occurred").await?;
-            return Err(e.into());
-        }
-    }
+    let res = _register(&msg.author, acc_name).await;
+    res.reply(ctx, msg).await?;
+    res.log(ctx, msg.into(), &msg.author).await;
     Ok(())
 }
 
@@ -74,16 +64,14 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         }
     };
 
-    match join_training(ctx, &msg.author, training_id).await {
-        Ok(_) => return Ok(()),
-        Err(e) => {
-            if let Some(e) = e.downcast_ref::<ConversationError>() {
-                msg.reply(ctx, e).await?;
-                return Ok(());
-            }
-            return Err(e.into());
+    let res = join_training(ctx, &msg.author, training_id).await;
+    if let Err(e) = &res {
+        if let Some(e) = e.downcast_ref::<ConversationError>() {
+            msg.reply(ctx, e).await?;
         }
     }
+    res.log(ctx, msg.into(), &msg.author).await;
+    res.cmd_result()
 }
 
 #[command]
@@ -100,16 +88,14 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
         }
     };
 
-    match remove_signup(ctx, &msg.author, training_id).await {
-        Ok(_) => return Ok(()),
-        Err(e) => {
-            if let Some(e) = e.downcast_ref::<ConversationError>() {
-                msg.reply(ctx, e).await?;
-                return Ok(());
-            }
-            return Err(e.into());
+    let res = remove_signup(ctx, &msg.author, training_id).await;
+    if let Err(e) = &res {
+        if let Some(e) = e.downcast_ref::<ConversationError>() {
+            msg.reply(ctx, e).await?;
         }
     }
+    res.log(ctx, msg.into(), &msg.author).await;
+    res.cmd_result()
 }
 
 #[command]
@@ -126,16 +112,14 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         }
     };
 
-    match edit_signup(ctx, &msg.author, training_id).await {
-        Ok(_) => return Ok(()),
-        Err(e) => {
-            if let Some(e) = e.downcast_ref::<ConversationError>() {
-                msg.reply(ctx, e).await?;
-                return Ok(());
-            }
-            return Err(e.into());
+    let res = edit_signup(ctx, &msg.author, training_id).await;
+    if let Err(e) = &res {
+        if let Some(e) = e.downcast_ref::<ConversationError>() {
+            msg.reply(ctx, e).await?;
         }
     }
+    res.log(ctx, msg.into(), &msg.author).await;
+    res.cmd_result()
 }
 
 #[command]
@@ -144,6 +128,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 #[usage = ""]
 #[num_args(0)]
 pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
+    // TODO
     let discord_user = &msg.author;
     let user = match db::User::get(*discord_user.id.as_u64()).await {
         Ok(u) => u,
