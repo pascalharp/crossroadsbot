@@ -1,4 +1,4 @@
-use crate::{conversation::*, db, embeds, log::*, utils::*};
+use crate::{conversation::*, db, log::*};
 use regex::Regex;
 use serenity::framework::standard::{
     macros::{command, group},
@@ -128,56 +128,12 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 #[usage = ""]
 #[num_args(0)]
 pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    // TODO
-    let discord_user = &msg.author;
-    let user = match db::User::get(*discord_user.id.as_u64()).await {
-        Ok(u) => u,
-        Err(diesel::NotFound) => {
-            msg.reply(ctx, "User not found. Please use the register command first")
-                .await?;
-            return Ok(());
+    let res = list_signup(ctx, &msg.author).await;
+    if let Err(e) = &res {
+        if let Some(e) = e.downcast_ref::<ConversationError>() {
+            msg.reply(ctx, e).await?;
         }
-        Err(e) => {
-            msg.reply(ctx, "Unexpected error").await?;
-            return Err(e.into());
-        }
-    };
-    let user = Arc::new(user);
-
-    let signups = user.clone().active_signups().await?;
-
-    if signups.is_empty() {
-        let mut conv = Conversation::start(ctx, &discord_user).await?;
-        conv.msg
-            .edit(ctx, |m| m.content("No active signup found"))
-            .await?;
-        return Ok(());
     }
-
-    let mut conv = Conversation::start(ctx, &discord_user).await?;
-    conv.msg
-        .edit(ctx, |m| {
-            m.content(format!("Loading {} active signup(s)", signups.len()))
-        })
-        .await?;
-    msg.react(ctx, ENVELOP_EMOJI).await?;
-    for (s, t) in signups {
-        let signup_id = s.id;
-        let s = Arc::new(s);
-        let roles = s.get_roles().await?;
-        let roles = roles.iter().map(|(_, r)| r).collect::<Vec<_>>();
-        let emb = embeds::training_base_embed(&t);
-        conv.chan
-            .send_message(ctx, |m| {
-                m.embed(|e| {
-                    e.0 = emb.0;
-                    e.field("**Signup Id**", &signup_id, true);
-                    e.field("Your selected roles", "------------------", false);
-                    e.fields(roles.iter().map(|r| (&r.repr, &r.title, true)));
-                    e
-                })
-            })
-            .await?;
-    }
-    Ok(())
+    res.log(ctx, msg.into(), &msg.author).await;
+    res.cmd_result()
 }

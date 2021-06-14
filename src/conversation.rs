@@ -7,7 +7,12 @@ use serenity::{
     model::prelude::*,
     prelude::*,
 };
-use std::{collections::HashSet, error::Error, fmt, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+    fmt,
+    sync::Arc,
+};
 
 type ConvResult = std::result::Result<Conversation, ConversationError>;
 
@@ -633,6 +638,98 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogR
             m.embed(|e| {
                 e.description(format!("{} Signup removed", CHECK_EMOJI));
                 e.field("Signup removed for training:", &training.title, false)
+            })
+        })
+        .await?;
+
+    Ok("Success".into())
+}
+
+pub async fn list_signup(ctx: &Context, user: &User) -> LogResult {
+    let mut conv = Conversation::start(ctx, user).await?;
+
+    let db_user = match db::User::get(*user.id.as_u64()).await {
+        Ok(u) => Arc::new(u),
+        Err(diesel::NotFound) => {
+            let emb = embeds::not_registered_embed();
+            conv.msg
+                .edit(ctx, |m| {
+                    m.content("");
+                    m.embed(|e| {
+                        e.0 = emb.0;
+                        e
+                    })
+                })
+                .await?;
+            return Ok(NOT_REGISTERED.into());
+        }
+        Err(e) => {
+            conv.unexpected_error(ctx).await?;
+            return Err(e.into());
+        }
+    };
+
+    let signups = match db_user.active_signups().await {
+        Ok(v) => v
+            .into_iter()
+            .map(|(s, t)| (Arc::new(s), Arc::new(t)))
+            .collect::<Vec<_>>(),
+        Err(e) => {
+            conv.unexpected_error(ctx).await?;
+            return Err(e.into());
+        }
+    };
+
+    let mut roles: HashMap<i32, Vec<db::Role>> = HashMap::with_capacity(signups.len());
+    for (s, _) in &signups {
+        let signup_roles = match s.clone().get_roles().await {
+            Ok(v) => v.into_iter().map(|(_, r)| r).collect::<Vec<_>>(),
+            Err(e) => {
+                conv.unexpected_error(ctx).await?;
+                return Err(e.into());
+            }
+        };
+        roles.insert(s.id, signup_roles);
+    }
+
+    conv.msg
+        .edit(ctx, |m| {
+            m.content("");
+            m.embed(|e| {
+                e.description("All current active signups");
+                for (s, t) in signups {
+                    e.field(
+                        &t.title,
+                        format!(
+                        "`Date        :` {}\n\
+                         `Time (Utc)  :` {}\n\
+                         `Training Id :` {}\n\
+                         `Roles       :` {}\n",
+                            t.date.date(),
+                            t.date.time(),
+                            t.id,
+                            match roles.get(&s.id) {
+                                Some(r) => r
+                                    .iter()
+                                    .map(|r| r.repr.clone())
+                                    .collect::<Vec<_>>()
+                                    .join(", "),
+                                None => String::from("Failed to load roles =("),
+                            }
+                        ),
+                        true,
+                    );
+                }
+                e.footer(|f| {
+                    f.text(format!(
+                        "To edit or remove your sign up reply with:\n\
+                        {}edit <training id>\n\
+                        {}leave <training id>",
+                        GLOB_COMMAND_PREFIX,
+                        GLOB_COMMAND_PREFIX
+                    ))
+                });
+                e
             })
         })
         .await?;

@@ -62,7 +62,7 @@ async fn log_info<'a>(ctx: &Context, kind: LogType<'a>, user: &User, info: &str)
         chan.send_message(ctx, |m| {
             m.allowed_mentions(|m| m.empty_parse());
             m.embed(|e| {
-                e.description("[INFO] Signup Board");
+                e.description("[INFO]");
                 e.field("User", Mention::from(user), true);
                 match kind {
                     LogType::Interaction(i) => {
