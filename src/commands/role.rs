@@ -165,7 +165,7 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
         return Ok("Timed out".into());
     }
 
-    Ok("Role added".into())
+    Ok(format!("Role added {}", Mention::from(emoji_id)).into())
 }
 
 #[command]
@@ -207,7 +207,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
 
     role.deactivate().await?;
 
-    let res: LogResult = Ok("Role not found".into());
+    let res: LogResult = Ok("Role removed".into());
     res.reply(ctx, msg).await?;
     res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
     res.cmd_result()
