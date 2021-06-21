@@ -134,36 +134,7 @@ async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result:
     let command = msg.content_safe(ctx).await;
     // Log to subscriber
     match command_result {
-        Ok(()) => {
-            info!(
-                "{}",
-                format!("{} used command {}: {}", author.id, msg.content, "OK")
-            );
-            let log_info = {
-                ctx.data
-                    .read()
-                    .await
-                    .get::<LogConfigData>()
-                    .unwrap()
-                    .clone()
-                    .read()
-                    .await
-                    .info
-            };
-            if let Some(chan) = log_info {
-                chan.send_message(ctx, |m| {
-                    m.allowed_mentions(|m| m.empty_parse());
-                    m.embed(|e| {
-                        e.description("[INFO] Command used");
-                        e.field("User", Mention::from(author), true);
-                        e.field("Command", format!("`{}`", command), true);
-                        e
-                    })
-                })
-                .await
-                .ok();
-            }
-        }
+        Ok(_) => (),
         Err(why) => {
             error!(
                 "{}",

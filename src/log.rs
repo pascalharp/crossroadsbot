@@ -1,6 +1,7 @@
 use crate::data::LogConfigData;
 use crate::signup_board::SignupBoardAction;
 use serenity::{async_trait, framework::standard::CommandResult, model::prelude::*, prelude::*};
+use diesel::result::Error as DieselError;
 
 pub type LogResult = std::result::Result<String, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -23,14 +24,33 @@ impl DiscordChannelLog for LogResult {
     async fn reply(&self, ctx: &Context, msg: &Message) -> serenity::Result<Message> {
         match self {
             Ok(s) => msg.reply(ctx, s).await,
-            // Do not reply with serenity api errors to the user directly
-            Err(_) => msg.reply(ctx, String::from("Unexpected error. =(")).await,
+            // dont report serenity or diesel errors directly to user
+            Err(e) => {
+                if let Some(_) = e.downcast_ref::<SerenityError>() {
+                    return msg.reply(ctx, String::from("Unexpected error. =(")).await;
+                } else if let Some(_) = e.downcast_ref::<DieselError>() {
+                    return msg.reply(ctx, String::from("Unexpected error. =(")).await;
+                } else {
+                    return msg.reply(ctx, e).await;
+                }
+            }
         }
     }
 
+    // Only bubbles up serenity and diesel errors to be reported as errors
     fn cmd_result(self) -> CommandResult {
-        self?;
-        Ok(())
+        match self {
+            Err(e) => {
+                if let Some(_) = e.downcast_ref::<SerenityError>() {
+                    return Err(e);
+                } else if let Some(_) = e.downcast_ref::<DieselError>() {
+                    return Err(e);
+                } else {
+                    return Ok(())
+                }
+            },
+            Ok(_) => return Ok(()),
+        }
     }
 }
 
@@ -102,7 +122,7 @@ async fn log_error<'a>(
         chan.send_message(ctx, |m| {
             m.allowed_mentions(|m| m.empty_parse());
             m.embed(|e| {
-                e.description("[ERROR] Command failed");
+                e.description("[ERROR]");
                 e.field("User", Mention::from(user), true);
                 match kind {
                     LogType::Interaction(i) => {
