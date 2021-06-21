@@ -1,7 +1,7 @@
 use super::ADMIN_ROLE_CHECK;
 use crate::{
     data::ConfigValuesData,
-    db,
+    db, log::*,
     utils::{self, *},
 };
 use serenity::framework::standard::{
@@ -16,22 +16,13 @@ use serenity::prelude::*;
 #[commands(add, remove, list)]
 pub struct Role;
 
-#[command]
-#[checks(admin_role)]
-#[description = "Add a role by providing a full role name and a role short identifier (without spaces)"]
-#[example = "\"Power DPS\" pdps"]
-#[usage = "full_name identifier"]
-#[only_in("guild")]
-#[num_args(2)]
-pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let author = &msg.author;
+async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args) -> LogResult {
 
     let role_name = args.single_quoted::<String>()?;
     let role_repr = args.single_quoted::<String>()?;
 
     if role_repr.contains(" ") {
-        msg.reply(ctx, "Identifier must not contain spaces").await?;
-        return Ok(());
+        return Ok("Identifier must not contain spaces".into());
     }
 
     // load all roles from db
@@ -60,12 +51,10 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         .collect();
 
     if available.is_empty() {
-        msg.reply(ctx, "No more emojis for roles available").await?;
-        return Ok(());
+        return Ok("No more emojis for roles available".into());
     }
 
-    let mut msg = msg
-        .channel_id
+    let mut msg = channel
         .send_message(ctx, |m| {
             m.embed(|e| {
                 e.description("New Role");
@@ -92,7 +81,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     let emoji = msg
         .await_reaction(ctx)
         .timeout(DEFAULT_TIMEOUT)
-        .author_id(author.id)
+        .author_id(author)
         .filter(move |r| {
             if r.emoji == ReactionType::from(CROSS_EMOJI) {
                 return true;
@@ -114,8 +103,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
     let emoji_id = match emoji {
         None => {
-            msg.reply(ctx, "Timed out").await?;
-            return Ok(());
+            return Ok("Timed out".into());
         }
         Some(r) => {
             match &r.as_inner_ref().emoji {
@@ -126,8 +114,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                 } => *id,
                 ReactionType::Unicode(s) => {
                     if *s == String::from(CROSS_EMOJI) {
-                        msg.reply(ctx, "Aborted").await?;
-                        return Ok(());
+                        return Ok("Aborted".into());
                     }
                     // Should never occur since filtered already filtered
                     return Err("Unexpected emoji".into());
@@ -159,7 +146,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
     utils::send_yes_or_no(ctx, &msg).await?;
 
-    if let Some(e) = utils::await_yes_or_no(ctx, &msg, Some(author.id)).await {
+    if let Some(e) = utils::await_yes_or_no(ctx, &msg, Some(author)).await {
         match e {
             utils::YesOrNo::Yes => {
                 let new_role = db::NewRole {
@@ -168,27 +155,31 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                     emoji: *emoji_id.as_u64() as i64,
                 };
 
-                match new_role.add().await {
-                    Ok(_) => {
-                        msg.reply(ctx, "Role added to database").await?;
-                    }
-                    Err(e) => {
-                        msg.reply(ctx, format!("Error adding role to database:\n{}", e))
-                            .await?;
-                    }
-                };
+                new_role.add().await?;
             }
             utils::YesOrNo::No => {
-                msg.reply(ctx, "Aborted").await?;
-                return Ok(());
+                return Ok("Aborted".into());
             }
         }
     } else {
-        msg.reply(ctx, "Timed out").await?;
-        return Ok(());
+        return Ok("Timed out".into());
     }
 
-    Ok(())
+    Ok("Role added".into())
+}
+
+#[command]
+#[checks(admin_role)]
+#[description = "Add a role by providing a full role name and a role short identifier (without spaces)"]
+#[example = "\"Power DPS\" pdps"]
+#[usage = "full_name identifier"]
+#[only_in("guild")]
+#[num_args(2)]
+pub async fn add(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let res = _add(ctx, msg.channel_id, msg.author.id, args).await;
+    res.reply(ctx, msg).await?;
+    res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+    res.cmd_result()
 }
 
 #[command]
@@ -205,17 +196,21 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
         Ok(r) => r,
         Err(e) => match e {
             diesel::result::Error::NotFound => {
-                msg.reply(ctx, format!("Role not found: {}", &role_repr))
-                    .await?;
-                return Ok(());
+                let res: LogResult = Ok("Role not found".into());
+                res.reply(ctx, msg).await?;
+                res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+                return res.cmd_result();
             }
             _ => return Err(e.into()),
         },
     };
 
     role.deactivate().await?;
-    msg.react(ctx, CHECK_EMOJI).await?;
-    Ok(())
+
+    let res: LogResult = Ok("Role not found".into());
+    res.reply(ctx, msg).await?;
+    res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+    res.cmd_result()
 }
 
 #[command]
@@ -247,5 +242,7 @@ pub async fn list(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResul
         })
         .await?;
 
-    Ok(())
+    let res: LogResult = Ok("Success".into());
+    res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+    res.cmd_result()
 }
