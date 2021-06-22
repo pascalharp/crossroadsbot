@@ -1,4 +1,4 @@
-use super::ADMIN_ROLE_CHECK;
+use super::SQUADMAKER_ROLE_CHECK;
 use crate::{
     data::ConfigValuesData,
     db, log::*,
@@ -169,7 +169,7 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
 }
 
 #[command]
-#[checks(admin_role)]
+#[checks(squadmaker_role)]
 #[description = "Add a role by providing a full role name and a role short identifier (without spaces)"]
 #[example = "\"Power DPS\" pdps"]
 #[usage = "full_name identifier"]
@@ -184,7 +184,7 @@ pub async fn add(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
 #[command]
 #[aliases("rm")]
-#[checks(admin_role)]
+#[checks(squadmaker_role)]
 #[description = "Remove (deactivate) a role by providing the short role identifier"]
 #[example = "pdps"]
 #[usage = "identifier"]
@@ -214,6 +214,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
 }
 
 #[command]
+#[checks(squadmaker_role)]
 #[aliases("ls")]
 #[description = "Lists all currently available roles"]
 #[usage = ""]

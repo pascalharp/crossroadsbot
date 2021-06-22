@@ -75,7 +75,7 @@ If you want more information about a specific command, just pass the command as 
 #[command_not_found_text = "Could not find: `{}`."]
 #[max_levenshtein_distance(3)]
 #[indention_prefix = "-"]
-#[lacking_conditions = "strike"]
+#[lacking_conditions = "hide"]
 async fn help_cmd(
     context: &Context,
     msg: &Message,

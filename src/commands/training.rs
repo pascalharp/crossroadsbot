@@ -236,6 +236,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 const TRAINING_TIME_FMT: &str = "%a, %B %Y at %H:%M %Z";
 
 #[command]
+#[checks(squadmaker_role)]
 #[description = "Displays information about the training with the specified id"]
 #[example = "121"]
 #[usage = "training_id"]
