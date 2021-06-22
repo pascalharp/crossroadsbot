@@ -239,7 +239,10 @@ async fn main() {
     );
 
     let framework = StandardFramework::new()
-        .configure(|c| c.prefix(GLOB_COMMAND_PREFIX))
+        .configure(|c| {
+            c.prefix(GLOB_COMMAND_PREFIX);
+            c.no_dm_prefix(true)
+        })
         .on_dispatch_error(dispatch_error_hook)
         .after(after)
         .help(&commands::HELP_CMD)
