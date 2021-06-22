@@ -23,9 +23,9 @@ pub fn select_roles_embed(
         let des = String::from(format!(
             "{} | {}",
             if sel.contains(r) {
-                CHECK_EMOJI
+                GREEN_SQUARE_EMOJI
             } else {
-                CROSS_EMOJI
+                RED_SQUARE_EMOJI
             },
             r.repr
         ));

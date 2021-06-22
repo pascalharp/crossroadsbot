@@ -33,6 +33,8 @@ pub const GREEN_CIRCLE_EMOJI: char = '🟢';
 pub const RED_CIRCLE_EMOJI: char = '🔴';
 pub const CONSTRUCTION_SITE_EMOJI: char = '🚧';
 pub const MEMO_EMOJI: char = '📝';
+pub const GREEN_SQUARE_EMOJI: char = '🟩';
+pub const RED_SQUARE_EMOJI: char = '🟥';
 
 pub enum YesOrNo {
     Yes,
