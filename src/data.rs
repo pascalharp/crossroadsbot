@@ -1,4 +1,5 @@
 use crate::signup_board::SignupBoard;
+use crate::db::DBPool;
 use dashmap::DashSet;
 use serenity::{model::prelude::*, prelude::*};
 use std::sync::Arc;
@@ -38,4 +39,9 @@ impl TypeMapKey for LogConfigData {
 pub struct SignupBoardData;
 impl TypeMapKey for SignupBoardData {
     type Value = Arc<RwLock<SignupBoard>>;
+}
+
+pub struct DBPoolData;
+impl TypeMapKey for DBPoolData {
+    type Value = Arc<DBPool>;
 }

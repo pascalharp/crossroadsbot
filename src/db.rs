@@ -5,18 +5,51 @@
 
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
-use diesel::r2d2::{ConnectionManager, Pool};
+use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::result::QueryResult;
 use lazy_static::lazy_static;
 use std::env;
 use std::sync::Arc;
 use tokio::task;
+use serenity::client::Context;
+use crate::data::DBPoolData;
 
 pub mod models;
 pub mod schema;
 
 pub use models::*;
 use schema::*;
+
+pub struct DBPool(Pool<ConnectionManager<PgConnection>>);
+
+impl DBPool {
+    pub fn new() -> Self {
+        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let manager = ConnectionManager::<PgConnection>::new(database_url);
+        DBPool(Pool::new(manager).unwrap())
+    }
+
+    async fn load(ctx: &Context) -> Arc<Self> {
+        ctx.data
+            .read()
+            .await
+            .get::<DBPoolData>()
+            .unwrap()
+            .clone()
+    }
+
+    fn conn(&self) -> PooledConnection<ConnectionManager<PgConnection>> {
+        self.0.get().unwrap()
+    }
+}
+
+
+pub async fn get_user_by_id(ctx: &Context, discord_id: u64) -> QueryResult<User> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        users::table.filter(users::discord_id.eq(discord_id as i64)).first(&pool.conn())
+    }).await.unwrap()
+}
 
 lazy_static! {
     /// Global connection pool for postgresql database. Lazily created on first use
