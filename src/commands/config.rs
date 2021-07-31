@@ -1,5 +1,5 @@
 use super::ADMIN_ROLE_CHECK;
-use crate::{data::*, db, signup_board, log::*};
+use crate::{data::*, db, log::*, signup_board};
 use serenity::framework::standard::{
     macros::{command, group},
     Args, CommandResult,
@@ -19,11 +19,10 @@ struct Config;
 
 enum LogChannelType {
     Info,
-    Error
+    Error,
 }
 
 async fn set_log_channel(ctx: &Context, mut args: Args, kind: LogChannelType) -> LogResult {
-
     let channel_id: ChannelId = match args.single::<ChannelId>() {
         Err(_) => {
             return Err("No valid channel provided".into());
@@ -57,9 +56,7 @@ async fn set_log_channel(ctx: &Context, mut args: Args, kind: LogChannelType) ->
 
     match conf.save().await {
         Ok(_) => (),
-        Err(e) => {
-            return Err(e.into())
-        }
+        Err(e) => return Err(e.into()),
     }
 
     Ok("Log channel saved".into())
@@ -133,12 +130,7 @@ async fn _set_signup_board_category(ctx: &Context, mut args: Args) -> LogResult 
 #[usage = "category_id"]
 #[only_in("guild")]
 #[num_args(1)]
-pub async fn set_signup_board_category(
-    ctx: &Context,
-    msg: &Message,
-    args: Args,
-) -> CommandResult {
-
+pub async fn set_signup_board_category(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let res = _set_signup_board_category(ctx, args).await;
     res.reply(ctx, msg).await?;
     res.log(ctx, msg.into(), &msg.author).await;

@@ -61,7 +61,7 @@ impl SignupBoard {
         chan: ChannelId,
         training: Arc<db::Training>,
     ) -> Result<Message> {
-        let tier_roles = match training.get_tier().await {
+        let tier_roles = match training.get_tier(ctx).await {
             None => None,
             Some(t) => match t {
                 Ok(ok) => {
@@ -121,7 +121,7 @@ impl SignupBoard {
         msg: MessageId,
         training: Arc<db::Training>,
     ) -> Result<()> {
-        let tier_roles = match training.get_tier().await {
+        let tier_roles = match training.get_tier(ctx).await {
             None => None,
             Some(t) => match t {
                 Ok(ok) => {
@@ -330,7 +330,7 @@ impl SignupBoard {
         self.msg_trainings.clear();
 
         // Load all active trainings
-        let mut trainings = match db::Training::load_active().await {
+        let mut trainings = match db::Training::all_active(ctx).await {
             Ok(ok) => ok,
             Err(e) => {
                 error!("Failed to load active trainings for sign up board: {}", e);
@@ -355,7 +355,7 @@ impl SignupBoard {
     // with no trainings left.
     pub async fn update(&mut self, ctx: &Context, id: i32) -> Result<()> {
         // Get the latest version from the db
-        let new_training = match db::Training::by_id(id).await {
+        let new_training = match db::Training::by_id(ctx, id).await {
             Ok(ok) => Arc::new(ok),
             Err(e) => {
                 error!("Failed to load training: {}", e);

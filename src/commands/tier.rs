@@ -1,6 +1,7 @@
 use super::ADMIN_ROLE_CHECK;
 use crate::{
-    db, log::*,
+    db,
+    log::*,
     utils::{self, *},
 };
 use serenity::framework::standard::{
@@ -59,7 +60,8 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
         .await?;
 
     let res: LogResult = Ok("Success".into());
-    res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+    res.log(ctx, LogType::Command(&msg.content), &msg.author)
+        .await;
     res.cmd_result()
 }
 
@@ -147,7 +149,8 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
 pub async fn add(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let res = _add(ctx, msg.channel_id, msg.author.id, args).await;
     res.reply(ctx, msg).await?;
-    res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+    res.log(ctx, LogType::Command(&msg.content), &msg.author)
+        .await;
     res.cmd_result()
 }
 
@@ -236,7 +239,8 @@ async fn _remove(ctx: &Context, channel: ChannelId, author: UserId, mut args: Ar
 pub async fn remove(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let res = _remove(ctx, msg.channel_id, msg.author.id, args).await;
     res.reply(ctx, msg).await?;
-    res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+    res.log(ctx, LogType::Command(&msg.content), &msg.author)
+        .await;
     res.cmd_result()
 }
 
@@ -288,7 +292,8 @@ async fn _edit_add(mut args: Args) -> LogResult {
 pub async fn edit_add(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let res = _edit_add(args).await;
     res.reply(ctx, msg).await?;
-    res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+    res.log(ctx, LogType::Command(&msg.content), &msg.author)
+        .await;
     res.cmd_result()
 }
 
@@ -316,7 +321,7 @@ async fn _edit_remove(mut args: Args) -> LogResult {
     };
 
     to_remove.delete().await?;
-    return Ok("Discord role removed".into())
+    return Ok("Discord role removed".into());
 }
 
 #[command("remove")]
@@ -330,6 +335,7 @@ async fn _edit_remove(mut args: Args) -> LogResult {
 pub async fn edit_remove(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let res = _edit_remove(args).await;
     res.reply(ctx, msg).await?;
-    res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+    res.log(ctx, LogType::Command(&msg.content), &msg.author)
+        .await;
     res.cmd_result()
 }

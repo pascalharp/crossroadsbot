@@ -249,7 +249,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         }
     };
 
-    let training = match db::Training::by_id(training_id).await {
+    let training = match db::Training::by_id(ctx, training_id).await {
         Ok(t) => Arc::new(t),
         Err(_) => {
             msg.reply(ctx, "Unable to find training with this id")
@@ -279,7 +279,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     };
 
     let (tier, tier_roles) = {
-        let tier = training.get_tier().await;
+        let tier = training.get_tier(ctx).await;
         match tier {
             None => (None, None),
             Some(t) => {
@@ -380,7 +380,7 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         }
     };
 
-    let training = match db::Training::by_id(training_id).await {
+    let training = match db::Training::by_id(ctx, training_id).await {
         Ok(t) => t,
         Err(_) => {
             msg.reply(ctx, "Failed to load training, double check id")
@@ -389,7 +389,7 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         }
     };
 
-    training.set_state(state).await?;
+    training.set_state(ctx, state).await?;
 
     // inform the SignupBoard
     let board_lock = {
@@ -412,7 +412,7 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
 async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -> CommandResult {
     let author_id = msg.author.id;
-    let trainings = { db::Training::by_state(state.clone()).await? };
+    let trainings = { db::Training::by_state(ctx, state.clone()).await? };
 
     // An embed can only have 25 fields. So partition the training to be sent
     // over multiple messages if needed
@@ -487,11 +487,11 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -
 
 async fn list_amounts(ctx: &Context, msg: &Message) -> CommandResult {
     let (created, open, closed, started, finished) = match try_join!(
-        db::Training::amount_by_state(db::TrainingState::Created),
-        db::Training::amount_by_state(db::TrainingState::Open),
-        db::Training::amount_by_state(db::TrainingState::Closed),
-        db::Training::amount_by_state(db::TrainingState::Started),
-        db::Training::amount_by_state(db::TrainingState::Finished),
+        db::Training::amount_by_state(ctx, db::TrainingState::Created),
+        db::Training::amount_by_state(ctx, db::TrainingState::Open),
+        db::Training::amount_by_state(ctx, db::TrainingState::Closed),
+        db::Training::amount_by_state(ctx, db::TrainingState::Started),
+        db::Training::amount_by_state(ctx, db::TrainingState::Finished),
     ) {
         Ok(ok) => ok,
         Err(e) => {
@@ -566,7 +566,7 @@ pub async fn info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         }
     };
 
-    let training = match db::Training::by_id(training_id).await {
+    let training = match db::Training::by_id(ctx, training_id).await {
         Ok(t) => Arc::new(t),
         Err(diesel::NotFound) => {
             msg.reply(ctx, "Training not found").await?;
@@ -688,7 +688,7 @@ pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
 
     for id in args.iter::<i32>() {
         match id {
-            Ok(id) => match db::Training::by_id(id).await {
+            Ok(id) => match db::Training::by_id(ctx, id).await {
                 Ok(t) => trainings.push(Arc::new(t)),
                 Err(diesel::NotFound) => {
                     msg.reply(ctx, format!("Training with id {} not found", id))

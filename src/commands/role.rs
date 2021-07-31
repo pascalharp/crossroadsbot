@@ -1,7 +1,8 @@
 use super::SQUADMAKER_ROLE_CHECK;
 use crate::{
     data::ConfigValuesData,
-    db, log::*,
+    db,
+    log::*,
     utils::{self, *},
 };
 use serenity::framework::standard::{
@@ -17,7 +18,6 @@ use serenity::prelude::*;
 pub struct Role;
 
 async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args) -> LogResult {
-
     let role_name = args.single_quoted::<String>()?;
     let role_repr = args.single_quoted::<String>()?;
 
@@ -178,7 +178,8 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
 pub async fn add(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let res = _add(ctx, msg.channel_id, msg.author.id, args).await;
     res.reply(ctx, msg).await?;
-    res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+    res.log(ctx, LogType::Command(&msg.content), &msg.author)
+        .await;
     res.cmd_result()
 }
 
@@ -198,7 +199,8 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
             diesel::result::Error::NotFound => {
                 let res: LogResult = Ok("Role not found".into());
                 res.reply(ctx, msg).await?;
-                res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+                res.log(ctx, LogType::Command(&msg.content), &msg.author)
+                    .await;
                 return res.cmd_result();
             }
             _ => return Err(e.into()),
@@ -209,7 +211,8 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
 
     let res: LogResult = Ok("Role removed".into());
     res.reply(ctx, msg).await?;
-    res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+    res.log(ctx, LogType::Command(&msg.content), &msg.author)
+        .await;
     res.cmd_result()
 }
 
@@ -244,6 +247,7 @@ pub async fn list(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResul
         .await?;
 
     let res: LogResult = Ok("Success".into());
-    res.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+    res.log(ctx, LogType::Command(&msg.content), &msg.author)
+        .await;
     res.cmd_result()
 }

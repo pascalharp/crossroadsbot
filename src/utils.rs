@@ -123,7 +123,7 @@ pub async fn verify_tier(
     training: &db::Training,
     user: &User,
 ) -> Result<(bool, String)> {
-    let tier = training.get_tier().await;
+    let tier = training.get_tier(ctx).await;
     let tier = match tier {
         None => return Ok((true, "none".to_string())),
         Some(t) => Arc::new(t?),

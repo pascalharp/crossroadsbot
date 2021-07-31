@@ -1,5 +1,5 @@
-use crate::signup_board::SignupBoard;
 use crate::db::DBPool;
+use crate::signup_board::SignupBoard;
 use dashmap::DashSet;
 use serenity::{model::prelude::*, prelude::*};
 use std::sync::Arc;

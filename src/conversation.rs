@@ -223,24 +223,25 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
     };
 
     // Get training with id
-    let training = match db::Training::by_id_and_state(training_id, db::TrainingState::Open).await {
-        Ok(t) => Arc::new(t),
-        Err(diesel::NotFound) => {
-            conv.msg
-                .edit(ctx, |m| {
-                    m.content(format!(
-                        "No **open** training found with id {}",
-                        training_id
-                    ))
-                })
-                .await?;
-            return Ok(NOT_OPEN.into());
-        }
-        Err(e) => {
-            conv.unexpected_error(ctx).await?;
-            return Err(e.into());
-        }
-    };
+    let training =
+        match db::Training::by_id_and_state(ctx, training_id, db::TrainingState::Open).await {
+            Ok(t) => Arc::new(t),
+            Err(diesel::NotFound) => {
+                conv.msg
+                    .edit(ctx, |m| {
+                        m.content(format!(
+                            "No **open** training found with id {}",
+                            training_id
+                        ))
+                    })
+                    .await?;
+                return Ok(NOT_OPEN.into());
+            }
+            Err(e) => {
+                conv.unexpected_error(ctx).await?;
+                return Err(e.into());
+            }
+        };
 
     // verify if tier requirements pass
     match verify_tier(ctx, &training, &conv.user).await {
@@ -417,22 +418,23 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
         }
     };
 
-    let training = match db::Training::by_id_and_state(training_id, db::TrainingState::Open).await {
-        Ok(t) => Arc::new(t),
-        Err(diesel::NotFound) => {
-            conv.msg
-                .reply(
-                    ctx,
-                    format!("No **open** training with id {} found", training_id),
-                )
-                .await?;
-            return Ok(NOT_OPEN.into());
-        }
-        Err(e) => {
-            conv.unexpected_error(ctx).await?;
-            return Err(e.into());
-        }
-    };
+    let training =
+        match db::Training::by_id_and_state(ctx, training_id, db::TrainingState::Open).await {
+            Ok(t) => Arc::new(t),
+            Err(diesel::NotFound) => {
+                conv.msg
+                    .reply(
+                        ctx,
+                        format!("No **open** training with id {} found", training_id),
+                    )
+                    .await?;
+                return Ok(NOT_OPEN.into());
+            }
+            Err(e) => {
+                conv.unexpected_error(ctx).await?;
+                return Err(e.into());
+            }
+        };
 
     let signup = match db::Signup::by_user_and_training(&db_user, &training.clone()).await {
         Ok(s) => Arc::new(s),
@@ -574,22 +576,23 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogR
         }
     };
 
-    let training = match db::Training::by_id_and_state(training_id, db::TrainingState::Open).await {
-        Ok(t) => Arc::new(t),
-        Err(diesel::NotFound) => {
-            conv.msg
-                .reply(
-                    ctx,
-                    format!("No **open** training with id {} found", training_id),
-                )
-                .await?;
-            return Ok(NOT_OPEN.into());
-        }
-        Err(e) => {
-            conv.unexpected_error(ctx).await?;
-            return Err(e.into());
-        }
-    };
+    let training =
+        match db::Training::by_id_and_state(ctx, training_id, db::TrainingState::Open).await {
+            Ok(t) => Arc::new(t),
+            Err(diesel::NotFound) => {
+                conv.msg
+                    .reply(
+                        ctx,
+                        format!("No **open** training with id {} found", training_id),
+                    )
+                    .await?;
+                return Ok(NOT_OPEN.into());
+            }
+            Err(e) => {
+                conv.unexpected_error(ctx).await?;
+                return Err(e.into());
+            }
+        };
 
     let signup = match db::Signup::by_user_and_training(&db_user, &training.clone()).await {
         Ok(s) => s,
@@ -701,7 +704,7 @@ pub async fn list_signup(ctx: &Context, user: &User) -> LogResult {
                     e.field(
                         &t.title,
                         format!(
-                        "`Date        :` {}\n\
+                            "`Date        :` {}\n\
                          `Time (Utc)  :` {}\n\
                          `Training Id :` {}\n\
                          `Roles       :` {}\n",
@@ -725,8 +728,7 @@ pub async fn list_signup(ctx: &Context, user: &User) -> LogResult {
                         "To edit or remove your sign up reply with:\n\
                         {}edit <training id>\n\
                         {}leave <training id>",
-                        GLOB_COMMAND_PREFIX,
-                        GLOB_COMMAND_PREFIX
+                        GLOB_COMMAND_PREFIX, GLOB_COMMAND_PREFIX
                     ))
                 });
                 e

@@ -93,9 +93,12 @@ async fn select_joined_active_trainings_by_user(
             .inner_join(users::table)
             .inner_join(trainings::table);
         join.filter(users::id.eq(user_id))
-            .filter(trainings::state.eq(TrainingState::Open))
-            .or_filter(trainings::state.eq(TrainingState::Closed))
-            .or_filter(trainings::state.eq(TrainingState::Started))
+            .filter(
+                trainings::state
+                    .eq(TrainingState::Open)
+                    .or(trainings::state.eq(TrainingState::Closed))
+                    .or(trainings::state.eq(TrainingState::Started)),
+            )
             .select(trainings::all_columns)
             .load(&pool.conn())
     })
@@ -113,14 +116,104 @@ async fn select_active_signups_trainings_by_user(
             .inner_join(users::table)
             .inner_join(trainings::table);
         join.filter(users::id.eq(user_id))
-            .filter(trainings::state.eq(TrainingState::Open))
-            .or_filter(trainings::state.eq(TrainingState::Closed))
-            .or_filter(trainings::state.eq(TrainingState::Started))
+            .filter(
+                trainings::state
+                    .eq(TrainingState::Open)
+                    .or(trainings::state.eq(TrainingState::Closed))
+                    .or(trainings::state.eq(TrainingState::Started)),
+            )
             .select((signups::all_columns, trainings::all_columns))
             .load(&pool.conn())
     })
     .await
     .unwrap()
+}
+
+async fn select_training_by_id(ctx: &Context, id: i32) -> QueryResult<Training> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || trainings::table.find(id).first(&pool.conn()))
+        .await
+        .unwrap()
+}
+
+async fn select_trainings_by_state(
+    ctx: &Context,
+    state: TrainingState,
+) -> QueryResult<Vec<Training>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        trainings::table
+            .filter(trainings::state.eq(state))
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_training_by_id_and_state(
+    ctx: &Context,
+    id: i32,
+    state: TrainingState,
+) -> QueryResult<Training> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        trainings::table
+            .find(id)
+            .filter(trainings::state.eq(state))
+            .first::<Training>(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_active_trainings(ctx: &Context) -> QueryResult<Vec<Training>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        trainings::table
+            .filter(
+                trainings::state
+                    .eq(TrainingState::Open)
+                    .or(trainings::state.eq(TrainingState::Closed))
+                    .or(trainings::state.eq(TrainingState::Started)),
+            )
+            .load::<Training>(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn count_trainings_by_state(ctx: &Context, state: TrainingState) -> QueryResult<i64> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        trainings::table
+            .filter(trainings::state.eq(state))
+            .count()
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn update_training_state(
+    ctx: &Context,
+    id: i32,
+    state: TrainingState,
+) -> QueryResult<Training> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::update(trainings::table.find(id))
+            .set(trainings::state.eq(state))
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_tier_by_id(ctx: &Context, id: i32) -> QueryResult<Tier> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || tiers::table.find(id).first(&pool.conn()))
+        .await
+        .unwrap()
 }
 
 // TODO remove once done refactoring
@@ -163,94 +256,39 @@ impl User {
 }
 
 /* -- Training -- */
-
 impl Training {
-    pub async fn by_state(state: TrainingState) -> QueryResult<Vec<Training>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            trainings::table
-                .filter(trainings::state.eq(state))
-                .load::<Training>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn by_state(ctx: &Context, state: TrainingState) -> QueryResult<Vec<Training>> {
+        select_trainings_by_state(ctx, state).await
     }
 
-    pub async fn load_active() -> QueryResult<Vec<Training>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            trainings::table
-                .filter(trainings::state.eq(TrainingState::Open))
-                .or_filter(trainings::state.eq(TrainingState::Closed))
-                .or_filter(trainings::state.eq(TrainingState::Started))
-                .load::<Training>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn all_active(ctx: &Context) -> QueryResult<Vec<Training>> {
+        select_active_trainings(ctx).await
     }
 
-    pub async fn amount_by_state(state: TrainingState) -> QueryResult<i64> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            trainings::table
-                .filter(trainings::state.eq(state))
-                .count()
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn amount_by_state(ctx: &Context, state: TrainingState) -> QueryResult<i64> {
+        count_trainings_by_state(ctx, state).await
     }
 
-    pub async fn by_id(id: i32) -> QueryResult<Training> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            trainings::table
-                .filter(trainings::id.eq(id))
-                .first::<Training>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn by_id(ctx: &Context, id: i32) -> QueryResult<Training> {
+        select_training_by_id(ctx, id).await
     }
 
-    pub async fn by_id_and_state(id: i32, state: TrainingState) -> QueryResult<Training> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            trainings::table
-                .filter(trainings::id.eq(id))
-                .filter(trainings::state.eq(state))
-                .first::<Training>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn by_id_and_state(
+        ctx: &Context,
+        id: i32,
+        state: TrainingState,
+    ) -> QueryResult<Training> {
+        select_training_by_id_and_state(ctx, id, state).await
     }
 
-    pub async fn set_state(&self, state: TrainingState) -> QueryResult<Training> {
-        let training_id = self.id;
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::update(trainings::table.find(training_id))
-                .set(trainings::state.eq(state))
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn set_state(self, ctx: &Context, state: TrainingState) -> QueryResult<Training> {
+        update_training_state(ctx, self.id, state).await
     }
 
-    pub async fn get_tier(&self) -> Option<QueryResult<Tier>> {
+    pub async fn get_tier(&self, ctx: &Context) -> Option<QueryResult<Tier>> {
         match self.tier_id {
             None => None,
-            Some(id) => {
-                let pool = POOL.clone();
-                Some(
-                    task::spawn_blocking(move || {
-                        tiers::table
-                            .filter(tiers::id.eq(id))
-                            .first::<Tier>(&pool.get().unwrap())
-                    })
-                    .await
-                    .unwrap(),
-                )
-            }
+            Some(id) => Some(select_tier_by_id(ctx, id).await),
         }
     }
 

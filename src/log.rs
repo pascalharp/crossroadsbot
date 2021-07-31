@@ -1,7 +1,7 @@
 use crate::data::LogConfigData;
 use crate::signup_board::SignupBoardAction;
-use serenity::{async_trait, framework::standard::CommandResult, model::prelude::*, prelude::*};
 use diesel::result::Error as DieselError;
+use serenity::{async_trait, framework::standard::CommandResult, model::prelude::*, prelude::*};
 
 pub type LogResult = std::result::Result<String, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -46,9 +46,9 @@ impl DiscordChannelLog for LogResult {
                 } else if let Some(_) = e.downcast_ref::<DieselError>() {
                     return Err(e);
                 } else {
-                    return Ok(())
+                    return Ok(());
                 }
-            },
+            }
             Ok(_) => return Ok(()),
         }
     }
