@@ -10,6 +10,7 @@ use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::result::QueryResult;
 use lazy_static::lazy_static;
 use serenity::client::Context;
+use serenity::model::id::UserId;
 use std::env;
 use std::sync::Arc;
 use tokio::task;
@@ -68,12 +69,30 @@ async fn select_user_by_discord_id(ctx: &Context, discord_id: u64) -> QueryResul
     .unwrap()
 }
 
-async fn select_joined_active_trainings_by_user(ctx: &Context, user_id: i32) -> QueryResult<Vec<Training>> {
+async fn select_all_signups_by_user(ctx: &Context, user_id: i32) -> QueryResult<Vec<Signup>> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
-        let join = signups::table.inner_join(users::table).inner_join(trainings::table);
-        join
-            .filter(users::id.eq(user_id))
+        let join = signups::table
+            .inner_join(users::table)
+            .inner_join(trainings::table);
+        join.filter(users::id.eq(user_id))
+            .select(signups::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_joined_active_trainings_by_user(
+    ctx: &Context,
+    user_id: i32,
+) -> QueryResult<Vec<Training>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = signups::table
+            .inner_join(users::table)
+            .inner_join(trainings::table);
+        join.filter(users::id.eq(user_id))
             .filter(trainings::state.eq(TrainingState::Open))
             .or_filter(trainings::state.eq(TrainingState::Closed))
             .or_filter(trainings::state.eq(TrainingState::Started))
@@ -84,6 +103,27 @@ async fn select_joined_active_trainings_by_user(ctx: &Context, user_id: i32) -> 
     .unwrap()
 }
 
+async fn select_active_signups_trainings_by_user(
+    ctx: &Context,
+    user_id: i32,
+) -> QueryResult<Vec<(Signup, Training)>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = signups::table
+            .inner_join(users::table)
+            .inner_join(trainings::table);
+        join.filter(users::id.eq(user_id))
+            .filter(trainings::state.eq(TrainingState::Open))
+            .or_filter(trainings::state.eq(TrainingState::Closed))
+            .or_filter(trainings::state.eq(TrainingState::Started))
+            .select((signups::all_columns, trainings::all_columns))
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+// TODO remove once done refactoring
 lazy_static! {
     /// Global connection pool for postgresql database. Lazily created on first use
     static ref POOL: Pool<ConnectionManager<PgConnection>> = {
@@ -93,21 +133,10 @@ lazy_static! {
     };
 }
 
+// TODO remove once done refactoring
 /// Retrieves an Arc from the connection pool
 pub fn get_connection() -> Pool<ConnectionManager<PgConnection>> {
     POOL.clone()
-}
-
-pub async fn pool_test() -> QueryResult<Vec<Role>> {
-    let pool = POOL.clone();
-    task::spawn_blocking(move || {
-        let conn = pool.get().unwrap();
-        roles::table
-            .filter(roles::active.eq(true))
-            .load::<Role>(&conn)
-    })
-    .await
-    .unwrap()
 }
 
 /* --- User --- */
@@ -116,33 +145,20 @@ impl User {
         upsert_user(ctx, discord_id, gw2_id).await
     }
 
-    pub async fn get(ctx: &Context, discord_id: u64) -> QueryResult<User> {
-        select_user_by_discord_id(ctx, discord_id).await
+    pub async fn by_discord_id(ctx: &Context, id: UserId) -> QueryResult<User> {
+        select_user_by_discord_id(ctx, *id.as_u64()).await
     }
 
     pub async fn joined_active_trainings(&self, ctx: &Context) -> QueryResult<Vec<Training>> {
         select_joined_active_trainings_by_user(ctx, self.id).await
     }
 
-    pub async fn active_signups(self: Arc<User>) -> QueryResult<Vec<(Signup, Training)>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            Signup::belonging_to(self.as_ref())
-                .inner_join(trainings::table)
-                .filter(trainings::state.eq(TrainingState::Open))
-                .or_filter(trainings::state.eq(TrainingState::Closed))
-                .or_filter(trainings::state.eq(TrainingState::Started))
-                .load(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn active_signups(&self, ctx: &Context) -> QueryResult<Vec<(Signup, Training)>> {
+        select_active_signups_trainings_by_user(ctx, self.id).await
     }
 
-    pub async fn get_all_signups(self: Arc<User>) -> QueryResult<Vec<Signup>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || Signup::belonging_to(self.as_ref()).load(&pool.get().unwrap()))
-            .await
-            .unwrap()
+    pub async fn all_signups(&self, ctx: &Context) -> QueryResult<Vec<Signup>> {
+        select_all_signups_by_user(ctx, self.id).await
     }
 }
 
