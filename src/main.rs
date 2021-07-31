@@ -273,6 +273,7 @@ async fn main() {
             error: None,
         })));
         data.insert::<SignupBoardData>(Arc::new(RwLock::new(SignupBoard::new())));
+        data.insert::<DBPoolData>(Arc::new(db::DBPool::new()));
     }
 
     let shard_manager = client.shard_manager.clone();
