@@ -20,7 +20,7 @@ impl User {
     }
 }
 
-#[derive(Insertable, Debug)]
+#[derive(Insertable, AsChangeset, Debug)]
 #[table_name = "users"]
 pub struct NewUser<'a> {
     pub discord_id: i64,

@@ -3,16 +3,16 @@
 //! is used to hold connections and allowing diesel calls to be move to a blocking thread
 //! with tokio task::spawn_blocking to not block on the executer thread
 
+use crate::data::DBPoolData;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::result::QueryResult;
 use lazy_static::lazy_static;
+use serenity::client::Context;
 use std::env;
 use std::sync::Arc;
 use tokio::task;
-use serenity::client::Context;
-use crate::data::DBPoolData;
 
 pub mod models;
 pub mod schema;
@@ -30,12 +30,7 @@ impl DBPool {
     }
 
     async fn load(ctx: &Context) -> Arc<Self> {
-        ctx.data
-            .read()
-            .await
-            .get::<DBPoolData>()
-            .unwrap()
-            .clone()
+        ctx.data.read().await.get::<DBPoolData>().unwrap().clone()
     }
 
     fn conn(&self) -> PooledConnection<ConnectionManager<PgConnection>> {
@@ -43,12 +38,50 @@ impl DBPool {
     }
 }
 
-
-pub async fn get_user_by_id(ctx: &Context, discord_id: u64) -> QueryResult<User> {
+async fn upsert_user(ctx: &Context, discord_id: u64, gw2_id: String) -> QueryResult<User> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
-        users::table.filter(users::discord_id.eq(discord_id as i64)).first(&pool.conn())
-    }).await.unwrap()
+        let user = NewUser {
+            discord_id: discord_id as i64,
+            gw2_id: &gw2_id,
+        };
+
+        diesel::insert_into(users::table)
+            .values(&user)
+            .on_conflict(users::discord_id)
+            .do_update()
+            .set(&user)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_user_by_discord_id(ctx: &Context, discord_id: u64) -> QueryResult<User> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        users::table
+            .filter(users::discord_id.eq(discord_id as i64))
+            .first(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_joined_active_trainings_by_user(ctx: &Context, user_id: i32) -> QueryResult<Vec<Training>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = signups::table.inner_join(users::table).inner_join(trainings::table);
+        join
+            .filter(users::id.eq(user_id))
+            .filter(trainings::state.eq(TrainingState::Open))
+            .or_filter(trainings::state.eq(TrainingState::Closed))
+            .or_filter(trainings::state.eq(TrainingState::Started))
+            .select(trainings::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
 }
 
 lazy_static! {
@@ -79,31 +112,16 @@ pub async fn pool_test() -> QueryResult<Vec<Role>> {
 
 /* --- User --- */
 impl User {
-    pub async fn add(discord_id: u64, gw2_id: String) -> QueryResult<User> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            let user = NewUser {
-                discord_id: discord_id as i64,
-                gw2_id: &gw2_id,
-            };
-
-            diesel::insert_into(users::table)
-                .values(&user)
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn upsert(ctx: &Context, discord_id: u64, gw2_id: String) -> QueryResult<User> {
+        upsert_user(ctx, discord_id, gw2_id).await
     }
 
-    pub async fn get(discord_id: u64) -> QueryResult<User> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            users::table
-                .filter(users::discord_id.eq(discord_id as i64))
-                .first::<User>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn get(ctx: &Context, discord_id: u64) -> QueryResult<User> {
+        select_user_by_discord_id(ctx, discord_id).await
+    }
+
+    pub async fn joined_active_trainings(&self, ctx: &Context) -> QueryResult<Vec<Training>> {
+        select_joined_active_trainings_by_user(ctx, self.id).await
     }
 
     pub async fn active_signups(self: Arc<User>) -> QueryResult<Vec<(Signup, Training)>> {
@@ -125,18 +143,6 @@ impl User {
         task::spawn_blocking(move || Signup::belonging_to(self.as_ref()).load(&pool.get().unwrap()))
             .await
             .unwrap()
-    }
-
-    pub async fn update_gw2_id(self: Arc<User>, gw2_id: &str) -> QueryResult<User> {
-        let pool = POOL.clone();
-        let gw2_id = String::from(gw2_id);
-        task::spawn_blocking(move || {
-            diesel::update(users::table.find(self.id))
-                .set(users::gw2_id.eq(gw2_id))
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
     }
 }
 

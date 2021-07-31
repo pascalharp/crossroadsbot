@@ -201,7 +201,7 @@ static NOT_SIGNED_UP: &str = "Not signup found for user";
 pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogResult {
     let mut conv = Conversation::start(ctx, user).await?;
 
-    let db_user = match db::User::get(*user.id.as_u64()).await {
+    let db_user = match db::User::get(ctx, *user.id.as_u64()).await {
         Ok(u) => u,
         Err(diesel::NotFound) => {
             let emb = embeds::not_registered_embed();
@@ -396,7 +396,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
 pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogResult {
     let mut conv = Conversation::start(ctx, user).await?;
 
-    let db_user = match db::User::get(*user.id.as_u64()).await {
+    let db_user = match db::User::get(ctx, *user.id.as_u64()).await {
         Ok(u) => u,
         Err(diesel::NotFound) => {
             let emb = embeds::not_registered_embed();
@@ -553,7 +553,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
 pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogResult {
     let mut conv = Conversation::start(ctx, user).await?;
 
-    let db_user = match db::User::get(*user.id.as_u64()).await {
+    let db_user = match db::User::get(ctx, *user.id.as_u64()).await {
         Ok(u) => u,
         Err(diesel::NotFound) => {
             let emb = embeds::not_registered_embed();
@@ -648,7 +648,7 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogR
 pub async fn list_signup(ctx: &Context, user: &User) -> LogResult {
     let mut conv = Conversation::start(ctx, user).await?;
 
-    let db_user = match db::User::get(*user.id.as_u64()).await {
+    let db_user = match db::User::get(ctx, *user.id.as_u64()).await {
         Ok(u) => Arc::new(u),
         Err(diesel::NotFound) => {
             let emb = embeds::not_registered_embed();

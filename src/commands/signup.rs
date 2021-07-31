@@ -6,35 +6,20 @@ use serenity::framework::standard::{
 };
 use serenity::model::prelude::*;
 use serenity::prelude::*;
-use std::sync::Arc;
 
 #[group]
 #[commands(register, join, leave, edit, list)]
 struct Signup;
 
-async fn _register(user: &User, gw2_acc: String) -> LogResult {
+async fn _register(ctx: &Context, user: &User, gw2_acc: String) -> LogResult {
     let re = Regex::new("^[a-zA-Z]{3,27}\\.[0-9]{4}$").unwrap();
     if !re.is_match(&gw2_acc) {
         return Ok("Invalid gw2 account name format".into());
     }
 
-    let user_req = db::User::get(*user.id.as_u64()).await;
-    match user_req {
-        // User already exist. update account name
-        Ok(user) => {
-            let user = Arc::new(user);
-            user.clone().update_gw2_id(&gw2_acc).await?;
-            Ok("Gw2 account name updated".into())
-        }
-        // User does not exist. Create new one
-        Err(diesel::NotFound) => {
-            db::User::add(*user.id.as_u64(), gw2_acc.clone()).await?;
-            Ok("Gw2 account name registered".into())
-        }
-        Err(e) => {
-            return Err(e.into());
-        }
-    }
+    // this is an update on conflict
+    let new_user = db::User::upsert(ctx, *user.id.as_u64(), gw2_acc.clone()).await?;
+    Ok(format!("Gw2 account set to: {}", new_user.gw2_id))
 }
 
 #[command]
@@ -44,7 +29,7 @@ async fn _register(user: &User, gw2_acc: String) -> LogResult {
 #[num_args(1)]
 pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let acc_name = args.single::<String>()?;
-    let res = _register(&msg.author, acc_name).await;
+    let res = _register(ctx, &msg.author, acc_name).await;
     res.reply(ctx, msg).await?;
     res.log(ctx, msg.into(), &msg.author).await;
     Ok(())
