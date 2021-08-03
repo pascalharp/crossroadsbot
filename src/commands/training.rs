@@ -181,12 +181,8 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             Some(t) => Some(t.id),
             None => None,
         };
-        let new_training = db::NewTraining {
-            title: String::from(training_name),
-            date: training_time,
-            tier_id: training_tier_id,
-        };
-        let training = match new_training.add().await {
+
+        let training = match db::Training::insert(ctx, training_name, training_time, training_tier_id).await {
             Err(e) => {
                 msg.reply(ctx, format!("{}", e)).await?;
                 return Ok(());
@@ -195,7 +191,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         };
 
         for r in &selected {
-            match training.add_role(r.id).await {
+            match training.add_role(ctx, r.id).await {
                 Err(e) => {
                     msg.reply(ctx, format!("{}", e)).await?;
                     return Ok(());
@@ -268,7 +264,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     }
 
     let roles: Vec<db::Role> = {
-        let stream = stream::iter(training.clone().get_training_roles().await?);
+        let stream = stream::iter(training.get_training_roles(ctx).await?);
         stream
             .filter_map(|r| async move {
                 // Ignores deactivated roles
@@ -567,6 +563,7 @@ pub async fn info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     };
 
     let training = match db::Training::by_id(ctx, training_id).await {
+        // TODO without Arc
         Ok(t) => Arc::new(t),
         Err(diesel::NotFound) => {
             msg.reply(ctx, "Training not found").await?;
@@ -579,19 +576,17 @@ pub async fn info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     };
 
     let signups = training
-        .clone()
-        .get_signups()
+        .get_signups(ctx)
         .await?
         .into_iter()
         .map(|s| Arc::new(s))
         .collect::<Vec<_>>();
 
     let mut roles = training
-        .clone()
-        .all_roles()
+        .all_roles(ctx)
         .await?
         .into_iter()
-        .map(|(_, r)| (r, 0))
+        .map(|r| (r, 0))
         .collect::<HashMap<db::Role, u32>>();
 
     let signed_up_roles = future::try_join_all(signups.iter().map(|s| s.clone().get_roles()))
@@ -708,7 +703,7 @@ pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
     }
 
     for training in trainings {
-        let signups = match training.clone().get_signups().await {
+        let signups = match training.get_signups(ctx).await {
             Ok(s) => s,
             Err(e) => {
                 msg.reply(ctx, "Unexpected error loading signups").await?;

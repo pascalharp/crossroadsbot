@@ -22,9 +22,9 @@ impl User {
 
 #[derive(Insertable, AsChangeset, Debug)]
 #[table_name = "users"]
-pub struct NewUser<'a> {
+pub(super) struct NewUser {
     pub discord_id: i64,
-    pub gw2_id: &'a str,
+    pub gw2_id: String,
 }
 
 #[derive(Identifiable, Queryable, Associations, Clone, PartialEq, Debug)]
@@ -94,7 +94,7 @@ pub struct Training {
 
 #[derive(Insertable, Debug)]
 #[table_name = "trainings"]
-pub struct NewTraining {
+pub(super) struct NewTraining {
     pub title: String,
     pub date: NaiveDateTime,
     pub tier_id: Option<i32>,
@@ -139,8 +139,8 @@ pub struct NewSignupRole {
 #[belongs_to(Training)]
 #[belongs_to(Role)]
 #[table_name = "training_roles"]
+#[primary_key(training_id, role_id)]
 pub struct TrainingRole {
-    pub id: i32,
     pub training_id: i32,
     pub role_id: i32,
 }

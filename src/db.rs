@@ -14,6 +14,7 @@ use serenity::model::id::UserId;
 use std::env;
 use std::sync::Arc;
 use tokio::task;
+use chrono::NaiveDateTime;
 
 pub mod models;
 pub mod schema;
@@ -39,14 +40,10 @@ impl DBPool {
     }
 }
 
-async fn upsert_user(ctx: &Context, discord_id: u64, gw2_id: String) -> QueryResult<User> {
+// Insert und Upsert
+async fn upsert_user(ctx: &Context, user: NewUser) -> QueryResult<User> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
-        let user = NewUser {
-            discord_id: discord_id as i64,
-            gw2_id: &gw2_id,
-        };
-
         diesel::insert_into(users::table)
             .values(&user)
             .on_conflict(users::discord_id)
@@ -58,6 +55,29 @@ async fn upsert_user(ctx: &Context, discord_id: u64, gw2_id: String) -> QueryRes
     .unwrap()
 }
 
+async fn insert_training(ctx: &Context, t: NewTraining) -> QueryResult<Training> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::insert_into(trainings::table)
+            .values(&t)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn insert_training_role(ctx: &Context, tr: NewTrainingRole) -> QueryResult<TrainingRole> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::insert_into(training_roles::table)
+            .values(&tr)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+// Select
 async fn select_user_by_discord_id(ctx: &Context, discord_id: u64) -> QueryResult<User> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -182,6 +202,70 @@ async fn select_active_trainings(ctx: &Context) -> QueryResult<Vec<Training>> {
     .unwrap()
 }
 
+async fn select_signups_by_training(ctx: &Context, id: i32) -> QueryResult<Vec<Signup>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = signups::table.inner_join(trainings::table);
+        join.filter(trainings::id.eq(id))
+            .select(signups::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_tier_by_id(ctx: &Context, id: i32) -> QueryResult<Tier> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || tiers::table.find(id).first(&pool.conn()))
+        .await
+        .unwrap()
+}
+
+async fn select_training_roles_by_training(
+    ctx: &Context,
+    id: i32,
+) -> QueryResult<Vec<TrainingRole>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = training_roles::table.inner_join(trainings::table);
+        join.filter(trainings::id.eq(id))
+            .select(training_roles::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_roles_by_training(ctx: &Context, id: i32) -> QueryResult<Vec<Role>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = training_roles::table
+            .inner_join(trainings::table)
+            .inner_join(roles::table);
+        join.filter(trainings::id.eq(id))
+            .select(roles::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_active_roles_by_training(ctx: &Context, id: i32) -> QueryResult<Vec<Role>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = training_roles::table
+            .inner_join(trainings::table)
+            .inner_join(roles::table);
+        join.filter(trainings::id.eq(id))
+            .filter(roles::active.eq(true))
+            .select(roles::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+// Count
 async fn count_trainings_by_state(ctx: &Context, state: TrainingState) -> QueryResult<i64> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -194,6 +278,7 @@ async fn count_trainings_by_state(ctx: &Context, state: TrainingState) -> QueryR
     .unwrap()
 }
 
+// Update
 async fn update_training_state(
     ctx: &Context,
     id: i32,
@@ -209,11 +294,19 @@ async fn update_training_state(
     .unwrap()
 }
 
-async fn select_tier_by_id(ctx: &Context, id: i32) -> QueryResult<Tier> {
+async fn update_training_tier(
+    ctx: &Context,
+    id: i32,
+    tier_id: Option<i32>,
+) -> QueryResult<Training> {
     let pool = DBPool::load(ctx).await;
-    task::spawn_blocking(move || tiers::table.find(id).first(&pool.conn()))
-        .await
-        .unwrap()
+    task::spawn_blocking(move || {
+        diesel::update(trainings::table.find(id))
+            .set(trainings::tier_id.eq(tier_id))
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
 }
 
 // TODO remove once done refactoring
@@ -235,7 +328,11 @@ pub fn get_connection() -> Pool<ConnectionManager<PgConnection>> {
 /* --- User --- */
 impl User {
     pub async fn upsert(ctx: &Context, discord_id: u64, gw2_id: String) -> QueryResult<User> {
-        upsert_user(ctx, discord_id, gw2_id).await
+        let user = NewUser {
+            discord_id: discord_id as i64,
+            gw2_id,
+        };
+        upsert_user(ctx, user).await
     }
 
     pub async fn by_discord_id(ctx: &Context, id: UserId) -> QueryResult<User> {
@@ -257,6 +354,15 @@ impl User {
 
 /* -- Training -- */
 impl Training {
+    pub async fn insert(ctx: &Context, title: String, date: NaiveDateTime, tier_id: Option<i32>) -> QueryResult<Training> {
+        let t = NewTraining {
+            title,
+            date,
+            tier_id
+        };
+        insert_training(ctx, t).await
+    }
+
     pub async fn by_state(ctx: &Context, state: TrainingState) -> QueryResult<Vec<Training>> {
         select_trainings_by_state(ctx, state).await
     }
@@ -292,88 +398,36 @@ impl Training {
         }
     }
 
-    pub async fn set_tier(&self, tier: Option<i32>) -> QueryResult<Training> {
-        let training_id = self.id;
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::update(trainings::table.find(training_id))
-                .set(trainings::tier_id.eq(tier))
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn set_tier(&self, ctx: &Context, tier_id: Option<i32>) -> QueryResult<Training> {
+        update_training_tier(ctx, self.id, tier_id).await
     }
 
-    pub async fn get_signups(self: Arc<Training>) -> QueryResult<Vec<Signup>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || Signup::belonging_to(self.as_ref()).load(&pool.get().unwrap()))
-            .await
-            .unwrap()
+    pub async fn get_signups(&self, ctx: &Context) -> QueryResult<Vec<Signup>> {
+        select_signups_by_training(ctx, self.id).await
     }
 
-    pub async fn add_role(&self, role_id: i32) -> QueryResult<TrainingRole> {
+    pub async fn add_role(&self, ctx: &Context, role_id: i32) -> QueryResult<TrainingRole> {
         let training_role = NewTrainingRole {
             training_id: self.id,
             role_id,
         };
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::insert_into(training_roles::table)
-                .values(&training_role)
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+        insert_training_role(ctx, training_role).await
     }
 
-    pub async fn get_training_roles(self: Arc<Training>) -> QueryResult<Vec<TrainingRole>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            TrainingRole::belonging_to(self.as_ref()).load(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn get_training_roles(&self, ctx: &Context) -> QueryResult<Vec<TrainingRole>> {
+        select_training_roles_by_training(ctx, self.id).await
     }
 
-    pub async fn all_roles(self: Arc<Training>) -> QueryResult<Vec<(TrainingRole, Role)>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            TrainingRole::belonging_to(self.as_ref())
-                .inner_join(roles::table)
-                .load(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn all_roles(&self, ctx: &Context) -> QueryResult<Vec<Role>> {
+        select_roles_by_training(ctx, self.id).await
     }
 
-    pub async fn active_roles(self: Arc<Training>) -> QueryResult<Vec<(TrainingRole, Role)>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            TrainingRole::belonging_to(self.as_ref())
-                .inner_join(roles::table)
-                .filter(roles::active.eq(true))
-                .load(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
-    }
-}
-
-impl NewTraining {
-    pub async fn add(self: NewTraining) -> QueryResult<Training> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::insert_into(trainings::table)
-                .values(&self)
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn active_roles(&self, ctx: &Context) -> QueryResult<Vec<Role>> {
+        select_active_roles_by_training(ctx, self.id).await
     }
 }
 
 /* -- Signup -- */
-
 impl Signup {
     pub async fn get_training(&self) -> QueryResult<Training> {
         let training_id = self.training_id;

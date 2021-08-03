@@ -215,7 +215,7 @@ async fn _remove(ctx: &Context, channel: ChannelId, author: UserId, mut args: Ar
         r.delete().await?;
     }
     for t in trainings {
-        t.set_tier(None).await?;
+        t.set_tier(ctx, None).await?;
     }
     match Arc::try_unwrap(tier) {
         Ok(t) => {
