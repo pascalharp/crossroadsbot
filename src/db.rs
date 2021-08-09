@@ -4,6 +4,7 @@
 //! with tokio task::spawn_blocking to not block on the executer thread
 
 use crate::data::DBPoolData;
+use chrono::NaiveDateTime;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
@@ -14,7 +15,6 @@ use serenity::model::id::UserId;
 use std::env;
 use std::sync::Arc;
 use tokio::task;
-use chrono::NaiveDateTime;
 
 pub mod models;
 pub mod schema;
@@ -77,7 +77,34 @@ async fn insert_training_role(ctx: &Context, tr: NewTrainingRole) -> QueryResult
     .unwrap()
 }
 
+// Delete
+async fn delete_signup_roles_by_signup(ctx: &Context, id: i32) -> QueryResult<usize> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::delete(signup_roles::table.filter(signup_roles::signup_id.eq(id)))
+            .execute(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn delete_signup_by_id(ctx: &Context, id: i32) -> QueryResult<usize> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::delete(signups::table.filter(signups::id.eq(id)))
+            .execute(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
 // Select
+async fn select_user_by_id(ctx: &Context, id: i32) -> QueryResult<User> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || users::table.find(id).first(&pool.conn()))
+        .await
+        .unwrap()
+}
+
 async fn select_user_by_discord_id(ctx: &Context, discord_id: u64) -> QueryResult<User> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -214,6 +241,22 @@ async fn select_signups_by_training(ctx: &Context, id: i32) -> QueryResult<Vec<S
     .unwrap()
 }
 
+async fn select_signup_by_user_and_training(
+    ctx: &Context,
+    user_id: i32,
+    training_id: i32,
+) -> QueryResult<Signup> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        signups::table
+            .filter(signups::user_id.eq(user_id))
+            .filter(signups::training_id.eq(training_id))
+            .first(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn select_tier_by_id(ctx: &Context, id: i32) -> QueryResult<Tier> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || tiers::table.find(id).first(&pool.conn()))
@@ -258,6 +301,20 @@ async fn select_active_roles_by_training(ctx: &Context, id: i32) -> QueryResult<
             .inner_join(roles::table);
         join.filter(trainings::id.eq(id))
             .filter(roles::active.eq(true))
+            .select(roles::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_roles_by_signup(ctx: &Context, id: i32) -> QueryResult<Vec<Role>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = signup_roles::table
+            .inner_join(signups::table)
+            .inner_join(roles::table);
+        join.filter(signups::id.eq(id))
             .select(roles::all_columns)
             .load(&pool.conn())
     })
@@ -354,11 +411,16 @@ impl User {
 
 /* -- Training -- */
 impl Training {
-    pub async fn insert(ctx: &Context, title: String, date: NaiveDateTime, tier_id: Option<i32>) -> QueryResult<Training> {
+    pub async fn insert(
+        ctx: &Context,
+        title: String,
+        date: NaiveDateTime,
+        tier_id: Option<i32>,
+    ) -> QueryResult<Training> {
         let t = NewTraining {
             title,
             date,
-            tier_id
+            tier_id,
         };
         insert_training(ctx, t).await
     }
@@ -429,72 +491,32 @@ impl Training {
 
 /* -- Signup -- */
 impl Signup {
-    pub async fn get_training(&self) -> QueryResult<Training> {
-        let training_id = self.training_id;
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            trainings::table
-                .filter(trainings::id.eq(training_id))
-                .first::<Training>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn get_training(&self, ctx: &Context) -> QueryResult<Training> {
+        select_training_by_id(ctx, self.training_id).await
     }
 
-    pub async fn get_user(&self) -> QueryResult<User> {
-        let user_id = self.user_id;
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            users::table
-                .filter(users::id.eq(user_id))
-                .first::<User>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn get_user(&self, ctx: &Context) -> QueryResult<User> {
+        select_user_by_id(ctx, self.user_id).await
     }
 
-    pub async fn get_roles(self: Arc<Signup>) -> QueryResult<Vec<(SignupRole, Role)>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            SignupRole::belonging_to(self.as_ref())
-                .inner_join(roles::table)
-                .load(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn get_roles(&self, ctx: &Context) -> QueryResult<Vec<Role>> {
+        select_roles_by_signup(ctx, self.id).await
     }
 
-    pub async fn clear_roles(self: Arc<Signup>) -> QueryResult<usize> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::delete(SignupRole::belonging_to(self.as_ref())).execute(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn clear_roles(&self, ctx: &Context) -> QueryResult<usize> {
+        delete_signup_roles_by_signup(ctx, self.id).await
     }
 
-    pub async fn by_user_and_training(u: &User, t: &Training) -> QueryResult<Signup> {
-        let training_id = t.id;
-        let user_id = u.id;
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            signups::table
-                .filter(signups::user_id.eq(user_id))
-                .filter(signups::training_id.eq(training_id))
-                .first::<Signup>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn by_user_and_training(
+        ctx: &Context,
+        u: &User,
+        t: &Training,
+    ) -> QueryResult<Signup> {
+        select_signup_by_user_and_training(ctx, u.id, t.id).await
     }
 
-    pub async fn remove(self) -> QueryResult<usize> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::delete(signups::table.filter(signups::id.eq(self.id)))
-                .execute(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn remove(self, ctx: &Context) -> QueryResult<usize> {
+        delete_signup_by_id(ctx, self.id).await
     }
 }
 

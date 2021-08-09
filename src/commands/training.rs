@@ -182,13 +182,14 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             None => None,
         };
 
-        let training = match db::Training::insert(ctx, training_name, training_time, training_tier_id).await {
-            Err(e) => {
-                msg.reply(ctx, format!("{}", e)).await?;
-                return Ok(());
-            }
-            Ok(t) => t,
-        };
+        let training =
+            match db::Training::insert(ctx, training_name, training_time, training_tier_id).await {
+                Err(e) => {
+                    msg.reply(ctx, format!("{}", e)).await?;
+                    return Ok(());
+                }
+                Ok(t) => t,
+            };
 
         for r in &selected {
             match training.add_role(ctx, r.id).await {
@@ -589,11 +590,10 @@ pub async fn info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         .map(|r| (r, 0))
         .collect::<HashMap<db::Role, u32>>();
 
-    let signed_up_roles = future::try_join_all(signups.iter().map(|s| s.clone().get_roles()))
+    let signed_up_roles = future::try_join_all(signups.iter().map(|s| s.get_roles(ctx)))
         .await?
         .into_iter()
         .flatten()
-        .map(|(_, r)| r)
         .collect::<Vec<_>>();
 
     for sr in signed_up_roles {
@@ -712,7 +712,7 @@ pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
         };
 
         for s in signups {
-            let user = match s.get_user().await {
+            let user = match s.get_user(ctx).await {
                 Ok(u) => u,
                 Err(_) => {
                     log.push(String::from(format!(
@@ -724,8 +724,8 @@ pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             };
 
             let s = Arc::new(s);
-            let roles = match s.clone().get_roles().await {
-                Ok(v) => v.into_iter().map(|(_, r)| r).collect::<Vec<db::Role>>(),
+            let roles = match s.clone().get_roles(ctx).await {
+                Ok(v) => v.into_iter().collect::<Vec<db::Role>>(),
                 Err(_) => {
                     log.push(String::from(format!(
                         "Error loading roles for signup with id {}. Skipped",

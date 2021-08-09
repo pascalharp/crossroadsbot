@@ -266,7 +266,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
     };
 
     // Check if signup already exist
-    match db::Signup::by_user_and_training(&db_user, &training).await {
+    match db::Signup::by_user_and_training(ctx, &db_user, &training).await {
         Ok(_) => {
             conv.msg
                 .edit(ctx, |m| {
@@ -436,7 +436,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
             }
         };
 
-    let signup = match db::Signup::by_user_and_training(&db_user, &training.clone()).await {
+    let signup = match db::Signup::by_user_and_training(ctx, &db_user, &training.clone()).await {
         Ok(s) => Arc::new(s),
         Err(diesel::NotFound) => {
             conv.msg
@@ -471,10 +471,9 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
     let mut selected: HashSet<&db::Role> = HashSet::new();
     let mut unselected: HashSet<&db::Role> = HashSet::new();
 
-    match signup.clone().get_roles().await {
+    match signup.clone().get_roles(ctx).await {
         Ok(v) => {
-            // this seems rather inefficient. Consider rework
-            let set = v.into_iter().map(|(_, r)| r).collect::<HashSet<_>>();
+            let set = v.into_iter().collect::<HashSet<_>>();
             for r in &roles {
                 if set.contains(r) {
                     selected.insert(r);
@@ -510,7 +509,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
         }
     };
 
-    if let Err(e) = signup.clone().clear_roles().await {
+    if let Err(e) = signup.clear_roles(ctx).await {
         conv.unexpected_error(ctx).await?;
         return Err(e.into());
     }
@@ -594,7 +593,7 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogR
             }
         };
 
-    let signup = match db::Signup::by_user_and_training(&db_user, &training.clone()).await {
+    let signup = match db::Signup::by_user_and_training(ctx, &db_user, &training).await {
         Ok(s) => s,
         Err(diesel::NotFound) => {
             conv.msg
@@ -623,7 +622,7 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogR
         }
     };
 
-    match signup.remove().await {
+    match signup.remove(ctx).await {
         Ok(1) => (),
         Ok(a) => {
             conv.unexpected_error(ctx).await?;
@@ -685,8 +684,8 @@ pub async fn list_signup(ctx: &Context, user: &User) -> LogResult {
 
     let mut roles: HashMap<i32, Vec<db::Role>> = HashMap::with_capacity(signups.len());
     for (s, _) in &signups {
-        let signup_roles = match s.clone().get_roles().await {
-            Ok(v) => v.into_iter().map(|(_, r)| r).collect::<Vec<_>>(),
+        let signup_roles = match s.clone().get_roles(ctx).await {
+            Ok(v) => v.into_iter().collect::<Vec<_>>(),
             Err(e) => {
                 conv.unexpected_error(ctx).await?;
                 return Err(e.into());
