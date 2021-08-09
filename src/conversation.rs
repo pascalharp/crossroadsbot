@@ -295,13 +295,8 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
         }
     };
 
-    let new_signup = db::NewSignup {
-        training_id: training.id,
-        user_id: db_user.id,
-    };
-
     // register new signup
-    let signup = match new_signup.add().await {
+    let signup = match db::Signup::insert(ctx, &db_user, &training).await {
         Ok(s) => s,
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -357,13 +352,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
 
     // Save roles
     conv.msg.edit(ctx, |m| m.content("Saving roles...")).await?;
-    let futs = selected.iter().map(|r| {
-        let new_signup_role = db::NewSignupRole {
-            role_id: r.id,
-            signup_id: signup.id,
-        };
-        new_signup_role.add()
-    });
+    let futs = selected.iter().map(|r| signup.add_role(ctx, &r));
     match future::try_join_all(futs).await {
         Ok(r) => {
             conv.msg
@@ -514,15 +503,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
         return Err(e.into());
     }
 
-    match future::try_join_all(selected.iter().map(|r| {
-        let new_signup_role = db::NewSignupRole {
-            role_id: r.id,
-            signup_id: signup.id,
-        };
-        new_signup_role.add()
-    }))
-    .await
-    {
+    match future::try_join_all(selected.iter().map(|r| signup.add_role(ctx, &r))).await {
         Ok(_) => {
             conv.msg
                 .edit(ctx, |m| {

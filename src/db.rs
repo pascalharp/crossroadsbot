@@ -77,6 +77,28 @@ async fn insert_training_role(ctx: &Context, tr: NewTrainingRole) -> QueryResult
     .unwrap()
 }
 
+async fn insert_signup(ctx: &Context, s: NewSignup) -> QueryResult<Signup> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::insert_into(signups::table)
+            .values(&s)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn insert_signup_role(ctx: &Context, sr: NewSignupRole) -> QueryResult<SignupRole> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::insert_into(signup_roles::table)
+            .values(&sr)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 // Delete
 async fn delete_signup_roles_by_signup(ctx: &Context, id: i32) -> QueryResult<usize> {
     let pool = DBPool::load(ctx).await;
@@ -91,8 +113,7 @@ async fn delete_signup_roles_by_signup(ctx: &Context, id: i32) -> QueryResult<us
 async fn delete_signup_by_id(ctx: &Context, id: i32) -> QueryResult<usize> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
-        diesel::delete(signups::table.filter(signups::id.eq(id)))
-            .execute(&pool.conn())
+        diesel::delete(signups::table.filter(signups::id.eq(id))).execute(&pool.conn())
     })
     .await
     .unwrap()
@@ -491,6 +512,22 @@ impl Training {
 
 /* -- Signup -- */
 impl Signup {
+    pub async fn insert(ctx: &Context, user: &User, training: &Training) -> QueryResult<Self> {
+        let new_signup = NewSignup {
+            user_id: user.id,
+            training_id: training.id,
+        };
+        insert_signup(ctx, new_signup).await
+    }
+
+    pub async fn add_role(&self, ctx: &Context, role: &Role) -> QueryResult<SignupRole> {
+        let sr = NewSignupRole {
+            signup_id: self.id,
+            role_id: role.id,
+        };
+        insert_signup_role(ctx, sr).await
+    }
+
     pub async fn get_training(&self, ctx: &Context) -> QueryResult<Training> {
         select_training_by_id(ctx, self.training_id).await
     }
@@ -517,32 +554,6 @@ impl Signup {
 
     pub async fn remove(self, ctx: &Context) -> QueryResult<usize> {
         delete_signup_by_id(ctx, self.id).await
-    }
-}
-
-impl NewSignupRole {
-    pub async fn add(self) -> QueryResult<SignupRole> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::insert_into(signup_roles::table)
-                .values(self)
-                .get_result::<SignupRole>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
-    }
-}
-
-impl NewSignup {
-    pub async fn add(self) -> QueryResult<Signup> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::insert_into(signups::table)
-                .values(&self)
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
     }
 }
 

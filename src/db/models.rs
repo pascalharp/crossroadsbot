@@ -122,15 +122,15 @@ pub struct NewRole {
 #[belongs_to(Signup)]
 #[belongs_to(Role)]
 #[table_name = "signup_roles"]
+#[primary_key(signup_id, role_id)]
 pub struct SignupRole {
-    pub id: i32,
     pub signup_id: i32,
     pub role_id: i32,
 }
 
 #[derive(Insertable, Debug)]
 #[table_name = "signup_roles"]
-pub struct NewSignupRole {
+pub(super) struct NewSignupRole {
     pub signup_id: i32,
     pub role_id: i32,
 }
