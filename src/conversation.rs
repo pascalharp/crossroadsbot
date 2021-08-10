@@ -313,14 +313,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
         })
         .await?;
 
-    // training role mapping
-    let training_roles = training.get_training_roles(ctx).await?;
-    // The actual roles. ignoring deactivated ones (or db load errors in general)
-    let roles: Vec<db::Role> = future::join_all(training_roles.iter().map(|tr| tr.role()))
-        .await
-        .into_iter()
-        .filter_map(|r| r.ok())
-        .collect();
+    let roles = training.active_roles(ctx).await?;
 
     // Create sets for selected and unselected
     let selected: HashSet<&db::Role> = HashSet::with_capacity(roles.len());
@@ -454,13 +447,12 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
         }
     };
 
-    let training_roles = training.get_training_roles(ctx).await?;
-    let roles = future::try_join_all(training_roles.iter().map(|r| r.role())).await?;
+    let roles = training.active_roles(ctx).await?;
 
     let mut selected: HashSet<&db::Role> = HashSet::new();
     let mut unselected: HashSet<&db::Role> = HashSet::new();
 
-    match signup.clone().get_roles(ctx).await {
+    match signup.get_roles(ctx).await {
         Ok(v) => {
             let set = v.into_iter().collect::<HashSet<_>>();
             for r in &roles {

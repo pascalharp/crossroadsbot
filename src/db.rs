@@ -66,6 +66,17 @@ async fn insert_training(ctx: &Context, t: NewTraining) -> QueryResult<Training>
     .unwrap()
 }
 
+async fn insert_role(ctx: &Context, r: NewRole) -> QueryResult<Role> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::insert_into(roles::table)
+            .values(&r)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn insert_training_role(ctx: &Context, tr: NewTrainingRole) -> QueryResult<TrainingRole> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -300,6 +311,53 @@ async fn select_training_roles_by_training(
     .unwrap()
 }
 
+async fn select_roles_by_active(ctx: &Context, active: bool) -> QueryResult<Vec<Role>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        roles::table
+            .filter(roles::active.eq(active))
+            .get_results(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+//async fn select_roles_by_active_and_emoji(ctx: &Context, active: bool, emoji_id: i64) -> QueryResult<Vec<Role>> {
+//    let pool = DBPool::load(ctx).await;
+//    task::spawn_blocking(move || {
+//        roles::table
+//            .filter(roles::active.eq(active))
+//            .filter(roles::emoji.eq(emoji_id))
+//            .get_results(&pool.conn())
+//    })
+//    .await
+//    .unwrap()
+//}
+
+async fn select_active_role_by_emoji(ctx: &Context, emoji_id: i64) -> QueryResult<Role> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        roles::table
+            .filter(roles::active.eq(true))
+            .filter(roles::emoji.eq(emoji_id))
+            .first(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_active_role_by_repr(ctx: &Context, repr: String) -> QueryResult<Role> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        roles::table
+            .filter(roles::active.eq(true))
+            .filter(roles::repr.eq(repr))
+            .first(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn select_roles_by_training(ctx: &Context, id: i32) -> QueryResult<Vec<Role>> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -381,6 +439,17 @@ async fn update_training_tier(
     task::spawn_blocking(move || {
         diesel::update(trainings::table.find(id))
             .set(trainings::tier_id.eq(tier_id))
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn update_role_active(ctx: &Context, id: i32, active: bool) -> QueryResult<Role> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::update(roles::table.find(id))
+            .set(roles::active.eq(active))
             .get_result(&pool.conn())
     })
     .await
@@ -560,99 +629,38 @@ impl Signup {
 /* -- Role -- */
 
 impl Role {
+    pub async fn insert(
+        ctx: &Context,
+        title: String,
+        repr: String,
+        emoji: u64,
+    ) -> QueryResult<Role> {
+        let r = NewRole {
+            title,
+            repr,
+            emoji: emoji as i64,
+        };
+        insert_role(ctx, r).await
+    }
+
     /// Deactivates the role but keeps it in database
-    pub async fn deactivate(self) -> QueryResult<Role> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::update(roles::table.find(self.id))
-                .set(roles::active.eq(false))
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn deactivate(self, ctx: &Context) -> QueryResult<Role> {
+        update_role_active(ctx, self.id, false).await
     }
 
     /// Loads all active roles
-    pub async fn all() -> QueryResult<Vec<Role>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            roles::table
-                .filter(roles::active.eq(true))
-                .load::<Role>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn all_active(ctx: &Context) -> QueryResult<Vec<Role>> {
+        select_roles_by_active(ctx, true).await
     }
 
     /// Loads the current active role associated with provided emoji
-    pub async fn by_emoji(emoji: u64) -> QueryResult<Role> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            roles::table
-                .filter(roles::active.eq(true))
-                .filter(roles::emoji.eq(emoji as i64))
-                .first::<Role>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn by_emoji(ctx: &Context, emoji: u64) -> QueryResult<Role> {
+        select_active_role_by_emoji(ctx, emoji as i64).await
     }
 
     /// Loads the current active role with specified repr
-    pub async fn by_repr(repr: String) -> QueryResult<Role> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            roles::table
-                .filter(roles::active.eq(true))
-                .filter(roles::repr.eq(repr))
-                .first::<Role>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
-    }
-}
-
-impl NewRole {
-    pub async fn add(self) -> QueryResult<Role> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::insert_into(roles::table)
-                .values(&self)
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
-    }
-}
-
-// --- TrainingRole ---
-
-impl TrainingRole {
-    /// Ignores deactivated roles. To load deactivated roles as well use
-    /// role_unfilterd
-    pub async fn role(&self) -> QueryResult<Role> {
-        let role_id = self.role_id;
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            roles::table
-                .filter(roles::active.eq(true))
-                .filter(roles::id.eq(role_id))
-                .first::<Role>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
-    }
-
-    /// Like role() but also loads deactivated roles
-    pub async fn role_unfilterd(&self) -> QueryResult<Role> {
-        let role_id = self.role_id;
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            roles::table
-                .filter(roles::id.eq(role_id))
-                .first::<Role>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn by_repr(ctx: &Context, repr: String) -> QueryResult<Role> {
+        select_active_role_by_repr(ctx, repr).await
     }
 }
 

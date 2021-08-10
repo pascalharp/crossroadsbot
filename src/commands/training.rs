@@ -10,7 +10,7 @@ use serenity::framework::standard::{
     macros::{command, group},
     ArgError, Args, CommandResult,
 };
-use serenity::futures::{prelude::*, stream};
+use serenity::futures::prelude::*;
 use serenity::http::AttachmentType;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
@@ -94,7 +94,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         .edit(ctx, |m| m.content("Loading roles..."))
         .await?;
     // Get roles and turn them into a HashMap with Emojis
-    let roles = db::Role::all().await?;
+    let roles = db::Role::all_active(ctx).await?;
     // Keep track of what roles are selected by EmojiId
     let mut selected: HashSet<&db::Role> = HashSet::new();
     let mut unselected: HashSet<&db::Role> = HashSet::new();
@@ -264,16 +264,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         _ => (),
     }
 
-    let roles: Vec<db::Role> = {
-        let stream = stream::iter(training.get_training_roles(ctx).await?);
-        stream
-            .filter_map(|r| async move {
-                // Ignores deactivated roles
-                r.role().await.ok()
-            })
-            .collect()
-            .await
-    };
+    let roles = training.active_roles(ctx).await?;
 
     let (tier, tier_roles) = {
         let tier = training.get_tier(ctx).await;

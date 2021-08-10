@@ -26,7 +26,7 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
     }
 
     // load all roles from db
-    let roles = db::Role::all().await?;
+    let roles = db::Role::all_active(ctx).await?;
     let db_emojis: Vec<EmojiId> = roles
         .iter()
         .map(|r| EmojiId::from(r.emoji as u64))
@@ -149,13 +149,7 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
     if let Some(e) = utils::await_yes_or_no(ctx, &msg, Some(author)).await {
         match e {
             utils::YesOrNo::Yes => {
-                let new_role = db::NewRole {
-                    title: String::from(role_name),
-                    repr: String::from(role_repr),
-                    emoji: *emoji_id.as_u64() as i64,
-                };
-
-                new_role.add().await?;
+                db::Role::insert(ctx, role_name, role_repr, *emoji_id.as_u64()).await?;
             }
             utils::YesOrNo::No => {
                 return Ok("Aborted".into());
@@ -193,7 +187,7 @@ pub async fn add(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 #[num_args(1)]
 pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let role_repr = args.single::<String>()?;
-    let role = match db::Role::by_repr(role_repr.clone()).await {
+    let role = match db::Role::by_repr(ctx, role_repr).await {
         Ok(r) => r,
         Err(e) => match e {
             diesel::result::Error::NotFound => {
@@ -207,7 +201,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
         },
     };
 
-    role.deactivate().await?;
+    role.deactivate(ctx).await?;
 
     let res: LogResult = Ok("Role removed".into());
     res.reply(ctx, msg).await?;
@@ -224,7 +218,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
 #[only_in("guild")]
 #[num_args(0)]
 pub async fn list(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
-    let roles = db::Role::all().await?;
+    let roles = db::Role::all_active(ctx).await?;
 
     msg.channel_id
         .send_message(ctx, |m| {

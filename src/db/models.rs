@@ -112,7 +112,7 @@ pub struct Role {
 
 #[derive(Insertable, Debug)]
 #[table_name = "roles"]
-pub struct NewRole {
+pub(super) struct NewRole {
     pub title: String,
     pub repr: String,
     pub emoji: i64,
