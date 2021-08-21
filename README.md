@@ -18,6 +18,8 @@ Example: *DATABASE\_URL=postgres://username:password@localhost/crossroad*
 ### DISCORD\_TOKEN
 The discord bot token to be used. [Check here](https://discord.com/developers/docs/intro) for more
 information.
+### APPLICATION\_ID
+The application id of the bot. This is required to use buttons
 ### MAIN\_GUILD\_ID
 The main discord guild id the bot will be used on. This is also the discord where role
 permissions are taken from

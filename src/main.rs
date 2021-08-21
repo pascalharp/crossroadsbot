@@ -219,6 +219,10 @@ async fn main() {
     }
 
     let token = env::var("DISCORD_TOKEN").expect("discord token not set");
+    let app_id = env::var("APPLICATION_ID")
+        .expect("application id not set")
+        .parse::<u64>()
+        .expect("Failed to parse application id");
 
     let main_guild_id = GuildId::from(
         env::var("MAIN_GUILD_ID")
@@ -264,6 +268,7 @@ async fn main() {
         .group(&commands::MISC_GROUP);
 
     let mut client = Client::builder(token)
+        .application_id(app_id)
         .framework(framework)
         .event_handler(Handler)
         .await
