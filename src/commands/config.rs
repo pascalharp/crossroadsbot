@@ -54,7 +54,7 @@ async fn set_log_channel(ctx: &Context, mut args: Args, kind: LogChannelType) ->
         value: channel_id.to_string(),
     };
 
-    match conf.save().await {
+    match conf.save(ctx).await {
         Ok(_) => (),
         Err(e) => return Err(e.into()),
     }
@@ -116,7 +116,7 @@ async fn _set_signup_board_category(ctx: &Context, mut args: Args) -> LogResult 
         value: channel_id.to_string(),
     };
 
-    match conf.save().await {
+    match conf.save(ctx).await {
         Ok(_) => Ok("Signup board category saved".into()),
         Err(e) => {
             return Err(e.into());

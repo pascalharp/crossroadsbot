@@ -2,6 +2,8 @@ use crossroadsbot::{
     commands, conversation, data::*, db, log::*, signup_board::*, utils::DIZZY_EMOJI,
 };
 use dashmap::DashSet;
+use diesel::pg::PgConnection;
+use diesel::prelude::*;
 use dotenv::dotenv;
 use serenity::{
     async_trait,
@@ -27,9 +29,15 @@ impl EventHandler for Handler {
         info!("Connected as {}", ready.user.name);
         info!("Refreshing config values");
 
-        let log_info = db::Config::load(String::from(INFO_LOG_NAME)).await.ok();
-        let log_error = db::Config::load(String::from(ERROR_LOG_NAME)).await.ok();
-        let signup_board_category = db::Config::load(String::from(SIGNUP_BOARD_NAME)).await.ok();
+        let log_info = db::Config::load(&ctx, String::from(INFO_LOG_NAME))
+            .await
+            .ok();
+        let log_error = db::Config::load(&ctx, String::from(ERROR_LOG_NAME))
+            .await
+            .ok();
+        let signup_board_category = db::Config::load(&ctx, String::from(SIGNUP_BOARD_NAME))
+            .await
+            .ok();
         let data_read = ctx.data.read().await;
         let mut log_write = data_read.get::<LogConfigData>().unwrap().write().await;
 
@@ -204,8 +212,10 @@ async fn main() {
 
     // Run migrations on the database
     {
-        let pool = db::get_connection();
-        embedded_migrations::run(&pool.get().unwrap()).expect("Failed to run migrations");
+        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not set");
+        let conn = PgConnection::establish(&database_url)
+            .expect(&format!("Error connecting to {}", database_url));
+        embedded_migrations::run(&conn).expect("Failed to run migrations");
     }
 
     let token = env::var("DISCORD_TOKEN").expect("discord token not set");

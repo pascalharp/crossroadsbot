@@ -10,7 +10,6 @@ edition = "2018"
 diesel = { version = "1.4.0", features = ["postgres", "chrono", "r2d2"] }
 diesel-derive-enum = { version = "1.1.1", features = ["postgres"] }
 diesel_migrations = { version = "1.4.0" }
-lazy_static = { version = "1.4.0" }
 dotenv = { version = "0.15.0" }
 chrono = { version = "0.4" }
 chrono-tz = { version = "0.4" }

@@ -9,7 +9,6 @@ use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::result::QueryResult;
-use lazy_static::lazy_static;
 use serenity::client::Context;
 use serenity::model::id::UserId;
 use std::env;
@@ -126,6 +125,20 @@ async fn insert_tier_mapping(ctx: &Context, tm: NewTierMapping) -> QueryResult<T
     task::spawn_blocking(move || {
         diesel::insert_into(tier_mappings::table)
             .values(&tm)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn upsert_config(ctx: &Context, conf: Config) -> QueryResult<Config> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::insert_into(config::table)
+            .values(&conf)
+            .on_conflict(config::name)
+            .do_update()
+            .set(config::value.eq(&conf.value))
             .get_result(&pool.conn())
     })
     .await
@@ -472,6 +485,13 @@ async fn select_roles_by_signup(ctx: &Context, id: i32) -> QueryResult<Vec<Role>
     .unwrap()
 }
 
+async fn select_config_by_name(ctx: &Context, name: String) -> QueryResult<Config> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || config::table.find(name).first(&pool.conn()))
+        .await
+        .unwrap()
+}
+
 // Count
 async fn count_trainings_by_state(ctx: &Context, state: TrainingState) -> QueryResult<i64> {
     let pool = DBPool::load(ctx).await;
@@ -525,22 +545,6 @@ async fn update_role_active(ctx: &Context, id: i32, active: bool) -> QueryResult
     })
     .await
     .unwrap()
-}
-
-// TODO remove once done refactoring
-lazy_static! {
-    /// Global connection pool for postgresql database. Lazily created on first use
-    static ref POOL: Pool<ConnectionManager<PgConnection>> = {
-        let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-        let manager = ConnectionManager::<PgConnection>::new(database_url);
-        Pool::new(manager).unwrap()
-    };
-}
-
-// TODO remove once done refactoring
-/// Retrieves an Arc from the connection pool
-pub fn get_connection() -> Pool<ConnectionManager<PgConnection>> {
-    POOL.clone()
 }
 
 /* --- User --- */
@@ -784,28 +788,11 @@ impl TierMapping {
 
 // Config
 impl Config {
-    pub async fn load(name: String) -> QueryResult<Config> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            config::table
-                .filter(config::name.eq(&name))
-                .first(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn load(ctx: &Context, name: String) -> QueryResult<Config> {
+        select_config_by_name(ctx, name).await
     }
 
-    pub async fn save(self) -> QueryResult<Config> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::insert_into(config::table)
-                .values(&self)
-                .on_conflict(config::name)
-                .do_update()
-                .set(config::value.eq(&self.value))
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn save(self, ctx: &Context) -> QueryResult<Config> {
+        upsert_config(ctx, self).await
     }
 }

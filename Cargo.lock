@@ -203,7 +203,6 @@ dependencies = [
  "diesel-derive-enum",
  "diesel_migrations",
  "dotenv",
- "lazy_static",
  "regex 1.4.6",
  "serde",
  "serenity",
