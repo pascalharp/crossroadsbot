@@ -147,7 +147,7 @@ pub struct TrainingRole {
 
 #[derive(Insertable, Debug)]
 #[table_name = "training_roles"]
-pub struct NewTrainingRole {
+pub(super) struct NewTrainingRole {
     pub training_id: i32,
     pub role_id: i32,
 }
@@ -161,22 +161,22 @@ pub struct Tier {
 
 #[derive(Insertable, Debug)]
 #[table_name = "tiers"]
-pub struct NewTier {
+pub(super) struct NewTier {
     pub name: String,
 }
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
 #[table_name = "tier_mappings"]
 #[belongs_to(Tier)]
+#[primary_key(tier_id, discord_role_id)]
 pub struct TierMapping {
-    pub id: i32,
     pub tier_id: i32,
     pub discord_role_id: i64,
 }
 
 #[derive(Insertable, Debug)]
 #[table_name = "tier_mappings"]
-pub struct NewTierMapping {
+pub(super) struct NewTierMapping {
     pub tier_id: i32,
     pub discord_role_id: i64,
 }

@@ -77,6 +77,17 @@ async fn insert_role(ctx: &Context, r: NewRole) -> QueryResult<Role> {
     .unwrap()
 }
 
+async fn insert_tier(ctx: &Context, t: NewTier) -> QueryResult<Tier> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::insert_into(tiers::table)
+            .values(&t)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn insert_training_role(ctx: &Context, tr: NewTrainingRole) -> QueryResult<TrainingRole> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -110,6 +121,17 @@ async fn insert_signup_role(ctx: &Context, sr: NewSignupRole) -> QueryResult<Sig
     .unwrap()
 }
 
+async fn insert_tier_mapping(ctx: &Context, tm: NewTierMapping) -> QueryResult<TierMapping> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::insert_into(tier_mappings::table)
+            .values(&tm)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 // Delete
 async fn delete_signup_roles_by_signup(ctx: &Context, id: i32) -> QueryResult<usize> {
     let pool = DBPool::load(ctx).await;
@@ -123,12 +145,31 @@ async fn delete_signup_roles_by_signup(ctx: &Context, id: i32) -> QueryResult<us
 
 async fn delete_signup_by_id(ctx: &Context, id: i32) -> QueryResult<usize> {
     let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || diesel::delete(signups::table.find(id)).execute(&pool.conn()))
+        .await
+        .unwrap()
+}
+
+async fn delete_tier_by_id(ctx: &Context, id: i32) -> QueryResult<usize> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || diesel::delete(tiers::table.find(id)).execute(&pool.conn()))
+        .await
+        .unwrap()
+}
+
+async fn delete_tier_mapping(
+    ctx: &Context,
+    tier_id: i32,
+    discord_role_id: i64,
+) -> QueryResult<usize> {
+    let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
-        diesel::delete(signups::table.filter(signups::id.eq(id))).execute(&pool.conn())
+        diesel::delete(tier_mappings::table.find((tier_id, discord_role_id))).execute(&pool.conn())
     })
     .await
     .unwrap()
 }
+
 // Select
 async fn select_user_by_id(ctx: &Context, id: i32) -> QueryResult<User> {
     let pool = DBPool::load(ctx).await;
@@ -261,6 +302,18 @@ async fn select_active_trainings(ctx: &Context) -> QueryResult<Vec<Training>> {
     .unwrap()
 }
 
+async fn select_trainings_by_tier(ctx: &Context, id: i32) -> QueryResult<Vec<Training>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = trainings::table.inner_join(tiers::table);
+        join.filter(tiers::id.eq(id))
+            .select(trainings::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn select_signups_by_training(ctx: &Context, id: i32) -> QueryResult<Vec<Signup>> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -289,11 +342,41 @@ async fn select_signup_by_user_and_training(
     .unwrap()
 }
 
+async fn select_all_tiers(ctx: &Context) -> QueryResult<Vec<Tier>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || tiers::table.load(&pool.conn()))
+        .await
+        .unwrap()
+}
+
 async fn select_tier_by_id(ctx: &Context, id: i32) -> QueryResult<Tier> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || tiers::table.find(id).first(&pool.conn()))
         .await
         .unwrap()
+}
+
+async fn select_tier_by_name(ctx: &Context, name: String) -> QueryResult<Tier> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        tiers::table
+            .filter(tiers::name.eq(name))
+            .first(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_tier_mappings_by_tier(ctx: &Context, id: i32) -> QueryResult<Vec<TierMapping>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = tier_mappings::table.inner_join(tiers::table);
+        join.filter(tiers::id.eq(id))
+            .select(tier_mappings::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
 }
 
 async fn select_training_roles_by_training(
@@ -321,18 +404,6 @@ async fn select_roles_by_active(ctx: &Context, active: bool) -> QueryResult<Vec<
     .await
     .unwrap()
 }
-
-//async fn select_roles_by_active_and_emoji(ctx: &Context, active: bool, emoji_id: i64) -> QueryResult<Vec<Role>> {
-//    let pool = DBPool::load(ctx).await;
-//    task::spawn_blocking(move || {
-//        roles::table
-//            .filter(roles::active.eq(active))
-//            .filter(roles::emoji.eq(emoji_id))
-//            .get_results(&pool.conn())
-//    })
-//    .await
-//    .unwrap()
-//}
 
 async fn select_active_role_by_emoji(ctx: &Context, emoji_id: i64) -> QueryResult<Role> {
     let pool = DBPool::load(ctx).await;
@@ -666,93 +737,48 @@ impl Role {
 
 // --- Tier ---
 impl Tier {
-    pub async fn all() -> QueryResult<Vec<Tier>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || tiers::table.load::<Tier>(&pool.get().unwrap()))
-            .await
-            .unwrap()
+    pub async fn insert(ctx: &Context, name: String) -> QueryResult<Tier> {
+        let new_tier = NewTier { name };
+        insert_tier(ctx, new_tier).await
     }
 
-    pub async fn by_name(name: String) -> QueryResult<Tier> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            tiers::table
-                .filter(tiers::name.eq(name))
-                .first::<Tier>(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn all(ctx: &Context) -> QueryResult<Vec<Tier>> {
+        select_all_tiers(ctx).await
     }
 
-    pub async fn add_discord_role(&self, discord_id: u64) -> QueryResult<TierMapping> {
-        let pool = POOL.clone();
+    pub async fn by_name(ctx: &Context, name: String) -> QueryResult<Tier> {
+        select_tier_by_name(ctx, name).await
+    }
+
+    pub async fn add_discord_role(
+        &self,
+        ctx: &Context,
+        discord_id: u64,
+    ) -> QueryResult<TierMapping> {
         let new_tier_mapping = NewTierMapping {
             tier_id: self.id,
             discord_role_id: discord_id as i64,
         };
-
-        task::spawn_blocking(move || {
-            diesel::insert_into(tier_mappings::table)
-                .values(&new_tier_mapping)
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+        insert_tier_mapping(ctx, new_tier_mapping).await
     }
 
-    pub async fn delete(self) -> QueryResult<usize> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::delete(tiers::table.filter(tiers::id.eq(self.id))).execute(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn delete(self, ctx: &Context) -> QueryResult<usize> {
+        delete_tier_by_id(ctx, self.id).await
     }
 
-    pub async fn get_discord_roles(self: Arc<Tier>) -> QueryResult<Vec<TierMapping>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            TierMapping::belonging_to(self.as_ref()).load(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn get_discord_roles(&self, ctx: &Context) -> QueryResult<Vec<TierMapping>> {
+        select_tier_mappings_by_tier(ctx, self.id).await
     }
 
-    pub async fn get_trainings(self: Arc<Tier>) -> QueryResult<Vec<Training>> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            Training::belonging_to(self.as_ref()).load(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
-    }
-}
-
-impl NewTier {
-    pub async fn add(self) -> QueryResult<Tier> {
-        let pool = POOL.clone();
-        task::spawn_blocking(move || {
-            diesel::insert_into(tiers::table)
-                .values(&self)
-                .get_result(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn get_trainings(&self, ctx: &Context) -> QueryResult<Vec<Training>> {
+        select_trainings_by_tier(ctx, self.id).await
     }
 }
 
 // --- TierMapping ---
-
 impl TierMapping {
-    pub async fn delete(self) -> QueryResult<usize> {
-        let pool = POOL.clone();
-        let id = self.id;
-        task::spawn_blocking(move || {
-            diesel::delete(tier_mappings::table.filter(tier_mappings::id.eq(id)))
-                .execute(&pool.get().unwrap())
-        })
-        .await
-        .unwrap()
+    pub async fn delete(self, ctx: &Context) -> QueryResult<usize> {
+        delete_tier_mapping(ctx, self.tier_id, self.discord_role_id).await
     }
 }
 

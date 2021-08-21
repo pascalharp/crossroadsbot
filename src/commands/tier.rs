@@ -25,13 +25,13 @@ pub struct Tier;
 #[only_in("guild")]
 #[num_args(0)]
 pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    let tiers = db::Tier::all().await?;
+    let tiers = db::Tier::all(ctx).await?;
 
     let mut tier_roles: Vec<(Arc<db::Tier>, Vec<db::TierMapping>)> = vec![];
 
     for t in tiers {
         let t = Arc::new(t);
-        let m = t.clone().get_discord_roles().await?;
+        let m = t.get_discord_roles(ctx).await?;
         tier_roles.push((t, m));
     }
 
@@ -127,13 +127,10 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
         },
     }
 
-    let new_tier = db::NewTier {
-        name: String::from(tier_name),
-    };
-    let tier = new_tier.add().await?;
+    let tier = db::Tier::insert(ctx, tier_name).await?;
 
     for r in roles {
-        tier.add_discord_role(*r.as_u64()).await?;
+        tier.add_discord_role(ctx, *r.as_u64()).await?;
     }
 
     Ok("Tier added".into())
@@ -162,13 +159,13 @@ async fn _remove(ctx: &Context, channel: ChannelId, author: UserId, mut args: Ar
         }
     };
 
-    let tier = match db::Tier::by_name(tier_name).await {
+    let tier = match db::Tier::by_name(ctx, tier_name).await {
         Ok(t) => Arc::new(t),
         Err(diesel::NotFound) => return Ok("Tier not found".into()),
         Err(e) => return Err(e.into()),
     };
-    let roles = tier.clone().get_discord_roles().await?;
-    let trainings = tier.clone().get_trainings().await?;
+    let roles = tier.get_discord_roles(ctx).await?;
+    let trainings = tier.get_trainings(ctx).await?;
 
     let (created, open, closed, started, finished) = trainings.iter().fold(
         (0u32, 0u32, 0u32, 0u32, 0u32),
@@ -212,14 +209,14 @@ async fn _remove(ctx: &Context, channel: ChannelId, author: UserId, mut args: Ar
     }
 
     for r in roles {
-        r.delete().await?;
+        r.delete(ctx).await?;
     }
     for t in trainings {
         t.set_tier(ctx, None).await?;
     }
     match Arc::try_unwrap(tier) {
         Ok(t) => {
-            t.delete().await?;
+            t.delete(ctx).await?;
         }
         Err(_) => {
             return Ok("Unexpected internal error unwrapping Arc".into());
@@ -256,7 +253,7 @@ pub async fn edit(_: &Context, _: &Message, _: Args) -> CommandResult {
     Ok(())
 }
 
-async fn _edit_add(mut args: Args) -> LogResult {
+async fn _edit_add(ctx: &Context, mut args: Args) -> LogResult {
     let tier = args.single_quoted::<String>()?;
     let role = match args.single_quoted::<RoleId>() {
         Ok(r) => r,
@@ -265,12 +262,12 @@ async fn _edit_add(mut args: Args) -> LogResult {
         }
     };
 
-    let tier = match db::Tier::by_name(tier).await {
+    let tier = match db::Tier::by_name(ctx, tier).await {
         Ok(t) => Arc::new(t),
         Err(diesel::NotFound) => return Ok("Failed to load tier. Check spelling".into()),
         Err(e) => return Err(e.into()),
     };
-    let discord_roles = tier.clone().get_discord_roles().await?;
+    let discord_roles = tier.get_discord_roles(ctx).await?;
     if discord_roles
         .iter()
         .any(|d| RoleId::from(d.discord_role_id as u64) == role)
@@ -278,7 +275,7 @@ async fn _edit_add(mut args: Args) -> LogResult {
         return Ok("Discord role is already part of that tier".into());
     }
 
-    tier.clone().add_discord_role(*role.as_u64()).await?;
+    tier.add_discord_role(ctx, *role.as_u64()).await?;
     Ok("Discord role added to Tier".into())
 }
 
@@ -290,14 +287,14 @@ async fn _edit_add(mut args: Args) -> LogResult {
 #[only_in("guild")]
 #[num_args(2)]
 pub async fn edit_add(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let res = _edit_add(args).await;
+    let res = _edit_add(ctx, args).await;
     res.reply(ctx, msg).await?;
     res.log(ctx, LogType::Command(&msg.content), &msg.author)
         .await;
     res.cmd_result()
 }
 
-async fn _edit_remove(mut args: Args) -> LogResult {
+async fn _edit_remove(ctx: &Context, mut args: Args) -> LogResult {
     let tier = args.single_quoted::<String>()?;
     let role = match args.single_quoted::<RoleId>() {
         Ok(r) => r,
@@ -306,12 +303,12 @@ async fn _edit_remove(mut args: Args) -> LogResult {
         }
     };
 
-    let tier = match db::Tier::by_name(tier).await {
+    let tier = match db::Tier::by_name(ctx, tier).await {
         Ok(t) => Arc::new(t),
         Err(diesel::NotFound) => return Ok("Failed to load tier. Check spelling".into()),
         Err(e) => return Err(e.into()),
     };
-    let discord_roles = tier.get_discord_roles().await?;
+    let discord_roles = tier.get_discord_roles(ctx).await?;
     let to_remove = discord_roles
         .into_iter()
         .find(|d| RoleId::from(d.discord_role_id as u64) == role);
@@ -320,7 +317,7 @@ async fn _edit_remove(mut args: Args) -> LogResult {
         Some(i) => i,
     };
 
-    to_remove.delete().await?;
+    to_remove.delete(ctx).await?;
     return Ok("Discord role removed".into());
 }
 
@@ -333,7 +330,7 @@ async fn _edit_remove(mut args: Args) -> LogResult {
 #[only_in("guild")]
 #[num_args(2)]
 pub async fn edit_remove(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let res = _edit_remove(args).await;
+    let res = _edit_remove(ctx, args).await;
     res.reply(ctx, msg).await?;
     res.log(ctx, LogType::Command(&msg.content), &msg.author)
         .await;

@@ -66,7 +66,7 @@ impl SignupBoard {
             Some(t) => match t {
                 Ok(ok) => {
                     let tier = Arc::new(ok);
-                    let roles = match tier.clone().get_discord_roles().await {
+                    let roles = match tier.get_discord_roles(ctx).await {
                         Ok(ok) => Arc::new(ok),
                         Err(e) => {
                             error!("Failed to load discord roles for tier {}", e);
@@ -126,7 +126,7 @@ impl SignupBoard {
             Some(t) => match t {
                 Ok(ok) => {
                     let tier = Arc::new(ok);
-                    let roles = match tier.clone().get_discord_roles().await {
+                    let roles = match tier.get_discord_roles(ctx).await {
                         Ok(ok) => Arc::new(ok),
                         Err(e) => {
                             error!("Failed to load discord roles for tier {}", e);

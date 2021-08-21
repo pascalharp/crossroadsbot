@@ -60,7 +60,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         if training_tier.to_lowercase().eq("none") {
             None
         } else {
-            match db::Tier::by_name(training_tier).await {
+            match db::Tier::by_name(ctx, training_tier).await {
                 Err(_) => {
                     msg.reply(
                         ctx,
@@ -272,7 +272,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             None => (None, None),
             Some(t) => {
                 let t = Arc::new(t?);
-                (Some(t.clone()), Some(t.clone().get_discord_roles().await?))
+                (Some(t.clone()), Some(t.get_discord_roles(ctx).await?))
             }
         }
     };

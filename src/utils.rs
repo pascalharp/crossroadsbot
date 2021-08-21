@@ -128,7 +128,7 @@ pub async fn verify_tier(
         None => return Ok((true, "none".to_string())),
         Some(t) => Arc::new(t?),
     };
-    let tier_mappings = tier.clone().get_discord_roles().await?;
+    let tier_mappings = tier.get_discord_roles(ctx).await?;
     let roles_set = {
         let guild = ctx
             .data
@@ -165,13 +165,13 @@ pub async fn filter_trainings(
         guild.member(ctx, user.id).await?.roles
     };
 
-    let tiers = db::Tier::all().await?;
+    let tiers = db::Tier::all(ctx).await?;
 
     let mut tier_map: HashMap<i32, Vec<db::TierMapping>> = HashMap::new();
 
     for t in tiers {
         let t = Arc::new(t);
-        let discord_roles = t.clone().get_discord_roles().await?;
+        let discord_roles = t.get_discord_roles(ctx).await?;
         tier_map.insert(t.id, discord_roles);
     }
 
