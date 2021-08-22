@@ -3,6 +3,7 @@ use serenity::framework::standard::{
     Args, CommandResult,
 };
 use serenity::model::interactions::message_component::ButtonStyle;
+use serenity::model::interactions::InteractionResponseType;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 
@@ -63,8 +64,16 @@ pub async fn button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult 
             })
         })
         .await?;
-    let i = msg.await_component_interaction(ctx).await;
+    let i = msg.await_component_interaction(ctx).await.unwrap();
     println!("{:?}", i);
-    msg.reply(ctx, format!("{:?}", i.unwrap().data)).await?;
+    i.create_interaction_response(ctx, |r| {
+        r.kind(InteractionResponseType::UpdateMessage);
+        r.interaction_response_data(|d| {
+            d.content(format!("Reply: {:?}", i.data));
+            d.components(|c| c)
+        })
+    })
+    .await?;
+
     Ok(())
 }
