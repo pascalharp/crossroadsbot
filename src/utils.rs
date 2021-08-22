@@ -35,6 +35,7 @@ pub const CONSTRUCTION_SITE_EMOJI: char = '🚧';
 pub const MEMO_EMOJI: char = '📝';
 pub const GREEN_SQUARE_EMOJI: char = '🟩';
 pub const RED_SQUARE_EMOJI: char = '🟥';
+pub const ALARM_CLOCK_EMOJI: char = '⏰';
 
 pub enum YesOrNo {
     Yes,
