@@ -3,6 +3,7 @@ use serenity::framework::standard::{
     Args, CommandResult,
 };
 use serenity::model::interactions::InteractionResponseType;
+use serenity::model::interactions::message_component::ButtonStyle;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 
@@ -32,6 +33,24 @@ pub async fn button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult 
         .send_message(ctx, |m| {
             m.content("Uhhhh look. Fancy buttons =D");
             m.components(|c| {
+                c.create_action_row( |ar| {
+                    ar.create_button( |b| {
+                        b.style(ButtonStyle::Primary);
+                        b.label("Hello");
+                        b.custom_id("hello")
+                    });
+                    ar.create_button( |b| {
+                        b.style(ButtonStyle::Primary);
+                        b.label("Crossroads");
+                        b.custom_id("crossroads")
+                    });
+                    ar.create_button( |b| {
+                        b.style(ButtonStyle::Primary);
+                        b.label("Inn");
+                        b.custom_id("inn")
+                    });
+                    ar
+                });
                 c.add_action_row(confirm_abort_action_row());
                 c
             })
@@ -55,12 +74,7 @@ pub async fn button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult 
             i.create_interaction_response(ctx, |r| {
                 r.kind(InteractionResponseType::UpdateMessage);
                 r.interaction_response_data(|d| {
-                    let reply = match i.data.custom_id.as_str() {
-                        COMPONENT_ID_CONFIRM => COMPONENT_LABEL_CONFIRM,
-                        COMPONENT_ID_ABORT => COMPONENT_LABEL_ABORT,
-                        _ => "Unknown",
-                    };
-                    d.content(format!("You clicked: {}", reply));
+                    d.content(format!("You clicked: {}", resolve_button_response(&i)));
                     d.components(|c| c)
                 })
             })

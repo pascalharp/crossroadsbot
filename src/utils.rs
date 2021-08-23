@@ -25,6 +25,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60 * 3);
 pub const CHECK_EMOJI: char = '✅';
 pub const CROSS_EMOJI: char = '❌';
+pub const X_EMOJI: char = '✖';
 pub const ENVELOP_EMOJI: char = '✉';
 pub const WARNING_EMOJI: char = '⚠';
 pub const DIZZY_EMOJI: char = '😵';
