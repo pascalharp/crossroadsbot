@@ -3,23 +3,21 @@ use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Paris};
 use serenity::{
     builder::CreateEmbed,
-    model::{guild::Emoji, id::RoleId, misc::Mention},
+    model::{id::EmojiId, id::RoleId, misc::Mention},
 };
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{collections::HashSet, sync::Arc};
 
 // Embed helpers
+// TODO remove after rework
 pub fn select_roles_embed(
-    re_map: &HashMap<&db::Role, &Emoji>, // map with all relevant emojis
-    sel: &HashSet<&db::Role>,            // already selected roles
+    roles: &Vec<&db::Role>,   // all roles
+    sel: &HashSet<&db::Role>, // selected roles
     initial: bool,
 ) -> CreateEmbed {
     let mut e = CreateEmbed::default();
 
     e.description("Select roles");
-    e.fields(re_map.iter().map(|(r, e)| {
+    e.fields(roles.iter().map(|r| {
         let des = String::from(format!(
             "{} | {}",
             if sel.contains(r) {
@@ -29,7 +27,8 @@ pub fn select_roles_embed(
             },
             r.repr
         ));
-        let cont = String::from(format!("{} | {}", Mention::from(*e), r.title));
+        let emoji_id = EmojiId::from(r.emoji as u64);
+        let cont = String::from(format!("{} | {}", Mention::from(emoji_id), r.title));
         (des, cont, true)
     }));
     e.footer(|f| {
@@ -39,6 +38,32 @@ pub fn select_roles_embed(
             f.text(format!("React with the corresponding emoji to select/unselect a role. Use {} to confirm. Use {} to abort", CHECK_EMOJI, CROSS_EMOJI))
         }
     });
+    e
+}
+
+// Embed helpers
+pub fn _select_roles_embed(
+    roles: &Vec<db::Role>, // all roles
+    sel: &HashSet<String>, // selected roles
+) -> CreateEmbed {
+    let mut e = CreateEmbed::default();
+    let field_str = roles
+        .iter()
+        .map(|r| {
+            format!(
+                "{} | {} | {}",
+                if sel.contains(&r.repr) {
+                    GREEN_SQUARE_EMOJI
+                } else {
+                    RED_SQUARE_EMOJI
+                },
+                Mention::from(EmojiId::from(r.emoji as u64)),
+                r.title
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    e.field("Select roles", field_str, false);
     e
 }
 

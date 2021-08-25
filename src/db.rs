@@ -412,6 +412,7 @@ async fn select_roles_by_active(ctx: &Context, active: bool) -> QueryResult<Vec<
     task::spawn_blocking(move || {
         roles::table
             .filter(roles::active.eq(active))
+            .order_by(roles::title)
             .get_results(&pool.conn())
     })
     .await

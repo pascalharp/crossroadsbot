@@ -1,6 +1,7 @@
-use crate::{conversation::*, data::*, db, embeds::*};
+use crate::{components::*, conversation::*, data::*, db, embeds::*};
 
 use serenity::{
+    builder::CreateEmbed,
     client::bridge::gateway::ShardMessenger,
     collector::reaction_collector::*,
     futures::StreamExt,
@@ -9,6 +10,7 @@ use serenity::{
         channel::{Message, Reaction, ReactionType},
         guild::{Emoji, Guild},
         id::{EmojiId, RoleId, UserId},
+        interactions::{InteractionResponseType, InteractionType},
         user::User,
     },
     prelude::*,
@@ -261,7 +263,14 @@ pub async fn select_roles<'a>(
         })
         .await;
 
-    let emb = select_roles_embed(&re_map, &selected, true);
+    // TODO remove quick fix
+    let roles: Vec<&db::Role> = selected
+        .clone()
+        .into_iter()
+        .chain(unselected.clone().into_iter())
+        .collect();
+
+    let emb = select_roles_embed(&roles, &selected, true);
     conv.msg
         .edit(ctx, |m| {
             m.embed(|e| {
@@ -288,7 +297,8 @@ pub async fn select_roles<'a>(
 
     // Now wait for emoji reactions and update message
     loop {
-        let emb = select_roles_embed(&re_map, &selected, false);
+        // TODO remove quick fix
+        let emb = select_roles_embed(&roles, &selected, false);
         conv.msg
             .edit(ctx, |m| {
                 m.embed(|e| {
@@ -336,4 +346,119 @@ pub async fn select_roles<'a>(
     }
 
     Ok((selected, unselected))
+}
+
+pub async fn _select_roles(
+    ctx: &Context,
+    msg: &mut Message,
+    // The user who can select
+    user: &User,
+    // All roles
+    roles: &Vec<db::Role>,
+    // HashShet with unique reprs of roles
+    mut selected: HashSet<String>,
+) -> Result<HashSet<String>> {
+    let orig_embeds = msg
+        .embeds
+        .clone()
+        .into_iter()
+        .map(|e| CreateEmbed::from(e))
+        .collect::<Vec<_>>();
+    msg.edit(ctx, |m| {
+        m.add_embed(|e| {
+            e.0 = _select_roles_embed(roles, &selected).0;
+            e
+        });
+        m.components(|c| {
+            c.add_action_row(role_action_row(roles));
+            c.add_action_row(confirm_abort_action_row());
+            c
+        });
+        m
+    })
+    .await?;
+
+    let mut interactions = msg
+        .await_component_interactions(ctx)
+        .author_id(user.id)
+        .filter(|f| f.kind == InteractionType::MessageComponent)
+        .timeout(DEFAULT_TIMEOUT)
+        .await;
+
+    loop {
+        let i = interactions.next().await;
+        match i {
+            None => {
+                msg.edit(ctx, |m| {
+                    m.set_embeds(orig_embeds.clone());
+                    m.add_embed(|e| {
+                        e.0 = _select_roles_embed(roles, &selected).0;
+                        e.footer(|f| {
+                            f.text(format!("Role selection timed out {}", ALARM_CLOCK_EMOJI))
+                        })
+                    });
+                    m.components(|c| c)
+                })
+                .await?;
+                return Err(Box::new(ConversationError::TimedOut));
+            }
+            Some(i) => match resolve_button_response(&i) {
+                ButtonResponse::Confirm => {
+                    i.create_interaction_response(ctx, |r| {
+                        r.kind(InteractionResponseType::UpdateMessage);
+                        r.interaction_response_data(|d| {
+                            d.embeds(orig_embeds.clone());
+                            d.create_embed(|e| {
+                                e.0 = _select_roles_embed(roles, &selected).0;
+                                e.footer(|f| f.text(format!("Roles confirmed {}", CHECK_EMOJI)));
+                                e
+                            });
+                            d.components(|c| c)
+                        })
+                    })
+                    .await?;
+                    break;
+                }
+                ButtonResponse::Abort => {
+                    i.create_interaction_response(ctx, |r| {
+                        r.kind(InteractionResponseType::UpdateMessage);
+                        r.interaction_response_data(|d| {
+                            d.embeds(orig_embeds.clone());
+                            d.create_embed(|e| {
+                                e.0 = _select_roles_embed(roles, &selected).0;
+                                e.footer(|f| {
+                                    f.text(format!("Role selection aborted {}", CROSS_EMOJI))
+                                });
+                                e
+                            });
+                            d.components(|c| c)
+                        })
+                    })
+                    .await?;
+                    return Err(Box::new(ConversationError::Canceled));
+                }
+                ButtonResponse::Other(repr) => {
+                    if selected.contains(&repr) {
+                        selected.remove(&repr);
+                    } else {
+                        selected.insert(repr);
+                    }
+                    i.create_interaction_response(ctx, |r| {
+                        r.kind(InteractionResponseType::UpdateMessage);
+                        r.interaction_response_data(|d| {
+                            d.embeds(orig_embeds.clone());
+                            d.create_embed(|e| {
+                                e.0 = _select_roles_embed(roles, &selected).0;
+                                e.footer(|f| f.text("Select roles"));
+                                e
+                            })
+                        })
+                    })
+                    .await?;
+                }
+            },
+        }
+    }
+
+    Ok(selected)
 }

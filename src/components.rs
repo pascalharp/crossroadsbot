@@ -1,9 +1,10 @@
-use std::fmt;
-use serenity::model::prelude::*;
+use crate::db;
+use crate::utils::{CHECK_EMOJI, X_EMOJI};
+use serenity::builder::{CreateActionRow, CreateButton};
 use serenity::model::interactions::message_component::ButtonStyle;
 use serenity::model::interactions::message_component::MessageComponentInteraction;
-use serenity::builder::{CreateActionRow, CreateButton};
-use crate::utils::{CHECK_EMOJI, X_EMOJI};
+use serenity::model::prelude::*;
+use std::fmt;
 
 pub const COMPONENT_LABEL_CONFIRM: &str = "Confirm";
 pub const COMPONENT_LABEL_ABORT: &str = "Abort";
@@ -13,7 +14,7 @@ pub const COMPONENT_ID_ABORT: &str = "abort";
 pub enum ButtonResponse {
     Confirm,
     Abort,
-    Other(String)
+    Other(String),
 }
 
 impl fmt::Display for ButtonResponse {
@@ -26,11 +27,11 @@ impl fmt::Display for ButtonResponse {
     }
 }
 
-pub fn resolve_button_response(response :&MessageComponentInteraction) -> ButtonResponse {
+pub fn resolve_button_response(response: &MessageComponentInteraction) -> ButtonResponse {
     match response.data.custom_id.as_str() {
         COMPONENT_ID_CONFIRM => ButtonResponse::Confirm,
         COMPONENT_ID_ABORT => ButtonResponse::Abort,
-        s => ButtonResponse::Other(String::from(s))
+        s => ButtonResponse::Other(String::from(s)),
     }
 }
 
@@ -52,9 +53,26 @@ pub fn abort_button() -> CreateButton {
     b
 }
 
+pub fn role_button(role: &db::Role) -> CreateButton {
+    let mut b = CreateButton::default();
+    b.style(ButtonStyle::Primary);
+    b.label(role.title.clone());
+    b.custom_id(role.repr.clone());
+    b.emoji(ReactionType::from(EmojiId::from(role.emoji as u64)));
+    b
+}
+
 pub fn confirm_abort_action_row() -> CreateActionRow {
     let mut ar = CreateActionRow::default();
     ar.add_button(confirm_button());
     ar.add_button(abort_button());
+    ar
+}
+
+pub fn role_action_row(roles: &Vec<db::Role>) -> CreateActionRow {
+    let mut ar = CreateActionRow::default();
+    for r in roles {
+        ar.add_button(role_button(r));
+    }
     ar
 }
