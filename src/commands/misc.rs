@@ -8,7 +8,6 @@ use serenity::model::prelude::*;
 use serenity::prelude::*;
 
 use crate::components::*;
-use crate::conversation;
 use crate::db;
 use crate::utils::{self, ALARM_CLOCK_EMOJI, DEFAULT_TIMEOUT};
 
@@ -96,7 +95,7 @@ pub async fn role_button(ctx: &Context, msg: &Message, _args: Args) -> CommandRe
         .send_message(ctx, |m| {
             m.content("Here are all role buttons");
             m.components(|c| {
-                c.add_action_row(role_action_row(&roles));
+                c.set_action_rows(role_action_row(&roles));
                 c
             });
             m

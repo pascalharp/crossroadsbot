@@ -69,10 +69,30 @@ pub fn confirm_abort_action_row() -> CreateActionRow {
     ar
 }
 
-pub fn role_action_row(roles: &Vec<db::Role>) -> CreateActionRow {
-    let mut ar = CreateActionRow::default();
-    for r in roles {
-        ar.add_button(role_button(r));
+// Only 5 buttons per row possible
+// will never return more than 4 row to leave space or confirm/abort
+pub fn role_action_row(roles: &Vec<db::Role>) -> Vec<CreateActionRow> {
+    // split roles to chunks
+    let role_chunks = roles.chunks(5);
+    let chunk_count = role_chunks.len();
+
+    // If there are too much just return none. So it will be realized XD
+    if chunk_count > 5 {
+        return Vec::with_capacity(0);
+    }
+
+    // Create required amount of action rows
+    let mut ar: Vec<CreateActionRow> = Vec::with_capacity(chunk_count);
+    for _ in 0..chunk_count {
+        ar.push(CreateActionRow::default());
+    }
+
+    // create buttons
+    for (i, c) in role_chunks.enumerate() {
+        for r in c {
+            // save to unwrap here since we created the correct amount
+            ar.get_mut(i).unwrap().add_button(role_button(r));
+        }
     }
     ar
 }

@@ -370,7 +370,7 @@ pub async fn _select_roles(
             e
         });
         m.components(|c| {
-            c.add_action_row(role_action_row(roles));
+            c.set_action_rows(role_action_row(roles));
             c.add_action_row(confirm_abort_action_row());
             c
         });
