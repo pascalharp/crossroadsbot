@@ -51,9 +51,9 @@ pub fn _select_roles_embed(
         .iter()
         .map(|r| {
             format!(
-                "{} | {} | {}",
+                "`{}` | {} | {}",
                 if sel.contains(&r.repr) {
-                    GREEN_SQUARE_EMOJI
+                    CHECK_EMOJI
                 } else {
                     RED_SQUARE_EMOJI
                 },
