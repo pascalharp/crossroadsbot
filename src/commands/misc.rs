@@ -9,12 +9,13 @@ use serenity::prelude::*;
 
 use crate::components::*;
 use crate::db;
+use crate::log::*;
 use crate::utils::{self, ALARM_CLOCK_EMOJI, DEFAULT_TIMEOUT};
 
 use std::collections::HashSet;
 
 #[group]
-#[commands(ping, dudu, button, role_button, role_select, multi_embed)]
+#[commands(ping, dudu, button, role_button, role_select, multi_embed, log_test)]
 struct Misc;
 
 #[command]
@@ -145,4 +146,27 @@ pub async fn multi_embed(ctx: &Context, msg: &Message, _args: Args) -> CommandRe
         })
         .await?;
     Ok(())
+}
+
+#[command]
+pub async fn log_test(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    LogResult::command(ctx, msg, || async {
+        msg.channel_id
+            .send_message(ctx, |m| m.content("Testing logs, hmmmm"))
+            .await?;
+        let cmd = args.single::<String>()?;
+        match cmd.as_str() {
+            "ok" => LogResult::Ok("Everything ok".into()),
+            "num" => {
+                args.single::<i32>()?;
+                LogResult::Ok("Number provided".into())
+            }
+            "del" => {
+                msg.delete(ctx).await?;
+                LogResult::Ok("Lol deleting everyones messages. kekw".into())
+            }
+            _ => Err("Invalid argmunts".into()),
+        }
+    })
+    .await
 }

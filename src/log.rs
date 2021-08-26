@@ -2,6 +2,8 @@ use crate::data::LogConfigData;
 use crate::signup_board::SignupBoardAction;
 use diesel::result::Error as DieselError;
 use serenity::{async_trait, framework::standard::CommandResult, model::prelude::*, prelude::*};
+use std::future::Future;
+use std::ops::FnOnce;
 
 pub type LogResult = std::result::Result<String, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -10,6 +12,28 @@ pub trait DiscordChannelLog {
     async fn log<'a>(&self, ctx: &Context, kind: LogType<'a>, user: &User);
     async fn reply(&self, ctx: &Context, msg: &Message) -> serenity::Result<Message>;
     fn cmd_result(self) -> CommandResult;
+}
+
+#[async_trait]
+pub trait LogCalls {
+    async fn command<F: std::marker::Send, Fut: std::marker::Send>(
+        ctx: &Context,
+        msg: &Message,
+        f: F,
+    ) -> CommandResult
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = LogResult>;
+
+    async fn interaction<F: std::marker::Send, Fut: std::marker::Send>(
+        ctx: &Context,
+        action: &SignupBoardAction,
+        user: &User,
+        f: F,
+    ) -> ()
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = LogResult>;
 }
 
 #[async_trait]
@@ -51,6 +75,39 @@ impl DiscordChannelLog for LogResult {
             }
             Ok(_) => return Ok(()),
         }
+    }
+}
+
+#[async_trait]
+impl LogCalls for LogResult {
+    async fn command<F: std::marker::Send, Fut: std::marker::Send>(
+        ctx: &Context,
+        msg: &Message,
+        f: F,
+    ) -> CommandResult
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = LogResult>,
+    {
+        let res = f().await;
+        res.reply(ctx, msg).await?;
+        res.log(ctx, LogType::Command(&msg.content), &msg.author)
+            .await;
+        res.cmd_result()
+    }
+
+    async fn interaction<F: std::marker::Send, Fut: std::marker::Send>(
+        ctx: &Context,
+        action: &SignupBoardAction,
+        user: &User,
+        f: F,
+    ) -> ()
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = LogResult>,
+    {
+        let res = f().await;
+        res.log(ctx, LogType::Interaction(action), user).await;
     }
 }
 
