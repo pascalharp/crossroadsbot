@@ -314,16 +314,14 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
         .await?;
 
     let roles = training.active_roles(ctx).await?;
+    let roles_lookup: HashMap<String, &db::Role> =
+        roles.iter().map(|r| (String::from(&r.repr), r)).collect();
 
-    // Create sets for selected and unselected
-    let selected: HashSet<&db::Role> = HashSet::with_capacity(roles.len());
-    let mut unselected: HashSet<&db::Role> = HashSet::with_capacity(roles.len());
-    for r in &roles {
-        unselected.insert(r);
-    }
+    // Create sets for selected
+    let selected: HashSet<String> = HashSet::with_capacity(roles.len());
 
-    let selected = match select_roles(ctx, &mut conv, selected, unselected).await {
-        Ok((selected, _)) => selected,
+    let selected = match select_roles(ctx, &mut conv.msg, &conv.user, &roles, selected).await {
+        Ok(selected) => selected,
         Err(e) => {
             if let Some(e) = e.downcast_ref::<ConversationError>() {
                 match e {
@@ -345,7 +343,10 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
 
     // Save roles
     conv.msg.edit(ctx, |m| m.content("Saving roles...")).await?;
-    let futs = selected.iter().map(|r| signup.add_role(ctx, &r));
+    // We inserted all roles into the HashMap, so it is save to unwrap
+    let futs = selected
+        .iter()
+        .map(|r| signup.add_role(ctx, roles_lookup.get(r).unwrap()));
     match future::try_join_all(futs).await {
         Ok(r) => {
             conv.msg
@@ -448,18 +449,17 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
     };
 
     let roles = training.active_roles(ctx).await?;
+    let roles_lookup: HashMap<String, &db::Role> =
+        roles.iter().map(|r| (String::from(&r.repr), r)).collect();
 
-    let mut selected: HashSet<&db::Role> = HashSet::new();
-    let mut unselected: HashSet<&db::Role> = HashSet::new();
+    let mut selected: HashSet<String> = HashSet::with_capacity(roles.len());
 
     match signup.get_roles(ctx).await {
         Ok(v) => {
             let set = v.into_iter().collect::<HashSet<_>>();
             for r in &roles {
                 if set.contains(r) {
-                    selected.insert(r);
-                } else {
-                    unselected.insert(r);
+                    selected.insert(r.repr.clone());
                 }
             }
         }
@@ -469,8 +469,8 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
         }
     };
 
-    let selected = match select_roles(ctx, &mut conv, selected, unselected).await {
-        Ok((selected, _)) => selected,
+    let selected = match select_roles(ctx, &mut conv.msg, &conv.user, &roles, selected).await {
+        Ok(selected) => selected,
         Err(e) => {
             if let Some(e) = e.downcast_ref::<ConversationError>() {
                 match e {
@@ -495,7 +495,13 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
         return Err(e.into());
     }
 
-    match future::try_join_all(selected.iter().map(|r| signup.add_role(ctx, &r))).await {
+    match future::try_join_all(
+        selected
+            .iter()
+            .map(|r| signup.add_role(ctx, roles_lookup.get(r).unwrap())),
+    )
+    .await
+    {
         Ok(_) => {
             conv.msg
                 .edit(ctx, |m| {
@@ -507,7 +513,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
                             "New roles:",
                             selected
                                 .iter()
-                                .map(|r| r.repr.clone())
+                                .map(|r| roles_lookup.get(r).unwrap().title.clone())
                                 .collect::<Vec<_>>()
                                 .join(", "),
                             false,

@@ -1,6 +1,7 @@
 use super::SQUADMAKER_ROLE_CHECK;
 use crate::{
-    conversation, data, db, embeds,
+    data, db, embeds,
+    log::*,
     utils::{self, *},
 };
 use chrono::{DateTime, Utc};
@@ -29,205 +30,113 @@ pub struct Training;
 #[command]
 #[checks(squadmaker_role)]
 #[usage = "training_name %Y-%m-%dT%H:%M:%S% training_tier [ role_identifier... ]"]
-#[example = "\"Beginner Training\" 2021-05-11T19:00:00 none pdps cdps banners"]
+#[example = "\"Beginner Training\" 2021-05-11T19:00:00 none dps hfb banners"]
 #[min_args(3)]
 #[only_in(guild)]
 pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let discord_user = &msg.author;
-    let training_name = args.single_quoted::<String>()?;
+    LogResult::command(ctx, msg, || async {
+        let discord_user = &msg.author;
+        let training_name = args.single_quoted::<String>()?;
 
-    let training_time = match args.single_quoted::<chrono::NaiveDateTime>() {
-        Ok(r) => r,
-        Err(e) => {
-            match e {
+        let training_time = match args.single_quoted::<chrono::NaiveDateTime>() {
+            Ok(r) => r,
+            Err(e) => match e {
                 ArgError::Parse(_) => {
-                    msg.reply(
-                        ctx,
-                        "Failed to parse date. Required Format: %Y-%m-%dT%H:%M:%S%",
-                    )
-                    .await?;
+                    return Err("Failed to parse date. Required Format: %Y-%m-%dT%H:%M:%S%".into())
                 }
                 _ => {
                     return Err(e.into());
                 }
-            }
-            return Ok(());
-        }
-    };
-
-    let training_tier = args.single_quoted::<String>()?;
-    let training_tier: Option<db::Tier> = {
-        if training_tier.to_lowercase().eq("none") {
-            None
-        } else {
-            match db::Tier::by_name(ctx, training_tier).await {
-                Err(_) => {
-                    msg.reply(
-                        ctx,
-                        "Tier not found. You can use \"none\" to open the training for everyone",
-                    )
-                    .await?;
-                    return Ok(());
-                }
-                Ok(t) => Some(t),
-            }
-        }
-    };
-
-    let mut presel_roles: HashSet<String> = HashSet::new();
-
-    for role in args.iter::<String>() {
-        if let Ok(r) = role {
-            presel_roles.insert(r);
-        }
-    }
-
-    let mut conv = match conversation::Conversation::start(ctx, discord_user).await {
-        Ok(c) => c,
-        Err(e) => {
-            msg.reply(ctx, e).await?;
-            return Ok(());
-        }
-    };
-
-    conv.msg
-        .edit(ctx, |m| m.content("Loading roles..."))
-        .await?;
-    // Get roles and turn them into a HashMap with Emojis
-    let roles = db::Role::all_active(ctx).await?;
-    // Keep track of what roles are selected by EmojiId
-    let mut selected: HashSet<&db::Role> = HashSet::new();
-    let mut unselected: HashSet<&db::Role> = HashSet::new();
-
-    // Enter pre selected roles
-    for r in &roles {
-        if presel_roles.contains(&r.repr) {
-            selected.insert(r);
-        } else {
-            unselected.insert(r);
-        }
-    }
-
-    conv.msg
-        .edit(ctx, |m| m.content("Select roles for new training"))
-        .await?;
-
-    let selected = match utils::select_roles(ctx, &mut conv, selected, unselected).await {
-        Ok((s, _)) => s,
-        Err(e) => {
-            if let Some(e) = e.downcast_ref::<conversation::ConversationError>() {
-                conv.chan.send_message(ctx, |m| m.content(e)).await?;
-                return Ok(());
-            } else {
-                conv.chan
-                    .send_message(ctx, |m| m.content("Unexpected Error"))
-                    .await?;
-                return Err(e.into());
-            }
-        }
-    };
-
-    let confirm_msg = conv
-        .chan
-        .send_message(ctx, |m| {
-            m.content(format!(
-                "{} created a new training",
-                Mention::from(discord_user)
-            ));
-            m.embed(|e| {
-                e.field("Title", &training_name, true);
-                e.field(
-                    "Tier",
-                    training_tier.as_ref().map_or("none", |t| &t.name),
-                    true,
-                );
-                e.field("Date", &training_time, true);
-                e.field("Roles", "------------", false);
-                e.fields(
-                    selected
-                        .iter()
-                        .map(|r| (r.repr.clone(), r.title.clone(), true)),
-                );
-                e.footer(|f| {
-                    f.text(format!(
-                        "Confirm new training with {} or {} to abort",
-                        CHECK_EMOJI, CROSS_EMOJI
-                    ))
-                });
-                e
-            });
-            m
-        })
-        .await?;
-
-    utils::send_yes_or_no(ctx, &confirm_msg).await?;
-    match utils::await_yes_or_no(ctx, &confirm_msg, Some(discord_user.id)).await {
-        None => {
-            conv.timeout_msg(ctx).await?;
-            return Ok(());
-        }
-        Some(s) => match s {
-            utils::YesOrNo::Yes => (),
-            utils::YesOrNo::No => {
-                conv.canceled_msg(ctx).await?;
-                return Ok(());
-            }
-        },
-    }
-
-    // Do all the database stuff
-    let training = {
-        let training_tier_id = match training_tier {
-            Some(t) => Some(t.id),
-            None => None,
+            },
         };
 
-        let training =
-            match db::Training::insert(ctx, training_name, training_time, training_tier_id).await {
-                Err(e) => {
-                    msg.reply(ctx, format!("{}", e)).await?;
-                    return Ok(());
+        let training_tier = args.single_quoted::<String>()?;
+        let training_tier: Option<db::Tier> = {
+            if training_tier.to_lowercase().eq("none") {
+                None
+            } else {
+                match db::Tier::by_name(ctx, training_tier).await {
+                    Err(diesel::NotFound) => return Err(
+                        "Tier not found. You can use \"none\" to open the training for everyone"
+                            .into(),
+                    ),
+                    Err(e) => return Err(e.into()),
+                    Ok(t) => Some(t),
                 }
-                Ok(t) => t,
-            };
+            }
+        };
 
-        for r in &selected {
-            match training.add_role(ctx, r.id).await {
-                Err(e) => {
-                    msg.reply(ctx, format!("{}", e)).await?;
-                    return Ok(());
+        let roles = db::Role::all_active(ctx).await?;
+        let roles_lookup: HashMap<String, &db::Role> =
+            roles.iter().map(|r| (String::from(&r.repr), r)).collect();
+        let mut selected: HashSet<String> = HashSet::with_capacity(roles.len());
+
+        for a in args.iter::<String>() {
+            if let Ok(r) = a {
+                if roles_lookup.contains_key(&r) {
+                    selected.insert(r);
                 }
-                _ => (),
-            };
+            }
         }
-        training
-    };
 
-    confirm_msg.reply(ctx, "Training added").await?;
+        let mut m = msg
+            .channel_id
+            .send_message(ctx, |m| {
+                m.allowed_mentions(|a| a.empty_parse());
+                m.add_embed(|e| {
+                    e.description("New Training");
+                    e.field("Name", &training_name, true);
+                    e.field("Date", &training_time, true);
+                    e.field(
+                        "Tier",
+                        training_tier.as_ref().map_or("none", |t| &t.name),
+                        true,
+                    );
+                    e
+                })
+            })
+            .await?;
 
-    let emb = embeds::training_base_embed(&training);
-    msg.channel_id
-        .send_message(ctx, |m| {
-            m.allowed_mentions(|a| a.empty_parse());
-            m.content(format!(
-                "{} created a new training",
-                Mention::from(discord_user)
-            ));
+        let selected = utils::select_roles(ctx, &mut m, discord_user, &roles, selected).await?;
+
+        // Do all the database stuff
+        let training = {
+            let training_tier_id = match training_tier {
+                Some(t) => Some(t.id),
+                None => None,
+            };
+
+            let training =
+                db::Training::insert(ctx, training_name, training_time, training_tier_id).await?;
+
+            for r in &selected {
+                training
+                    .add_role(ctx, roles_lookup.get(r).unwrap().id)
+                    .await?;
+            }
+
+            training
+        };
+
+        // Update with new roles from db
+        let roles = training.active_roles(ctx).await?;
+
+        let mut emb = embeds::training_base_embed(&training);
+        embeds::training_embed_add_roles(&mut emb, &roles, false);
+
+        m.edit(ctx, |m| {
             m.embed(|e| {
                 e.0 = emb.0;
-                e.field("Roles", "-----", false);
-                e.fields(
-                    selected
-                        .into_iter()
-                        .map(|r| (r.repr.clone(), r.title.clone(), true)),
-                );
+                e.author(|a| a.name(format!("{} created:", discord_user.tag())));
                 e
             });
             m
         })
         .await?;
 
-    Ok(())
+        Ok(format!("New training added with id {}", training.id).into())
+    })
+    .await
 }
 
 const TRAINING_TIME_FMT: &str = "%a, %B %Y at %H:%M %Z";

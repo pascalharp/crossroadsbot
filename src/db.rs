@@ -451,6 +451,7 @@ async fn select_roles_by_training(ctx: &Context, id: i32) -> QueryResult<Vec<Rol
             .inner_join(roles::table);
         join.filter(trainings::id.eq(id))
             .select(roles::all_columns)
+            .order_by(roles::title)
             .load(&pool.conn())
     })
     .await
@@ -466,6 +467,7 @@ async fn select_active_roles_by_training(ctx: &Context, id: i32) -> QueryResult<
         join.filter(trainings::id.eq(id))
             .filter(roles::active.eq(true))
             .select(roles::all_columns)
+            .order_by(roles::title)
             .load(&pool.conn())
     })
     .await
@@ -480,6 +482,7 @@ async fn select_roles_by_signup(ctx: &Context, id: i32) -> QueryResult<Vec<Role>
             .inner_join(roles::table);
         join.filter(signups::id.eq(id))
             .select(roles::all_columns)
+            .order_by(roles::title)
             .load(&pool.conn())
     })
     .await

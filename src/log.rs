@@ -41,7 +41,17 @@ impl DiscordChannelLog for LogResult {
     async fn log<'a>(&self, ctx: &Context, kind: LogType<'a>, user: &User) {
         match self {
             Ok(ok) => log_info(ctx, kind, user, &ok).await,
-            Err(err) => log_error(ctx, kind, user, &err).await,
+            Err(err) => {
+                // Only log deep underlying errors as actual erros
+                // Currently: SerenityError, DieselError
+                if let Some(_) = err.downcast_ref::<SerenityError>() {
+                    log_error(ctx, kind, user, &err).await
+                } else if let Some(_) = err.downcast_ref::<DieselError>() {
+                    log_error(ctx, kind, user, &err).await
+                } else {
+                    log_info(ctx, kind, user, &err.to_string()).await
+                }
+            }
         }
     }
 

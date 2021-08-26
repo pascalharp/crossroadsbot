@@ -197,158 +197,7 @@ pub fn format_training_slim(t: &db::Training) -> String {
     String::from(format!("Name: `{}`\nDate `{} UTC`", t.title, t.date,))
 }
 
-/// Uses a conversation to select and un-select different roles
-/// Selected and unselected roles are given and returned.
-/// If the corresponding emoji is not found in the guild it will remain in
-/// its original set
-pub async fn select_roles<'a>(
-    ctx: &Context,
-    conv: &mut Conversation,
-    mut selected: HashSet<&'a db::Role>,
-    mut unselected: HashSet<&'a db::Role>,
-) -> Result<(HashSet<&'a db::Role>, HashSet<&'a db::Role>)> {
-    let emojis_guild_id = ctx
-        .data
-        .read()
-        .await
-        .get::<ConfigValuesData>()
-        .unwrap()
-        .emoji_guild_id;
-    let emoji_guild = Arc::new(Guild::get(ctx, emojis_guild_id).await?);
-
-    // Generate map of all roles with corresponding Emoji
-    let mut re_map: HashMap<&db::Role, &Emoji> =
-        HashMap::with_capacity(selected.len() + unselected.len());
-    // for quick reverse lookup
-    let mut er_map: HashMap<EmojiId, &db::Role> =
-        HashMap::with_capacity(selected.len() + unselected.len());
-    // Moved into closures as Arc
-    let mut e_set: HashSet<EmojiId> = HashSet::with_capacity(selected.len() + unselected.len());
-
-    selected.iter().chain(unselected.iter()).for_each(|r| {
-        let e_id = EmojiId::from(r.emoji as u64);
-        if let Some(e) = emoji_guild.emojis.get(&e_id) {
-            re_map.insert(r, e);
-            er_map.insert(e_id, r);
-            e_set.insert(e_id);
-        }
-    });
-
-    // No more mut
-    let re_map = re_map;
-    let er_map = er_map;
-    let e_set = Arc::new(e_set);
-
-    // Instantly start listening to reactions. Stream will catch them
-    // and we wont miss them
-    let reactor_emojis = e_set.clone();
-    let mut reactor = conv
-        .await_reactions(ctx)
-        .added(true)
-        .removed(true)
-        .filter(move |r| {
-            if r.emoji == ReactionType::from(CHECK_EMOJI)
-                || r.emoji == ReactionType::from(CROSS_EMOJI)
-            {
-                return true;
-            }
-            match &r.emoji {
-                ReactionType::Custom {
-                    animated: _,
-                    id,
-                    name: _,
-                } => reactor_emojis.contains(&id),
-                _ => false,
-            }
-        })
-        .await;
-
-    // TODO remove quick fix
-    let roles: Vec<&db::Role> = selected
-        .clone()
-        .into_iter()
-        .chain(unselected.clone().into_iter())
-        .collect();
-
-    let emb = select_roles_embed(&roles, &selected, true);
-    conv.msg
-        .edit(ctx, |m| {
-            m.embed(|e| {
-                e.0 = emb.0;
-                e
-            })
-        })
-        .await?;
-
-    // sending emojis is slow due to discord rate limits (I assume)
-    // So do it parallel while already accepting reactions
-    // Need to clone some stuff or it cant be moved to another thread
-    let msg_send = conv.msg.clone();
-    let ctx_send = ctx.clone();
-    let emoji_guild_send = emoji_guild.clone();
-    tokio::spawn(async move {
-        send_yes_or_no(&ctx_send, &msg_send).await.unwrap();
-        for e in e_set.iter() {
-            if let Some(e) = emoji_guild_send.emojis.get(e) {
-                msg_send.react(&ctx_send, e.clone()).await.unwrap();
-            }
-        }
-    });
-
-    // Now wait for emoji reactions and update message
-    loop {
-        // TODO remove quick fix
-        let emb = select_roles_embed(&roles, &selected, false);
-        conv.msg
-            .edit(ctx, |m| {
-                m.embed(|e| {
-                    e.0 = emb.0;
-                    e
-                })
-            })
-            .await?;
-
-        let react = reactor.next().await;
-
-        let react = match react {
-            None => {
-                return Err(Box::new(ConversationError::TimedOut));
-            }
-            // Dont care if added or removed. Its toggled
-            Some(e) => match *e {
-                ReactionAction::Added(ref r) => r.clone(),
-                ReactionAction::Removed(ref r) => r.clone(),
-            },
-        };
-
-        if react.emoji == ReactionType::from(CHECK_EMOJI) {
-            break;
-        } else if react.emoji == ReactionType::from(CROSS_EMOJI) {
-            return Err(Box::new(ConversationError::Canceled));
-        }
-        if let ReactionType::Custom {
-            animated: _,
-            id,
-            name: _,
-        } = &react.emoji
-        {
-            if let Some(role) = er_map.get(&id) {
-                // Should never fail
-                // if able to remove from selected add to unselected
-                if selected.remove(role) {
-                    unselected.insert(role);
-                // otherwise remove from unselected and add to selected
-                } else if unselected.remove(role) {
-                    selected.insert(role);
-                }
-            }
-        }
-    }
-
-    Ok((selected, unselected))
-}
-
-pub async fn _select_roles(
+pub async fn select_roles(
     ctx: &Context,
     msg: &mut Message,
     // The user who can select
@@ -366,7 +215,7 @@ pub async fn _select_roles(
         .collect::<Vec<_>>();
     msg.edit(ctx, |m| {
         m.add_embed(|e| {
-            e.0 = _select_roles_embed(roles, &selected).0;
+            e.0 = select_roles_embed(roles, &selected).0;
             e
         });
         m.components(|c| {
@@ -392,7 +241,7 @@ pub async fn _select_roles(
                 msg.edit(ctx, |m| {
                     m.set_embeds(orig_embeds.clone());
                     m.add_embed(|e| {
-                        e.0 = _select_roles_embed(roles, &selected).0;
+                        e.0 = select_roles_embed(roles, &selected).0;
                         e.footer(|f| {
                             f.text(format!("Role selection timed out {}", ALARM_CLOCK_EMOJI))
                         })
@@ -406,15 +255,7 @@ pub async fn _select_roles(
                 ButtonResponse::Confirm => {
                     i.create_interaction_response(ctx, |r| {
                         r.kind(InteractionResponseType::UpdateMessage);
-                        r.interaction_response_data(|d| {
-                            d.embeds(orig_embeds.clone());
-                            d.create_embed(|e| {
-                                e.0 = _select_roles_embed(roles, &selected).0;
-                                e.footer(|f| f.text(format!("Roles confirmed {}", CHECK_EMOJI)));
-                                e
-                            });
-                            d.components(|c| c)
-                        })
+                        r.interaction_response_data(|d| d.components(|c| c))
                     })
                     .await?;
                     break;
@@ -422,17 +263,7 @@ pub async fn _select_roles(
                 ButtonResponse::Abort => {
                     i.create_interaction_response(ctx, |r| {
                         r.kind(InteractionResponseType::UpdateMessage);
-                        r.interaction_response_data(|d| {
-                            d.embeds(orig_embeds.clone());
-                            d.create_embed(|e| {
-                                e.0 = _select_roles_embed(roles, &selected).0;
-                                e.footer(|f| {
-                                    f.text(format!("Role selection aborted {}", CROSS_EMOJI))
-                                });
-                                e
-                            });
-                            d.components(|c| c)
-                        })
+                        r.interaction_response_data(|d| d.components(|c| c))
                     })
                     .await?;
                     return Err(Box::new(ConversationError::Canceled));
@@ -448,8 +279,7 @@ pub async fn _select_roles(
                         r.interaction_response_data(|d| {
                             d.embeds(orig_embeds.clone());
                             d.create_embed(|e| {
-                                e.0 = _select_roles_embed(roles, &selected).0;
-                                e.footer(|f| f.text("Select roles"));
+                                e.0 = select_roles_embed(roles, &selected).0;
                                 e
                             })
                         })

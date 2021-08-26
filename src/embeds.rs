@@ -8,41 +8,7 @@ use serenity::{
 use std::{collections::HashSet, sync::Arc};
 
 // Embed helpers
-// TODO remove after rework
 pub fn select_roles_embed(
-    roles: &Vec<&db::Role>,   // all roles
-    sel: &HashSet<&db::Role>, // selected roles
-    initial: bool,
-) -> CreateEmbed {
-    let mut e = CreateEmbed::default();
-
-    e.description("Select roles");
-    e.fields(roles.iter().map(|r| {
-        let des = String::from(format!(
-            "{} | {}",
-            if sel.contains(r) {
-                GREEN_SQUARE_EMOJI
-            } else {
-                RED_SQUARE_EMOJI
-            },
-            r.repr
-        ));
-        let emoji_id = EmojiId::from(r.emoji as u64);
-        let cont = String::from(format!("{} | {}", Mention::from(emoji_id), r.title));
-        (des, cont, true)
-    }));
-    e.footer(|f| {
-        if initial {
-            f.text("Loading emojis. Please wait...")
-        } else {
-            f.text(format!("React with the corresponding emoji to select/unselect a role. Use {} to confirm. Use {} to abort", CHECK_EMOJI, CROSS_EMOJI))
-        }
-    });
-    e
-}
-
-// Embed helpers
-pub fn _select_roles_embed(
     roles: &Vec<db::Role>, // all roles
     sel: &HashSet<String>, // selected roles
 ) -> CreateEmbed {
@@ -121,6 +87,32 @@ pub fn training_embed_add_tier(
             );
         }
     }
+}
+
+pub fn training_embed_add_roles(e: &mut CreateEmbed, r: &Vec<db::Role>, inline: bool) {
+    let repr_width = r
+        .iter()
+        .map(|r| r.repr.len())
+        .fold(usize::MIN, |max, next| std::cmp::max(max, next));
+    let title_width = r
+        .iter()
+        .map(|r| r.title.len())
+        .fold(usize::MIN, |max, next| std::cmp::max(max, next));
+    let roles_text = r
+        .iter()
+        .map(|r| {
+            format!(
+                "{} `| {:^rwidth$} | {:^twidth$} |`",
+                Mention::from(EmojiId::from(r.emoji as u64)),
+                &r.repr,
+                &r.title,
+                rwidth = repr_width,
+                twidth = title_width
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    e.field("Roles", roles_text, inline);
 }
 
 pub fn training_embed_add_board_footer(e: &mut CreateEmbed, ts: &db::TrainingState) {
