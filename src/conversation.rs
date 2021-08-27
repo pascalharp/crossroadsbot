@@ -1,6 +1,7 @@
 use crate::{data::GLOB_COMMAND_PREFIX, data::*, db, embeds, log::LogResult, utils::*};
 use dashmap::DashSet;
 use serenity::{
+    builder::CreateEmbed,
     client::bridge::gateway::ShardMessenger,
     collector::{message_collector::*, reaction_collector::*},
     futures::future,
@@ -91,6 +92,43 @@ impl Conversation {
 
         // Send initial message to channel
         let msg = match chan.send_message(ctx, |m| m.content("Loading ...")).await {
+            Ok(m) => m,
+            Err(_) => {
+                lock.remove(&user.id);
+                return Err(ConversationError::DmBlocked);
+            }
+        };
+
+        Ok(Conversation {
+            lock,
+            user: user.clone(),
+            chan,
+            msg,
+        })
+    }
+
+    // Same as start but instead sends an embed as initial message
+    pub async fn init(ctx: &Context, user: &User, emb: CreateEmbed) -> ConvResult {
+        let lock = {
+            let data_read = ctx.data.read().await;
+            data_read.get::<ConversationLock>().unwrap().clone()
+        };
+
+        if !lock.insert(user.id) {
+            return Err(ConversationError::ConversationLocked);
+        }
+
+        // Check if we can open a dm channel
+        let chan = match user.create_dm_channel(ctx).await {
+            Ok(c) => c,
+            Err(_) => {
+                lock.remove(&user.id);
+                return Err(ConversationError::NoDmChannel);
+            }
+        };
+
+        // Send initial message to channel
+        let msg = match chan.send_message(ctx, |m| m.set_embed(emb)).await {
             Ok(m) => m,
             Err(_) => {
                 lock.remove(&user.id);
@@ -197,6 +235,119 @@ impl Drop for Conversation {
 static NOT_REGISTERED: &str = "User not registered";
 static NOT_OPEN: &str = "Training not found or not open";
 static NOT_SIGNED_UP: &str = "Not signup found for user";
+
+pub async fn _join_training(
+    ctx: &Context,
+    conv: &mut Conversation,
+    training: &db::Training,
+) -> LogResult {
+    let db_user = match db::User::by_discord_id(ctx, conv.user.id).await {
+        Ok(u) => u,
+        Err(diesel::NotFound) => {
+            let embed = embeds::not_registered_embed();
+            conv.msg
+                .edit(ctx, |m| {
+                    m.add_embed(|e| {
+                        e.0 = embed.0;
+                        e
+                    })
+                })
+                .await?;
+            return Err(NOT_REGISTERED.into());
+        }
+        Err(e) => return Err(e.into()),
+    };
+
+    // verify if tier requirements pass
+    match verify_tier(ctx, training, &conv.user).await {
+        Ok((pass, tier)) => {
+            if !pass {
+                conv.msg
+                    .edit(ctx, |m| {
+                        m.content("");
+                        m.embed(|e| {
+                            e.description("Tier requirement not fulfilled");
+                            e.field("Missing tier:", tier, false)
+                        })
+                    })
+                    .await?;
+                return Err("Tier requirement not fulfilled".into());
+            }
+        }
+        Err(e) => return Err(e.into()),
+    };
+
+    // Check if signup already exist
+    match db::Signup::by_user_and_training(ctx, &db_user, &training).await {
+        Ok(_) => {
+            conv.msg
+                .edit(ctx, |m| {
+                    m.content("");
+                    m.embed(|e| {
+                        e.description("Already signed up for this training");
+                        e.field(
+                            "You can edit your signup with:",
+                            format!("`{}edit {}`", GLOB_COMMAND_PREFIX, training.id),
+                            false,
+                        );
+                        e.field(
+                            "You can remove your signup with:",
+                            format!("`{}leave {}`", GLOB_COMMAND_PREFIX, training.id),
+                            false,
+                        )
+                    })
+                })
+                .await?;
+            return Err("Already signed up".into());
+        }
+        Err(diesel::NotFound) => (), // This is what we want
+        Err(e) => return Err(e.into()),
+    };
+
+    let roles = training.active_roles(ctx).await?;
+    let roles_lookup: HashMap<String, &db::Role> =
+        roles.iter().map(|r| (String::from(&r.repr), r)).collect();
+
+    // Gather selected roles
+    let selected: HashSet<String> = HashSet::with_capacity(roles.len());
+    let selected = select_roles(ctx, &mut conv.msg, &conv.user, &roles, selected).await?;
+
+    let signup = db::Signup::insert(ctx, &db_user, &training).await?;
+
+    // Save roles
+    // We inserted all roles into the HashMap, so it is save to unwrap
+    let futs = selected
+        .iter()
+        .map(|r| signup.add_role(ctx, roles_lookup.get(r).unwrap()));
+    future::try_join_all(futs).await?;
+
+    conv.msg
+        .edit(ctx, |m| {
+            m.add_embed(|e| {
+                e.color((0, 255, 0));
+                e.description("Successfully signed up");
+                e.field(
+                    "To edit your sign up:",
+                    format!("`{}edit {}`", GLOB_COMMAND_PREFIX, training.id),
+                    false,
+                );
+                e.field(
+                    "To remove your sign up:",
+                    format!("`{}leave {}`", GLOB_COMMAND_PREFIX, training.id),
+                    false,
+                );
+                e.field(
+                    "To list all your current sign ups:",
+                    format!("`{}list`", GLOB_COMMAND_PREFIX),
+                    false,
+                );
+                e
+            })
+        })
+        .await?;
+
+    Ok(Some("Sign up completed".into()))
+}
 
 pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogResult {
     let mut conv = Conversation::start(ctx, user).await?;

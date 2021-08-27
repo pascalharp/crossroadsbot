@@ -1,3 +1,4 @@
+use crate::conversation;
 use crate::data::LogConfigData;
 use crate::signup_board::SignupBoardAction;
 use diesel::result::Error as DieselError;
@@ -38,6 +39,7 @@ pub trait LogCalls {
         Fut: Future<Output = LogResult>;
 
     /// Only logs on errors, otherwise yields the result
+    /// Replies to the message with the error
     async fn value<T: std::marker::Send, F: std::marker::Send, Fut: std::marker::Send>(
         ctx: &Context,
         msg: &Message,
@@ -46,6 +48,28 @@ pub trait LogCalls {
     where
         F: FnOnce() -> Fut,
         Fut: Future<Output = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>>;
+
+    /// Only logs on errors, otherwise yields the result
+    /// Does not reply to a message on error
+    async fn value_silent<T: std::marker::Send, F: std::marker::Send, Fut: std::marker::Send>(
+        ctx: &Context,
+        user: &User,
+        f: F,
+    ) -> Option<T>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>>;
+
+    /// Log a conversation
+    async fn conversation<F: std::marker::Send, Fut: std::marker::Send>(
+        ctx: &Context,
+        mut conv: conversation::Conversation,
+        info: String,
+        f: F,
+    ) -> ()
+    where
+        F: FnOnce(conversation::Conversation) -> Fut,
+        Fut: Future<Output = LogResult>;
 }
 
 #[async_trait]
@@ -158,11 +182,52 @@ impl LogCalls for LogResult {
             }
         }
     }
+
+    async fn value_silent<T: std::marker::Send, F: std::marker::Send, Fut: std::marker::Send>(
+        ctx: &Context,
+        user: &User,
+        f: F,
+    ) -> Option<T>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>>,
+    {
+        let res = f().await;
+        match res {
+            Ok(ok) => Some(ok),
+            Err(err) => {
+                let err = LogResult::Err(err.into());
+                err.log(ctx, LogType::Internal, user).await;
+                None
+            }
+        }
+    }
+
+    /// Log a conversation
+    async fn conversation<F: std::marker::Send, Fut: std::marker::Send>(
+        ctx: &Context,
+        conv: conversation::Conversation,
+        info: String,
+        f: F,
+    ) -> ()
+    where
+        F: FnOnce(conversation::Conversation) -> Fut,
+        Fut: Future<Output = LogResult>,
+    {
+        // Too lazy to figure out proper lifetimes
+        let u = conv.user.clone();
+        let m = conv.msg.clone();
+        let res = f(conv).await;
+        res.reply(ctx, &m).await.ok();
+        res.log(ctx, LogType::Conversation(info), &u).await;
+    }
 }
 
 pub enum LogType<'a> {
     Command(&'a str),
     Interaction(&'a SignupBoardAction),
+    Conversation(String),
+    Internal,
 }
 
 impl<'a> From<&'a Message> for LogType<'a> {
@@ -196,6 +261,12 @@ async fn log_info<'a>(ctx: &Context, kind: LogType<'a>, user: &User, info: Optio
                     }
                     LogType::Command(c) => {
                         e.field("Command", format!("`{}`", c), true);
+                    }
+                    LogType::Conversation(s) => {
+                        e.field("Conversation", s, true);
+                    }
+                    LogType::Internal => {
+                        e.field("Internal", "*omitted*", true);
                     }
                 }
                 if let Some(info) = info {
@@ -239,6 +310,12 @@ async fn log_error<'a>(
                     }
                     LogType::Command(c) => {
                         e.field("Command", format!("`{}`", c), true);
+                    }
+                    LogType::Conversation(s) => {
+                        e.field("Conversation", s, true);
+                    }
+                    LogType::Internal => {
+                        e.field("Internal", "*omitted*", true);
                     }
                 }
                 e.field("Error", err, false);

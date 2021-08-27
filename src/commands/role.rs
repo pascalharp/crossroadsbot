@@ -2,7 +2,7 @@ use super::SQUADMAKER_ROLE_CHECK;
 use crate::{
     components,
     data::ConfigValuesData,
-    db,
+    db, embeds,
     log::*,
     utils::{CROSS_EMOJI, DEFAULT_TIMEOUT},
 };
@@ -240,28 +240,21 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 #[only_in("guild")]
 #[num_args(1)]
 pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let role_repr = args.single::<String>()?;
-    let role = match db::Role::by_repr(ctx, role_repr).await {
-        Ok(r) => r,
-        Err(e) => match e {
-            diesel::result::Error::NotFound => {
-                let res: LogResult = Ok(Some("Role not found".into()));
-                res.reply(ctx, msg).await?;
-                res.log(ctx, LogType::Command(&msg.content), &msg.author)
-                    .await;
-                return Ok(());
-            }
-            _ => return Err(e.into()),
-        },
-    };
-
-    role.deactivate(ctx).await?;
-
-    let res: LogResult = Ok(Some("Role removed".into()));
-    res.reply(ctx, msg).await?;
-    res.log(ctx, LogType::Command(&msg.content), &msg.author)
-        .await;
-    Ok(())
+    LogResult::command(ctx, msg, || async {
+        let role_repr = args.single::<String>()?;
+        let role = match db::Role::by_repr(ctx, role_repr).await {
+            Ok(r) => r,
+            Err(e) => match e {
+                diesel::NotFound => {
+                    return Err("Role not found".into());
+                }
+                _ => return Err(e.into()),
+            },
+        };
+        role.deactivate(ctx).await?;
+        Ok(Some("Role removed".into()))
+    })
+    .await
 }
 
 #[command]
@@ -272,30 +265,16 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
 #[only_in("guild")]
 #[num_args(0)]
 pub async fn list(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
-    let roles = db::Role::all_active(ctx).await?;
+    LogResult::command(ctx, msg, || async {
+        let roles = db::Role::all_active(ctx).await?;
+        let mut embed = CreateEmbed::default();
+        embeds::embed_add_roles(&mut embed, &roles, false);
 
-    msg.channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.title("Roles");
-                for r in roles {
-                    e.field(
-                        format!(
-                            "{} {}",
-                            Mention::from(EmojiId::from(r.emoji as u64)),
-                            r.repr
-                        ),
-                        r.title,
-                        true,
-                    );
-                }
-                e
-            })
-        })
-        .await?;
+        msg.channel_id
+            .send_message(ctx, |m| m.set_embed(embed))
+            .await?;
 
-    let res: LogResult = Ok(Some("Success".into()));
-    res.log(ctx, LogType::Command(&msg.content), &msg.author)
-        .await;
-    Ok(())
+        Ok(None)
+    })
+    .await
 }
