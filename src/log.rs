@@ -73,7 +73,7 @@ impl DiscordChannelLog for LogResult {
                 if let Some(info) = s {
                     msg.reply(ctx, info.as_str()).await?;
                 }
-            },
+            }
             // dont report serenity or diesel errors directly to user
             Err(e) => {
                 if let Some(_) = e.downcast_ref::<SerenityError>() {
@@ -144,14 +144,16 @@ impl LogCalls for LogResult {
     ) -> Option<T>
     where
         F: FnOnce() -> Fut,
-        Fut: Future<Output = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>> {
+        Fut: Future<Output = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>>,
+    {
         let res = f().await;
         match res {
             Ok(ok) => Some(ok),
             Err(err) => {
                 let err = LogResult::Err(err.into());
                 err.reply(ctx, msg).await.ok();
-                err.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+                err.log(ctx, LogType::Command(&msg.content), &msg.author)
+                    .await;
                 None
             }
         }

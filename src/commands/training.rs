@@ -144,19 +144,18 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 #[usage = "training_id"]
 pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     LogResult::command(ctx, msg, || async {
-
         let training_id = args.single::<i32>()?;
 
         let training = match db::Training::by_id(ctx, training_id).await {
             Ok(t) => t,
             Err(diesel::NotFound) => return Err("Unable to find training with this id".into()),
-            Err(e) => return Err(e.into())
+            Err(e) => return Err(e.into()),
         };
 
         match training.state {
             db::TrainingState::Created | db::TrainingState::Finished => {
                 return Err("Information for this training is not public".into())
-            },
+            }
             _ => (),
         }
 
@@ -168,7 +167,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 None => None,
                 Some(t) => {
                     let t = Arc::new(t?);
-                    Some( (t.clone(), Arc::new(t.get_discord_roles(ctx).await?)) )
+                    Some((t.clone(), Arc::new(t.get_discord_roles(ctx).await?)))
                 }
             }
         };
@@ -176,7 +175,6 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         let mut embed = embeds::training_base_embed(&training);
         embeds::training_embed_add_tier(&mut embed, &tiers, true);
         embeds::embed_add_roles(&mut embed, &roles, false);
-
 
         msg.channel_id
             .send_message(ctx, |m| {
@@ -186,7 +184,8 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             .await?;
 
         Ok(None)
-    }).await
+    })
+    .await
 }
 
 #[command]

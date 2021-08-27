@@ -195,7 +195,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
                 res.reply(ctx, msg).await?;
                 res.log(ctx, LogType::Command(&msg.content), &msg.author)
                     .await;
-                return Ok(())
+                return Ok(());
             }
             _ => return Err(e.into()),
         },

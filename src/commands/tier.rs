@@ -74,7 +74,9 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
             if t.contains(" ") {
                 return Ok(Some("Tier name may not contain spaces".into()));
             } else if t.to_lowercase().eq("none") {
-                return Ok(Some("none is a reserved keyword and can not be used".into()));
+                return Ok(Some(
+                    "none is a reserved keyword and can not be used".into(),
+                ));
             }
             t
         }
@@ -313,7 +315,11 @@ async fn _edit_remove(ctx: &Context, mut args: Args) -> LogResult {
         .into_iter()
         .find(|d| RoleId::from(d.discord_role_id as u64) == role);
     let to_remove = match to_remove {
-        None => return Ok(Some("Provided discord role is not part of the provided tier".into())),
+        None => {
+            return Ok(Some(
+                "Provided discord role is not part of the provided tier".into(),
+            ))
+        }
         Some(i) => i,
     };
 

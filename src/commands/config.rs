@@ -53,11 +53,7 @@ async fn set_log_channel(ctx: &Context, mut args: Args, kind: LogChannelType) ->
         },
         value: channel_id.to_string(),
     };
-
-    match conf.save(ctx).await {
-        Ok(_) => (),
-        Err(e) => return Err(e.into()),
-    }
+    conf.save(ctx).await?;
 
     Ok(Some("Log channel saved".into()))
 }
@@ -96,7 +92,11 @@ pub async fn set_log_error(ctx: &Context, msg: &Message, args: Args) -> CommandR
 #[usage = "category_id"]
 #[only_in("guild")]
 #[num_args(1)]
-pub async fn set_signup_board_category(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+pub async fn set_signup_board_category(
+    ctx: &Context,
+    msg: &Message,
+    mut args: Args,
+) -> CommandResult {
     LogResult::command(ctx, msg, || async {
         let channel_id: ChannelId = match args.single::<ChannelId>() {
             Err(_) => {
@@ -151,6 +151,6 @@ pub async fn signup_board_reset(ctx: &Context, msg: &Message, _: Args) -> Comman
 
         write_lock.write().await.reset(ctx).await?;
         LogResult::Ok(Some("Signup board resetted".into()))
-
-    }).await
+    })
+    .await
 }
