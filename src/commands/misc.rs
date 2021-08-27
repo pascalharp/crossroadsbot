@@ -156,14 +156,14 @@ pub async fn log_test(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             .await?;
         let cmd = args.single::<String>()?;
         match cmd.as_str() {
-            "ok" => LogResult::Ok("Everything ok".into()),
+            "ok" => LogResult::Ok(Some("Everything ok".into())),
             "num" => {
                 args.single::<i32>()?;
-                LogResult::Ok("Number provided".into())
+                LogResult::Ok(Some("Number provided".into()))
             }
             "del" => {
                 msg.delete(ctx).await?;
-                LogResult::Ok("Lol deleting everyones messages. kekw".into())
+                LogResult::Ok(Some("Lol deleting everyones messages. kekw".into()))
             }
             _ => Err("Invalid argmunts".into()),
         }

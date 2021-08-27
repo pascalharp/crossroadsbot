@@ -22,7 +22,7 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
     let role_repr = args.single_quoted::<String>()?;
 
     if role_repr.contains(" ") {
-        return Ok("Identifier must not contain spaces".into());
+        return Ok(Some("Identifier must not contain spaces".into()));
     }
 
     // load all roles from db
@@ -51,7 +51,7 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
         .collect();
 
     if available.is_empty() {
-        return Ok("No more emojis for roles available".into());
+        return Ok(Some("No more emojis for roles available".into()));
     }
 
     let mut msg = channel
@@ -103,7 +103,7 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
 
     let emoji_id = match emoji {
         None => {
-            return Ok("Timed out".into());
+            return Ok(Some("Timed out".into()));
         }
         Some(r) => {
             match &r.as_inner_ref().emoji {
@@ -114,7 +114,7 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
                 } => *id,
                 ReactionType::Unicode(s) => {
                     if *s == String::from(CROSS_EMOJI) {
-                        return Ok("Aborted".into());
+                        return Ok(Some("Aborted".into()));
                     }
                     // Should never occur since filtered already filtered
                     return Err("Unexpected emoji".into());
@@ -152,11 +152,11 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
                 db::Role::insert(ctx, role_name, role_repr, *emoji_id.as_u64()).await?;
             }
             utils::YesOrNo::No => {
-                return Ok("Aborted".into());
+                return Ok(Some("Aborted".into()));
             }
         }
     } else {
-        return Ok("Timed out".into());
+        return Ok(Some("Timed out".into()));
     }
 
     Ok(format!("Role added {}", Mention::from(emoji_id)).into())
@@ -174,7 +174,7 @@ pub async fn add(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     res.reply(ctx, msg).await?;
     res.log(ctx, LogType::Command(&msg.content), &msg.author)
         .await;
-    res.cmd_result()
+    Ok(())
 }
 
 #[command]
@@ -191,11 +191,11 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
         Ok(r) => r,
         Err(e) => match e {
             diesel::result::Error::NotFound => {
-                let res: LogResult = Ok("Role not found".into());
+                let res: LogResult = Ok(Some("Role not found".into()));
                 res.reply(ctx, msg).await?;
                 res.log(ctx, LogType::Command(&msg.content), &msg.author)
                     .await;
-                return res.cmd_result();
+                return Ok(())
             }
             _ => return Err(e.into()),
         },
@@ -203,11 +203,11 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
 
     role.deactivate(ctx).await?;
 
-    let res: LogResult = Ok("Role removed".into());
+    let res: LogResult = Ok(Some("Role removed".into()));
     res.reply(ctx, msg).await?;
     res.log(ctx, LogType::Command(&msg.content), &msg.author)
         .await;
-    res.cmd_result()
+    Ok(())
 }
 
 #[command]
@@ -240,8 +240,8 @@ pub async fn list(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResul
         })
         .await?;
 
-    let res: LogResult = Ok("Success".into());
+    let res: LogResult = Ok(Some("Success".into()));
     res.log(ctx, LogType::Command(&msg.content), &msg.author)
         .await;
-    res.cmd_result()
+    Ok(())
 }

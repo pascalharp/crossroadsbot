@@ -14,12 +14,12 @@ struct Signup;
 async fn _register(ctx: &Context, user: &User, gw2_acc: String) -> LogResult {
     let re = Regex::new("^[a-zA-Z]{3,27}\\.[0-9]{4}$").unwrap();
     if !re.is_match(&gw2_acc) {
-        return Ok("Invalid gw2 account name format".into());
+        return Ok(Some("Invalid gw2 account name format".into()));
     }
 
     // this is an update on conflict
     let new_user = db::User::upsert(ctx, *user.id.as_u64(), gw2_acc.clone()).await?;
-    Ok(format!("Gw2 account set to: {}", new_user.gw2_id))
+    Ok(Some(format!("Gw2 account set to: {}", new_user.gw2_id)))
 }
 
 #[command]
@@ -56,7 +56,7 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         }
     }
     res.log(ctx, msg.into(), &msg.author).await;
-    res.cmd_result()
+    Ok(())
 }
 
 #[command]
@@ -80,7 +80,7 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
         }
     }
     res.log(ctx, msg.into(), &msg.author).await;
-    res.cmd_result()
+    Ok(())
 }
 
 #[command]
@@ -104,7 +104,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         }
     }
     res.log(ctx, msg.into(), &msg.author).await;
-    res.cmd_result()
+    Ok(())
 }
 
 #[command]
@@ -120,5 +120,5 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
         }
     }
     res.log(ctx, msg.into(), &msg.author).await;
-    res.cmd_result()
+    Ok(())
 }

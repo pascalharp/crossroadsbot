@@ -5,17 +5,18 @@ use serenity::{async_trait, framework::standard::CommandResult, model::prelude::
 use std::future::Future;
 use std::ops::FnOnce;
 
-pub type LogResult = std::result::Result<String, Box<dyn std::error::Error + Send + Sync>>;
+pub type LogResult = std::result::Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
 
 #[async_trait]
 pub trait DiscordChannelLog {
-    async fn log<'a>(&self, ctx: &Context, kind: LogType<'a>, user: &User);
-    async fn reply(&self, ctx: &Context, msg: &Message) -> serenity::Result<Message>;
+    async fn log<'a>(self, ctx: &Context, kind: LogType<'a>, user: &User);
+    async fn reply(&self, ctx: &Context, msg: &Message) -> serenity::Result<()>;
     fn cmd_result(self) -> CommandResult;
 }
 
 #[async_trait]
 pub trait LogCalls {
+    /// Logs a command. Will reply to the inital message with the result
     async fn command<F: std::marker::Send, Fut: std::marker::Send>(
         ctx: &Context,
         msg: &Message,
@@ -25,6 +26,7 @@ pub trait LogCalls {
         F: FnOnce() -> Fut,
         Fut: Future<Output = LogResult>;
 
+    /// Logs an interaction if there is no initial message from the user
     async fn interaction<F: std::marker::Send, Fut: std::marker::Send>(
         ctx: &Context,
         action: &SignupBoardAction,
@@ -34,13 +36,23 @@ pub trait LogCalls {
     where
         F: FnOnce() -> Fut,
         Fut: Future<Output = LogResult>;
+
+    /// Only logs on errors, otherwise yields the result
+    async fn value<T: std::marker::Send, F: std::marker::Send, Fut: std::marker::Send>(
+        ctx: &Context,
+        msg: &Message,
+        f: F,
+    ) -> Option<T>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>>;
 }
 
 #[async_trait]
 impl DiscordChannelLog for LogResult {
-    async fn log<'a>(&self, ctx: &Context, kind: LogType<'a>, user: &User) {
+    async fn log<'a>(self, ctx: &Context, kind: LogType<'a>, user: &User) {
         match self {
-            Ok(ok) => log_info(ctx, kind, user, &ok).await,
+            Ok(ok) => log_info(ctx, kind, user, ok).await,
             Err(err) => {
                 // Only log deep underlying errors as actual erros
                 // Currently: SerenityError, DieselError
@@ -49,26 +61,31 @@ impl DiscordChannelLog for LogResult {
                 } else if let Some(_) = err.downcast_ref::<DieselError>() {
                     log_error(ctx, kind, user, &err).await
                 } else {
-                    log_info(ctx, kind, user, &err.to_string()).await
+                    log_info(ctx, kind, user, Some(err.to_string())).await
                 }
             }
         }
     }
 
-    async fn reply(&self, ctx: &Context, msg: &Message) -> serenity::Result<Message> {
+    async fn reply(&self, ctx: &Context, msg: &Message) -> serenity::Result<()> {
         match self {
-            Ok(s) => msg.reply(ctx, s).await,
+            Ok(s) => {
+                if let Some(info) = s {
+                    msg.reply(ctx, info.as_str()).await?;
+                }
+            },
             // dont report serenity or diesel errors directly to user
             Err(e) => {
                 if let Some(_) = e.downcast_ref::<SerenityError>() {
-                    return msg.reply(ctx, String::from("Unexpected error. =(")).await;
+                    msg.reply(ctx, String::from("Unexpected error. =(")).await?;
                 } else if let Some(_) = e.downcast_ref::<DieselError>() {
-                    return msg.reply(ctx, String::from("Unexpected error. =(")).await;
+                    msg.reply(ctx, String::from("Unexpected error. =(")).await?;
                 } else {
-                    return msg.reply(ctx, e).await;
+                    msg.reply(ctx, e).await?;
                 }
             }
-        }
+        };
+        Ok(())
     }
 
     // Only bubbles up serenity and diesel errors to be reported as errors
@@ -103,7 +120,7 @@ impl LogCalls for LogResult {
         res.reply(ctx, msg).await?;
         res.log(ctx, LogType::Command(&msg.content), &msg.author)
             .await;
-        res.cmd_result()
+        Ok(())
     }
 
     async fn interaction<F: std::marker::Send, Fut: std::marker::Send>(
@@ -119,6 +136,26 @@ impl LogCalls for LogResult {
         let res = f().await;
         res.log(ctx, LogType::Interaction(action), user).await;
     }
+
+    async fn value<T: std::marker::Send, F: std::marker::Send, Fut: std::marker::Send>(
+        ctx: &Context,
+        msg: &Message,
+        f: F,
+    ) -> Option<T>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>> {
+        let res = f().await;
+        match res {
+            Ok(ok) => Some(ok),
+            Err(err) => {
+                let err = LogResult::Err(err.into());
+                err.reply(ctx, msg).await.ok();
+                err.log(ctx, LogType::Command(&msg.content), &msg.author).await;
+                None
+            }
+        }
+    }
 }
 
 pub enum LogType<'a> {
@@ -132,7 +169,7 @@ impl<'a> From<&'a Message> for LogType<'a> {
     }
 }
 
-async fn log_info<'a>(ctx: &Context, kind: LogType<'a>, user: &User, info: &str) {
+async fn log_info<'a>(ctx: &Context, kind: LogType<'a>, user: &User, info: Option<String>) {
     let log_info = {
         ctx.data
             .read()
@@ -159,7 +196,10 @@ async fn log_info<'a>(ctx: &Context, kind: LogType<'a>, user: &User, info: &str)
                         e.field("Command", format!("`{}`", c), true);
                     }
                 }
-                e.field("Result", info, false)
+                if let Some(info) = info {
+                    e.field("Result", info, false);
+                }
+                e
             })
         })
         .await

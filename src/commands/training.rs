@@ -4,8 +4,6 @@ use crate::{
     log::*,
     utils::{self, *},
 };
-use chrono::{DateTime, Utc};
-use chrono_tz::Europe::{London, Moscow, Paris};
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serenity::framework::standard::{
     macros::{command, group},
@@ -122,7 +120,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         let roles = training.active_roles(ctx).await?;
 
         let mut emb = embeds::training_base_embed(&training);
-        embeds::training_embed_add_roles(&mut emb, &roles, false);
+        embeds::embed_add_roles(&mut emb, &roles, false);
 
         m.edit(ctx, |m| {
             m.embed(|e| {
@@ -139,119 +137,56 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     .await
 }
 
-const TRAINING_TIME_FMT: &str = "%a, %B %Y at %H:%M %Z";
-
 #[command]
 #[checks(squadmaker_role)]
 #[description = "Displays information about the training with the specified id"]
 #[example = "121"]
 #[usage = "training_id"]
 pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let training_id = match args.single::<i32>() {
-        Ok(i) => i,
-        Err(_) => {
-            msg.reply(ctx, "Unable to parse training id").await?;
-            return Ok(());
+    LogResult::command(ctx, msg, || async {
+
+        let training_id = args.single::<i32>()?;
+
+        let training = match db::Training::by_id(ctx, training_id).await {
+            Ok(t) => t,
+            Err(diesel::NotFound) => return Err("Unable to find training with this id".into()),
+            Err(e) => return Err(e.into())
+        };
+
+        match training.state {
+            db::TrainingState::Created | db::TrainingState::Finished => {
+                return Err("Information for this training is not public".into())
+            },
+            _ => (),
         }
-    };
 
-    let training = match db::Training::by_id(ctx, training_id).await {
-        Ok(t) => Arc::new(t),
-        Err(_) => {
-            msg.reply(ctx, "Unable to find training with this id")
-                .await?;
-            return Ok(());
-        }
-    };
+        let roles = training.active_roles(ctx).await?;
 
-    match training.state {
-        db::TrainingState::Created | db::TrainingState::Finished => {
-            msg.reply(ctx, "Information for this training is not public")
-                .await?;
-            return Ok(());
-        }
-        _ => (),
-    }
-
-    let roles = training.active_roles(ctx).await?;
-
-    let (tier, tier_roles) = {
-        let tier = training.get_tier(ctx).await;
-        match tier {
-            None => (None, None),
-            Some(t) => {
-                let t = Arc::new(t?);
-                (Some(t.clone()), Some(t.get_discord_roles(ctx).await?))
+        let tiers = {
+            let tier = training.get_tier(ctx).await;
+            match tier {
+                None => None,
+                Some(t) => {
+                    let t = Arc::new(t?);
+                    Some( (t.clone(), Arc::new(t.get_discord_roles(ctx).await?)) )
+                }
             }
-        }
-    };
+        };
 
-    let role_map = role_emojis(ctx, roles).await?;
+        let mut embed = embeds::training_base_embed(&training);
+        embeds::training_embed_add_tier(&mut embed, &tiers, true);
+        embeds::embed_add_roles(&mut embed, &roles, false);
 
-    let utc = DateTime::<Utc>::from_utc(training.date, Utc);
-    msg.channel_id
-        .send_message(ctx, |m| {
-            m.allowed_mentions(|am| am.empty_parse());
-            m.embed(|f| {
-                f.description(format!(
-                    "{} {}",
-                    match &training.state {
-                        db::TrainingState::Open => GREEN_CIRCLE_EMOJI,
-                        db::TrainingState::Closed => RED_CIRCLE_EMOJI,
-                        db::TrainingState::Started => RUNNING_EMOJI,
-                        _ => ' ',
-                    },
-                    &training.title
-                ));
-                f.field(
-                    "**Date**",
-                    format!(
-                        "{}\n{}\n{}\n{}",
-                        utc.format(TRAINING_TIME_FMT),
-                        utc.with_timezone(&London).format(TRAINING_TIME_FMT),
-                        utc.with_timezone(&Paris).format(TRAINING_TIME_FMT),
-                        utc.with_timezone(&Moscow).format(TRAINING_TIME_FMT),
-                    ),
-                    false,
-                );
-                f.field(
-                    "**Requirements**",
-                    match tier {
-                        Some(t) => {
-                            format!(
-                                "{}\n{}",
-                                t.name,
-                                tier_roles
-                                    .unwrap_or(vec![])
-                                    .iter()
-                                    .map(|r| {
-                                        Mention::from(RoleId::from(r.discord_role_id as u64))
-                                            .to_string()
-                                    })
-                                    .collect::<Vec<_>>()
-                                    .join("\n"),
-                            )
-                        }
-                        None => "Open for everyone".to_string(),
-                    },
-                    true,
-                );
-                f.field("**State**", &training.state, true);
-                f.field("**ID**", &training.id, true);
-                f.field("**Available roles**    ", "**-----------------**", false);
-                f.fields(role_map.values().map(|rm| {
-                    (
-                        format!("{}   {}", Mention::from(rm.emoji.id), &rm.role.repr),
-                        &rm.role.title,
-                        true,
-                    )
-                }));
-                f
+
+        msg.channel_id
+            .send_message(ctx, |m| {
+                m.allowed_mentions(|am| am.empty_parse());
+                m.set_embed(embed)
             })
-        })
-        .await?;
+            .await?;
 
-    Ok(())
+        Ok(None)
+    }).await
 }
 
 #[command]

@@ -89,7 +89,7 @@ pub fn training_embed_add_tier(
     }
 }
 
-pub fn training_embed_add_roles(e: &mut CreateEmbed, r: &Vec<db::Role>, inline: bool) {
+pub fn embed_add_roles(e: &mut CreateEmbed, r: &Vec<db::Role>, inline: bool) {
     let repr_width = r
         .iter()
         .map(|r| r.repr.len())

@@ -59,7 +59,7 @@ async fn set_log_channel(ctx: &Context, mut args: Args, kind: LogChannelType) ->
         Err(e) => return Err(e.into()),
     }
 
-    Ok("Log channel saved".into())
+    Ok(Some("Log channel saved".into()))
 }
 
 #[command]
@@ -70,10 +70,10 @@ async fn set_log_channel(ctx: &Context, mut args: Args, kind: LogChannelType) ->
 #[only_in("guild")]
 #[num_args(1)]
 pub async fn set_log_info(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let res = set_log_channel(ctx, args, LogChannelType::Info).await;
-    res.reply(ctx, msg).await?;
-    res.log(ctx, msg.into(), &msg.author).await;
-    res.cmd_result()
+    LogResult::command(ctx, msg, || async {
+        set_log_channel(ctx, args, LogChannelType::Info).await
+    })
+    .await
 }
 
 #[command]
@@ -84,44 +84,10 @@ pub async fn set_log_info(ctx: &Context, msg: &Message, args: Args) -> CommandRe
 #[only_in("guild")]
 #[num_args(1)]
 pub async fn set_log_error(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let res = set_log_channel(ctx, args, LogChannelType::Error).await;
-    res.reply(ctx, msg).await?;
-    res.log(ctx, msg.into(), &msg.author).await;
-    res.cmd_result()
-}
-
-async fn _set_signup_board_category(ctx: &Context, mut args: Args) -> LogResult {
-    let channel_id: ChannelId = match args.single::<ChannelId>() {
-        Err(_) => {
-            return Ok("No valid channel provided".into());
-        }
-        Ok(c) => c,
-    };
-
-    // set in memory
-    {
-        let write_lock = ctx
-            .data
-            .read()
-            .await
-            .get::<SignupBoardData>()
-            .unwrap()
-            .clone();
-        write_lock.write().await.set_category_channel(channel_id);
-    }
-
-    // save to db
-    let conf = db::Config {
-        name: String::from(signup_board::SIGNUP_BOARD_NAME),
-        value: channel_id.to_string(),
-    };
-
-    match conf.save(ctx).await {
-        Ok(_) => Ok("Signup board category saved".into()),
-        Err(e) => {
-            return Err(e.into());
-        }
-    }
+    LogResult::command(ctx, msg, || async {
+        set_log_channel(ctx, args, LogChannelType::Error).await
+    })
+    .await
 }
 
 #[command]
@@ -130,11 +96,41 @@ async fn _set_signup_board_category(ctx: &Context, mut args: Args) -> LogResult 
 #[usage = "category_id"]
 #[only_in("guild")]
 #[num_args(1)]
-pub async fn set_signup_board_category(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let res = _set_signup_board_category(ctx, args).await;
-    res.reply(ctx, msg).await?;
-    res.log(ctx, msg.into(), &msg.author).await;
-    res.cmd_result()
+pub async fn set_signup_board_category(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    LogResult::command(ctx, msg, || async {
+        let channel_id: ChannelId = match args.single::<ChannelId>() {
+            Err(_) => {
+                return Ok(Some("No valid channel provided".into()));
+            }
+            Ok(c) => c,
+        };
+
+        // set in memory
+        {
+            let write_lock = ctx
+                .data
+                .read()
+                .await
+                .get::<SignupBoardData>()
+                .unwrap()
+                .clone();
+            write_lock.write().await.set_category_channel(channel_id);
+        }
+
+        // save to db
+        let conf = db::Config {
+            name: String::from(signup_board::SIGNUP_BOARD_NAME),
+            value: channel_id.to_string(),
+        };
+
+        match conf.save(ctx).await {
+            Ok(_) => Ok(Some("Signup board category saved".into())),
+            Err(e) => {
+                return Err(e.into());
+            }
+        }
+    })
+    .await
 }
 
 #[command]
@@ -144,18 +140,17 @@ pub async fn set_signup_board_category(ctx: &Context, msg: &Message, args: Args)
 #[only_in("guild")]
 #[num_args(0)]
 pub async fn signup_board_reset(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    let write_lock = ctx
-        .data
-        .read()
-        .await
-        .get::<SignupBoardData>()
-        .unwrap()
-        .clone();
+    LogResult::command(ctx, msg, || async {
+        let write_lock = ctx
+            .data
+            .read()
+            .await
+            .get::<SignupBoardData>()
+            .unwrap()
+            .clone();
 
-    write_lock.write().await.reset(ctx).await?;
+        write_lock.write().await.reset(ctx).await?;
+        LogResult::Ok(Some("Signup board resetted".into()))
 
-    let res: LogResult = Ok("Signup Board resetted".into());
-    res.reply(ctx, msg).await?;
-    res.log(ctx, msg.into(), &msg.author).await;
-    res.cmd_result()
+    }).await
 }
