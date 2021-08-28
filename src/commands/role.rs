@@ -69,7 +69,9 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             .collect();
 
         if available.is_empty() {
-            return Ok(Some("No more emojis for roles available".into()));
+            return Ok(LogAction::Reply(
+                "No more emojis for roles available".into(),
+            ));
         }
 
         let mut emb = CreateEmbed::default();
@@ -126,7 +128,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
         let emoji_id = match emoji {
             None => {
-                return Ok(Some("Timed out".into()));
+                return Err("Timed out".into());
             }
             Some(r) => {
                 match &r.as_inner_ref().emoji {
@@ -137,7 +139,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                     } => *id,
                     ReactionType::Unicode(s) => {
                         if *s == String::from(CROSS_EMOJI) {
-                            return Ok(Some("Aborted".into()));
+                            return Err("Aborted".into());
                         }
                         // Should never occur since filtered already filtered
                         return Err("Unexpected emoji".into());
@@ -226,7 +228,11 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
         db::Role::insert(ctx, role_name.clone(), role_repr, *emoji_id.as_u64()).await?;
 
-        Ok(format!("Role added {} {}", Mention::from(emoji_id), role_name).into())
+        Ok(LogAction::Reply(format!(
+            "Role added {} {}",
+            Mention::from(emoji_id),
+            role_name
+        )))
     })
     .await
 }
@@ -252,7 +258,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
             },
         };
         role.deactivate(ctx).await?;
-        Ok(Some("Role removed".into()))
+        Ok(LogAction::Reply("Role removed".into()))
     })
     .await
 }
@@ -274,7 +280,7 @@ pub async fn list(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResul
             .send_message(ctx, |m| m.set_embed(embed))
             .await?;
 
-        Ok(None)
+        Ok(LogAction::LogOnly("Success".into()))
     })
     .await
 }

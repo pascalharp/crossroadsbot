@@ -254,16 +254,34 @@ pub async fn select_roles(
             Some(i) => match resolve_button_response(&i) {
                 ButtonResponse::Confirm => {
                     i.create_interaction_response(ctx, |r| {
-                        r.kind(InteractionResponseType::UpdateMessage);
-                        r.interaction_response_data(|d| d.components(|c| c))
+                        r.kind(InteractionResponseType::DeferredUpdateMessage)
+                    })
+                    .await?;
+                    // Edit message with final selection
+                    msg.edit(ctx, |m| {
+                        m.set_embeds(orig_embeds);
+                        m.add_embed(|e| {
+                            e.0 = select_roles_embed(&roles, &selected).0;
+                            e
+                        });
+                        m.components(|c| c)
                     })
                     .await?;
                     break;
                 }
                 ButtonResponse::Abort => {
                     i.create_interaction_response(ctx, |r| {
-                        r.kind(InteractionResponseType::UpdateMessage);
-                        r.interaction_response_data(|d| d.components(|c| c))
+                        r.kind(InteractionResponseType::DeferredUpdateMessage)
+                    })
+                    .await?;
+                    // Edit message with final selection
+                    msg.edit(ctx, |m| {
+                        m.set_embeds(orig_embeds);
+                        m.add_embed(|e| {
+                            e.0 = select_roles_embed(&roles, &selected).0;
+                            e
+                        });
+                        m.components(|c| c)
                     })
                     .await?;
                     return Err(Box::new(ConversationError::Canceled));

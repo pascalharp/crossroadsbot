@@ -6,7 +6,25 @@ use serenity::{async_trait, framework::standard::CommandResult, model::prelude::
 use std::future::Future;
 use std::ops::FnOnce;
 
-pub type LogResult = std::result::Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
+pub enum LogType<'a> {
+    Command(&'a str),
+    Interaction(&'a SignupBoardAction),
+    Conversation(String),
+    Internal,
+}
+
+pub enum LogAction {
+    // Try to avoid
+    None,
+    // Only log
+    LogOnly(String),
+    // This will log and as well reply with the message if possible
+    Reply(String),
+    // Same as Reply but with different messages
+    Custom { log_msg: String, reply_msg: String },
+}
+
+pub type LogResult = std::result::Result<LogAction, Box<dyn std::error::Error + Send + Sync>>;
 
 #[async_trait]
 pub trait DiscordChannelLog {
@@ -72,11 +90,37 @@ pub trait LogCalls {
         Fut: Future<Output = LogResult>;
 }
 
+impl LogAction {
+    fn log_string(&self) -> Option<&String> {
+        match self {
+            LogAction::None => None,
+            LogAction::LogOnly(s) => Some(s),
+            LogAction::Reply(s) => Some(s),
+            LogAction::Custom {
+                log_msg,
+                reply_msg: _,
+            } => Some(log_msg),
+        }
+    }
+
+    fn reply_string(&self) -> Option<&String> {
+        match self {
+            LogAction::None => None,
+            LogAction::LogOnly(_) => None,
+            LogAction::Reply(s) => Some(s),
+            LogAction::Custom {
+                log_msg: _,
+                reply_msg,
+            } => Some(reply_msg),
+        }
+    }
+}
+
 #[async_trait]
 impl DiscordChannelLog for LogResult {
     async fn log<'a>(self, ctx: &Context, kind: LogType<'a>, user: &User) {
         match self {
-            Ok(ok) => log_info(ctx, kind, user, ok).await,
+            Ok(ok) => log_info(ctx, kind, user, ok.log_string()).await,
             Err(err) => {
                 // Only log deep underlying errors as actual erros
                 // Currently: SerenityError, DieselError
@@ -85,7 +129,7 @@ impl DiscordChannelLog for LogResult {
                 } else if let Some(_) = err.downcast_ref::<DieselError>() {
                     log_error(ctx, kind, user, &err).await
                 } else {
-                    log_info(ctx, kind, user, Some(err.to_string())).await
+                    log_info(ctx, kind, user, Some(&err.to_string())).await
                 }
             }
         }
@@ -94,8 +138,8 @@ impl DiscordChannelLog for LogResult {
     async fn reply(&self, ctx: &Context, msg: &Message) -> serenity::Result<()> {
         match self {
             Ok(s) => {
-                if let Some(info) = s {
-                    msg.reply(ctx, info.as_str()).await?;
+                if let Some(info) = s.reply_string() {
+                    msg.reply(ctx, info).await?;
                 }
             }
             // dont report serenity or diesel errors directly to user
@@ -113,6 +157,7 @@ impl DiscordChannelLog for LogResult {
     }
 
     // Only bubbles up serenity and diesel errors to be reported as errors
+    // TODO remove
     fn cmd_result(self) -> CommandResult {
         match self {
             Err(e) => {
@@ -214,7 +259,7 @@ impl LogCalls for LogResult {
         F: FnOnce(conversation::Conversation) -> Fut,
         Fut: Future<Output = LogResult>,
     {
-        // Too lazy to figure out proper lifetimes
+        // Too lazy to figure out proper lifetimes, TODO
         let u = conv.user.clone();
         let m = conv.msg.clone();
         let res = f(conv).await;
@@ -223,20 +268,13 @@ impl LogCalls for LogResult {
     }
 }
 
-pub enum LogType<'a> {
-    Command(&'a str),
-    Interaction(&'a SignupBoardAction),
-    Conversation(String),
-    Internal,
-}
-
 impl<'a> From<&'a Message> for LogType<'a> {
     fn from(msg: &'a Message) -> LogType<'a> {
         LogType::Command(&msg.content)
     }
 }
 
-async fn log_info<'a>(ctx: &Context, kind: LogType<'a>, user: &User, info: Option<String>) {
+async fn log_info<'a>(ctx: &Context, kind: LogType<'a>, user: &User, info: Option<&String>) {
     let log_info = {
         ctx.data
             .read()

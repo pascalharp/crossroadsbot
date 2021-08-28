@@ -22,7 +22,7 @@ struct Misc;
 pub async fn ping(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
     LogResult::command(ctx, msg, || async {
         msg.channel_id.say(&ctx.http, "pong").await?;
-        LogResult::Ok(None)
+        LogResult::Ok(LogAction::LogOnly("pong".into()))
     })
     .await
 }
@@ -31,7 +31,7 @@ pub async fn ping(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
 pub async fn dudu(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
     LogResult::command(ctx, msg, || async {
         msg.channel_id.say(&ctx.http, "BONK").await?;
-        LogResult::Ok(None)
+        LogResult::Ok(LogAction::LogOnly("BONK".into()))
     })
     .await
 }
@@ -81,6 +81,7 @@ pub async fn button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult 
                     m
                 })
                 .await?;
+                LogResult::Ok(LogAction::LogOnly(format!("Timed out")))
             }
             Some(i) => {
                 i.create_interaction_response(ctx, |r| {
@@ -91,9 +92,9 @@ pub async fn button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult 
                     })
                 })
                 .await?;
+                LogResult::Ok(LogAction::LogOnly(format!("Clicked {}", &i.data.custom_id)))
             }
         }
-        LogResult::Ok(None)
     })
     .await
 }
@@ -112,7 +113,7 @@ pub async fn role_button(ctx: &Context, msg: &Message, _args: Args) -> CommandRe
                 m
             })
             .await?;
-        LogResult::Ok(None)
+        LogResult::Ok(LogAction::None)
     })
     .await
 }
@@ -131,7 +132,7 @@ pub async fn role_select(ctx: &Context, msg: &Message, _args: Args) -> CommandRe
             .await?;
 
         utils::select_roles(ctx, &mut m, &msg.author, &roles, selected).await?;
-        LogResult::Ok(None)
+        LogResult::Ok(LogAction::None)
     })
     .await
 }
@@ -160,7 +161,7 @@ pub async fn multi_embed(ctx: &Context, msg: &Message, _args: Args) -> CommandRe
                 m
             })
             .await?;
-        LogResult::Ok(None)
+        LogResult::Ok(LogAction::None)
     })
     .await
 }
@@ -173,14 +174,17 @@ pub async fn log_test(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             .await?;
         let cmd = args.single::<String>()?;
         match cmd.as_str() {
-            "ok" => LogResult::Ok(Some("Everything ok".into())),
+            "ok" => LogResult::Ok(LogAction::Reply("Everything ok".into())),
             "num" => {
                 args.single::<i32>()?;
-                LogResult::Ok(Some("Number provided".into()))
+                LogResult::Ok(LogAction::Reply("Number provided".into()))
             }
             "del" => {
                 msg.delete(ctx).await?;
-                LogResult::Ok(Some("Lol deleting everyones messages. kekw".into()))
+                LogResult::Ok(LogAction::Custom {
+                    log_msg: "Tried to use the del command. sus".into(),
+                    reply_msg: "Lol deleting everyones messages.... kekw".into(),
+                })
             }
             _ => Err("Invalid argmunts".into()),
         }

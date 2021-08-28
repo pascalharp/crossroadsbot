@@ -1,4 +1,4 @@
-use crate::{data::GLOB_COMMAND_PREFIX, data::*, db, embeds, log::LogResult, utils::*};
+use crate::{data::GLOB_COMMAND_PREFIX, data::*, db, embeds, log::*, utils::*};
 use dashmap::DashSet;
 use serenity::{
     builder::CreateEmbed,
@@ -232,9 +232,9 @@ impl Drop for Conversation {
     }
 }
 
-static NOT_REGISTERED: &str = "User not registered";
-static NOT_OPEN: &str = "Training not found or not open";
-static NOT_SIGNED_UP: &str = "Not signup found for user";
+pub static NOT_REGISTERED: &str = "User not registered";
+pub static NOT_OPEN: &str = "Training not found or not open";
+pub static NOT_SIGNED_UP: &str = "Not signup found for user";
 
 pub async fn _join_training(
     ctx: &Context,
@@ -346,7 +346,7 @@ pub async fn _join_training(
         })
         .await?;
 
-    Ok(Some("Sign up completed".into()))
+    Ok(LogAction::LogOnly("Sign up completed".into()))
 }
 
 pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogResult {
@@ -365,7 +365,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
                     })
                 })
                 .await?;
-            return Ok(Some(NOT_REGISTERED.into()));
+            return Err(NOT_REGISTERED.into());
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -386,7 +386,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
                         ))
                     })
                     .await?;
-                return Ok(Some(NOT_OPEN.into()));
+                return Err(NOT_OPEN.into());
             }
             Err(e) => {
                 conv.unexpected_error(ctx).await?;
@@ -407,7 +407,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
                         })
                     })
                     .await?;
-                return Ok(Some("Tier requirement not fulfilled".into()));
+                return Ok(LogAction::LogOnly("Tier requirement not fulfilled".into()));
             }
         }
         Err(e) => {
@@ -437,7 +437,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
                     })
                 })
                 .await?;
-            return Ok(Some("Already signed up".into()));
+            return Ok(LogAction::LogOnly("Already signed up".into()));
         }
         Err(diesel::NotFound) => (), // This is what we want
         Err(e) => {
@@ -478,11 +478,11 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
                 match e {
                     ConversationError::TimedOut => {
                         conv.timeout_msg(ctx).await?;
-                        return Ok(Some("Timed out".into()));
+                        return Err("Timed out".into());
                     }
                     ConversationError::Canceled => {
                         conv.canceled_msg(ctx).await?;
-                        return Ok(Some("Canceled".into()));
+                        return Err("Canceled".into());
                     }
                     _ => (),
                 }
@@ -525,7 +525,7 @@ pub async fn join_training(ctx: &Context, user: &User, training_id: i32) -> LogR
             return Err(e.into());
         }
     }
-    Ok(Some("Success".into()))
+    Ok(LogAction::LogOnly("Success".into()))
 }
 
 pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogResult {
@@ -544,7 +544,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
                     })
                 })
                 .await?;
-            return Ok(Some(NOT_REGISTERED.into()));
+            return Ok(LogAction::LogOnly(NOT_REGISTERED.into()));
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -562,7 +562,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
                         format!("No **open** training with id {} found", training_id),
                     )
                     .await?;
-                return Ok(Some(NOT_OPEN.into()));
+                return Err(NOT_OPEN.into());
             }
             Err(e) => {
                 conv.unexpected_error(ctx).await?;
@@ -591,7 +591,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
                     })
                 })
                 .await?;
-            return Ok(Some(NOT_SIGNED_UP.into()));
+            return Ok(LogAction::LogOnly(NOT_SIGNED_UP.into()));
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -627,11 +627,11 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
                 match e {
                     ConversationError::TimedOut => {
                         conv.timeout_msg(ctx).await?;
-                        return Ok(Some("Timed out".into()));
+                        return Err("Timed out".into());
                     }
                     ConversationError::Canceled => {
                         conv.canceled_msg(ctx).await?;
-                        return Ok(Some("Canceled".into()));
+                        return Err("Canceled".into());
                     }
                     _ => (),
                 }
@@ -672,7 +672,7 @@ pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogRes
                     })
                 })
                 .await?;
-            return Ok(Some("Success".into()));
+            return Ok(LogAction::LogOnly("Success".into()));
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -697,7 +697,7 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogR
                     })
                 })
                 .await?;
-            return Ok(Some(NOT_REGISTERED.into()));
+            return Ok(LogAction::LogOnly(NOT_REGISTERED.into()));
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -715,7 +715,7 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogR
                         format!("No **open** training with id {} found", training_id),
                     )
                     .await?;
-                return Ok(Some(NOT_OPEN.into()));
+                return Err(NOT_OPEN.into());
             }
             Err(e) => {
                 conv.unexpected_error(ctx).await?;
@@ -744,7 +744,7 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogR
                     })
                 })
                 .await?;
-            return Ok(Some(NOT_SIGNED_UP.into()));
+            return Ok(LogAction::LogOnly(NOT_SIGNED_UP.into()));
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -774,7 +774,7 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogR
         })
         .await?;
 
-    Ok(Some("Success".into()))
+    Ok(LogAction::LogOnly("Success".into()))
 }
 
 pub async fn list_signup(ctx: &Context, user: &User) -> LogResult {
@@ -793,7 +793,7 @@ pub async fn list_signup(ctx: &Context, user: &User) -> LogResult {
                     })
                 })
                 .await?;
-            return Ok(Some(NOT_REGISTERED.into()));
+            return Ok(LogAction::LogOnly(NOT_REGISTERED.into()));
         }
         Err(e) => {
             conv.unexpected_error(ctx).await?;
@@ -865,5 +865,5 @@ pub async fn list_signup(ctx: &Context, user: &User) -> LogResult {
         })
         .await?;
 
-    Ok(Some("Success".into()))
+    Ok(LogAction::LogOnly("Success".into()))
 }

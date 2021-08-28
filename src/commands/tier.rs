@@ -59,7 +59,7 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
         })
         .await?;
 
-    let res: LogResult = Ok(Some("Success".into()));
+    let res: LogResult = Ok(LogAction::Reply("Success".into()));
     res.log(ctx, LogType::Command(&msg.content), &msg.author)
         .await;
     Ok(())
@@ -68,15 +68,13 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
 async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args) -> LogResult {
     let tier_name = match args.single_quoted::<String>() {
         Err(_) => {
-            return Ok(Some("Unable to parse tier name".into()));
+            return Err("Unable to parse tier name".into());
         }
         Ok(t) => {
             if t.contains(" ") {
-                return Ok(Some("Tier name may not contain spaces".into()));
+                return Err("Tier name may not contain spaces".into());
             } else if t.to_lowercase().eq("none") {
-                return Ok(Some(
-                    "none is a reserved keyword and can not be used".into(),
-                ));
+                return Err("none is a reserved keyword and can not be used".into());
             }
             t
         }
@@ -84,7 +82,7 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
 
     let roles: Vec<_> = match args.iter::<RoleId>().collect() {
         Err(_) => {
-            return Ok(Some("Unable to parse provide discord role".into()));
+            return Err("Unable to parse provide discord role".into());
         }
         Ok(v) => v,
     };
@@ -119,11 +117,11 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
     utils::send_yes_or_no(ctx, &msg).await?;
     match utils::await_yes_or_no(ctx, &msg, Some(author)).await {
         None => {
-            return Ok(Some("Timed out".into()));
+            return Err("Timed out".into());
         }
         Some(r) => match r {
             utils::YesOrNo::No => {
-                return Ok(Some("Aborted".into()));
+                return Err("Aborted".into());
             }
             _ => (),
         },
@@ -135,7 +133,7 @@ async fn _add(ctx: &Context, channel: ChannelId, author: UserId, mut args: Args)
         tier.add_discord_role(ctx, *r.as_u64()).await?;
     }
 
-    Ok(Some("Tier added".into()))
+    Ok(LogAction::Reply("Tier added".into()))
 }
 
 #[command]
@@ -157,13 +155,13 @@ async fn _remove(ctx: &Context, channel: ChannelId, author: UserId, mut args: Ar
     let tier_name = match args.single_quoted::<String>() {
         Ok(t) => t,
         Err(_) => {
-            return Ok(Some("Unable to parse tier name".into()));
+            return Err("Unable to parse tier name".into());
         }
     };
 
     let tier = match db::Tier::by_name(ctx, tier_name).await {
         Ok(t) => Arc::new(t),
-        Err(diesel::NotFound) => return Ok(Some("Tier not found".into())),
+        Err(diesel::NotFound) => return Err("Tier not found".into()),
         Err(e) => return Err(e.into()),
     };
     let roles = tier.get_discord_roles(ctx).await?;
@@ -200,12 +198,12 @@ async fn _remove(ctx: &Context, channel: ChannelId, author: UserId, mut args: Ar
     utils::send_yes_or_no(ctx, &msg).await?;
     match utils::await_yes_or_no(ctx, &msg, Some(author)).await {
         None => {
-            return Ok(Some("Timed out".into()));
+            return Err("Timed out".into());
         }
         Some(r) => match r {
             utils::YesOrNo::Yes => (),
             utils::YesOrNo::No => {
-                return Ok(Some("Aborted".into()));
+                return Err("Aborted".into());
             }
         },
     }
@@ -224,7 +222,7 @@ async fn _remove(ctx: &Context, channel: ChannelId, author: UserId, mut args: Ar
             return Err("Unexpected internal error unwrapping Arc".into());
         }
     };
-    Ok(Some("Tier removed".into()))
+    Ok(LogAction::Reply("Tier removed".into()))
 }
 
 #[command]
@@ -251,8 +249,8 @@ pub async fn remove(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 #[usage = "(add | remove) @TierII"]
 #[only_in("guild")]
 #[num_args(0)]
-pub async fn edit(_: &Context, _: &Message, _: Args) -> CommandResult {
-    Ok(())
+pub async fn edit(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
+    LogResult::command(ctx, msg, || async { Err("Not implemented".into()) }).await
 }
 
 async fn _edit_add(ctx: &Context, mut args: Args) -> LogResult {
@@ -260,13 +258,13 @@ async fn _edit_add(ctx: &Context, mut args: Args) -> LogResult {
     let role = match args.single_quoted::<RoleId>() {
         Ok(r) => r,
         Err(_) => {
-            return Ok(Some("Failed to parse discord role".into()));
+            return Err("Failed to parse discord role".into());
         }
     };
 
     let tier = match db::Tier::by_name(ctx, tier).await {
         Ok(t) => Arc::new(t),
-        Err(diesel::NotFound) => return Ok(Some("Failed to load tier. Check spelling".into())),
+        Err(diesel::NotFound) => return Err("Tier not found. Check spelling".into()),
         Err(e) => return Err(e.into()),
     };
     let discord_roles = tier.get_discord_roles(ctx).await?;
@@ -274,11 +272,11 @@ async fn _edit_add(ctx: &Context, mut args: Args) -> LogResult {
         .iter()
         .any(|d| RoleId::from(d.discord_role_id as u64) == role)
     {
-        return Ok(Some("Discord role is already part of that tier".into()));
+        return Err("Discord role is already part of that tier".into());
     }
 
     tier.add_discord_role(ctx, *role.as_u64()).await?;
-    Ok(Some("Discord role added to Tier".into()))
+    Ok(LogAction::Reply("Discord role added to Tier".into()))
 }
 
 #[command("add")]
@@ -301,13 +299,13 @@ async fn _edit_remove(ctx: &Context, mut args: Args) -> LogResult {
     let role = match args.single_quoted::<RoleId>() {
         Ok(r) => r,
         Err(_) => {
-            return Ok(Some("Failed to parse discord role".into()));
+            return Err("Failed to parse discord role".into());
         }
     };
 
     let tier = match db::Tier::by_name(ctx, tier).await {
         Ok(t) => Arc::new(t),
-        Err(diesel::NotFound) => return Ok(Some("Failed to load tier. Check spelling".into())),
+        Err(diesel::NotFound) => return Err("Failed to load tier. Check spelling".into()),
         Err(e) => return Err(e.into()),
     };
     let discord_roles = tier.get_discord_roles(ctx).await?;
@@ -315,16 +313,12 @@ async fn _edit_remove(ctx: &Context, mut args: Args) -> LogResult {
         .into_iter()
         .find(|d| RoleId::from(d.discord_role_id as u64) == role);
     let to_remove = match to_remove {
-        None => {
-            return Ok(Some(
-                "Provided discord role is not part of the provided tier".into(),
-            ))
-        }
+        None => return Err("Provided discord role is not part of the provided tier".into()),
         Some(i) => i,
     };
 
     to_remove.delete(ctx).await?;
-    return Ok(Some("Discord role removed".into()));
+    return Ok(LogAction::Reply("Discord role removed".into()));
 }
 
 #[command("remove")]

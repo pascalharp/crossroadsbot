@@ -126,13 +126,17 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             m.embed(|e| {
                 e.0 = emb.0;
                 e.author(|a| a.name(format!("{} created:", discord_user.tag())));
+                e.footer(|f| f.text(format!("Training added {}", utils::CHECK_EMOJI)));
                 e
             });
             m
         })
         .await?;
 
-        Ok(format!("New training added with id {}", training.id).into())
+        Ok(LogAction::LogOnly(format!(
+            "New training added with id {}",
+            training.id
+        )))
     })
     .await
 }
@@ -183,7 +187,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             })
             .await?;
 
-        Ok(None)
+        Ok(LogAction::None)
     })
     .await
 }

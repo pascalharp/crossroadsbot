@@ -55,7 +55,7 @@ async fn set_log_channel(ctx: &Context, mut args: Args, kind: LogChannelType) ->
     };
     conf.save(ctx).await?;
 
-    Ok(Some("Log channel saved".into()))
+    Ok(LogAction::Reply("Log channel saved".into()))
 }
 
 #[command]
@@ -100,7 +100,7 @@ pub async fn set_signup_board_category(
     LogResult::command(ctx, msg, || async {
         let channel_id: ChannelId = match args.single::<ChannelId>() {
             Err(_) => {
-                return Ok(Some("No valid channel provided".into()));
+                return Err("No valid channel provided".into());
             }
             Ok(c) => c,
         };
@@ -124,10 +124,8 @@ pub async fn set_signup_board_category(
         };
 
         match conf.save(ctx).await {
-            Ok(_) => Ok(Some("Signup board category saved".into())),
-            Err(e) => {
-                return Err(e.into());
-            }
+            Ok(_) => Ok(LogAction::Reply("Signup board category saved".into())),
+            Err(e) => Err(e.into()),
         }
     })
     .await
@@ -150,7 +148,7 @@ pub async fn signup_board_reset(ctx: &Context, msg: &Message, _: Args) -> Comman
             .clone();
 
         write_lock.write().await.reset(ctx).await?;
-        LogResult::Ok(Some("Signup board resetted".into()))
+        LogResult::Ok(LogAction::Reply("Signup board resetted".into()))
     })
     .await
 }
