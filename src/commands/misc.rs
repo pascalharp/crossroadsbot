@@ -145,17 +145,17 @@ pub async fn multi_embed(ctx: &Context, msg: &Message, _args: Args) -> CommandRe
                 m.content("Sending message with multiple embeds");
                 m.add_embed(|e| {
                     e.description("Embed numer 1");
-                    e.field("Ember", "one", false);
+                    e.field("Embed", "one", false);
                     e
                 });
                 m.add_embed(|e| {
                     e.description("Embed numer 2");
-                    e.field("Ember", "two", false);
+                    e.field("Embed", "two", false);
                     e
                 });
                 m.add_embed(|e| {
                     e.description("Embed numer 3");
-                    e.field("Ember", "three", false);
+                    e.field("Embed", "three", false);
                     e
                 });
                 m

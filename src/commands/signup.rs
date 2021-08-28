@@ -76,7 +76,7 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
     }
 
     LogResult::conversation(ctx, conv, "join training".to_string(), |mut c| async move {
-        _join_training(ctx, &mut c, &training).await
+        join_training(ctx, &mut c, &training).await
     })
     .await;
 

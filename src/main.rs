@@ -1,6 +1,4 @@
-use crossroadsbot::{
-    commands, conversation, data::*, db, log::*, signup_board::*, utils::DIZZY_EMOJI,
-};
+use crossroadsbot::{commands, data::*, db, signup_board::*, utils::DIZZY_EMOJI};
 use dashmap::DashSet;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
@@ -77,62 +75,63 @@ impl EventHandler for Handler {
         info!("Resumed");
     }
 
-    async fn reaction_add(&self, ctx: Context, added_reaction: Reaction) {
-        let user = added_reaction.user(&ctx).await;
-        let user = match user {
-            Err(_) => return,
-            Ok(u) => {
-                if u.bot {
-                    return;
-                } else {
-                    u
-                }
-            }
-        };
+    // TODO remove and rework with buttons
+    async fn reaction_add(&self, _ctx: Context, _added_reaction: Reaction) {
+        //let user = added_reaction.user(&ctx).await;
+        //let user = match user {
+        //    Err(_) => return,
+        //    Ok(u) => {
+        //        if u.bot {
+        //            return;
+        //        } else {
+        //            u
+        //        }
+        //    }
+        //};
 
-        // Keep locks only as long as needed
-        let board_lock = {
-            let data_read = ctx.data.read().await;
-            data_read.get::<SignupBoardData>().unwrap().clone()
-        };
-        let board_action = {
-            let board = board_lock.read().await;
-            board.on_reaction(&added_reaction)
-        };
-        drop(board_lock);
+        //// Keep locks only as long as needed
+        //let board_lock = {
+        //    let data_read = ctx.data.read().await;
+        //    data_read.get::<SignupBoardData>().unwrap().clone()
+        //};
+        //let board_action = {
+        //    let board = board_lock.read().await;
+        //    board.on_reaction(&added_reaction)
+        //};
+        //drop(board_lock);
 
-        let ctx = Arc::new(ctx);
-        let rm_ctx = ctx.clone();
-        let result = match &board_action {
-            SignupBoardAction::Ignore => return,
-            SignupBoardAction::None => {
-                tokio::task::spawn(async move {
-                    added_reaction.delete(&*rm_ctx.clone()).await.ok();
-                });
-                return; // Nothing to log. just a random emoji
-            }
-            SignupBoardAction::JoinSignup(training) => {
-                tokio::task::spawn(async move {
-                    added_reaction.delete(&*rm_ctx.clone()).await.ok();
-                });
-                conversation::join_training(&*ctx, &user, training.id).await
-            }
-            SignupBoardAction::EditSignup(training) => {
-                tokio::task::spawn(async move {
-                    added_reaction.delete(&*rm_ctx.clone()).await.ok();
-                });
-                conversation::edit_signup(&*ctx, &user, training.id).await
-            }
-            SignupBoardAction::RemoveSignup(training) => {
-                tokio::task::spawn(async move {
-                    added_reaction.delete(&*rm_ctx.clone()).await.ok();
-                });
-                conversation::remove_signup(&*ctx, &user, training.id).await
-            }
-        };
-        result
-            .log(&ctx, LogType::Interaction(&board_action), &user)
-            .await;
+        //let ctx = Arc::new(ctx);
+        //let rm_ctx = ctx.clone();
+        //let result = match &board_action {
+        //    SignupBoardAction::Ignore => return,
+        //    SignupBoardAction::None => {
+        //        tokio::task::spawn(async move {
+        //            added_reaction.delete(&*rm_ctx.clone()).await.ok();
+        //        });
+        //        return; // Nothing to log. just a random emoji
+        //    }
+        //    SignupBoardAction::JoinSignup(training) => {
+        //        tokio::task::spawn(async move {
+        //            added_reaction.delete(&*rm_ctx.clone()).await.ok();
+        //        });
+        //        conversation::join_training(&*ctx, &user, training.id).await
+        //    }
+        //    SignupBoardAction::EditSignup(training) => {
+        //        tokio::task::spawn(async move {
+        //            added_reaction.delete(&*rm_ctx.clone()).await.ok();
+        //        });
+        //        conversation::edit_signup(&*ctx, &user, training.id).await
+        //    }
+        //    SignupBoardAction::RemoveSignup(training) => {
+        //        tokio::task::spawn(async move {
+        //            added_reaction.delete(&*rm_ctx.clone()).await.ok();
+        //        });
+        //        conversation::remove_signup(&*ctx, &user, training.id).await
+        //    }
+        //};
+        //result
+        //    .log(&ctx, LogType::Interaction(&board_action), &user)
+        //    .await;
     }
 }
 
