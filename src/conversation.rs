@@ -240,24 +240,8 @@ pub async fn join_training(
     ctx: &Context,
     conv: &mut Conversation,
     training: &db::Training,
+    db_user: &db::User,
 ) -> LogResult {
-    let db_user = match db::User::by_discord_id(ctx, conv.user.id).await {
-        Ok(u) => u,
-        Err(diesel::NotFound) => {
-            let embed = embeds::not_registered_embed();
-            conv.msg
-                .edit(ctx, |m| {
-                    m.add_embed(|e| {
-                        e.0 = embed.0;
-                        e
-                    })
-                })
-                .await?;
-            return Err(NOT_REGISTERED.into());
-        }
-        Err(e) => return Err(e.into()),
-    };
-
     // verify if tier requirements pass
     match verify_tier(ctx, training, &conv.user).await {
         Ok((pass, tier)) => {
@@ -271,7 +255,7 @@ pub async fn join_training(
                         })
                     })
                     .await?;
-                return Err("Tier requirement not fulfilled".into());
+                return Ok(LogAction::LogOnly("Tier requirement not fulfilled".into()));
             }
         }
         Err(e) => return Err(e.into()),
@@ -282,8 +266,7 @@ pub async fn join_training(
         Ok(_) => {
             conv.msg
                 .edit(ctx, |m| {
-                    m.content("");
-                    m.embed(|e| {
+                    m.add_embed(|e| {
                         e.description("Already signed up for this training");
                         e.field(
                             "You can edit your signup with:",
@@ -298,7 +281,7 @@ pub async fn join_training(
                     })
                 })
                 .await?;
-            return Err("Already signed up".into());
+            return Ok(LogAction::LogOnly("Already signed up".into()));
         }
         Err(diesel::NotFound) => (), // This is what we want
         Err(e) => return Err(e.into()),
@@ -349,157 +332,60 @@ pub async fn join_training(
     Ok(LogAction::LogOnly("Sign up completed".into()))
 }
 
-pub async fn edit_signup(ctx: &Context, user: &User, training_id: i32) -> LogResult {
-    let mut conv = Conversation::start(ctx, user).await?;
-
-    let db_user = match db::User::by_discord_id(ctx, user.id).await {
-        Ok(u) => u,
-        Err(diesel::NotFound) => {
-            let emb = embeds::not_registered_embed();
-            conv.msg
-                .edit(ctx, |m| {
-                    m.content("");
-                    m.embed(|e| {
-                        e.0 = emb.0;
-                        e
-                    })
-                })
-                .await?;
-            return Ok(LogAction::LogOnly(NOT_REGISTERED.into()));
-        }
-        Err(e) => {
-            conv.unexpected_error(ctx).await?;
-            return Err(e.into());
-        }
-    };
-
-    let training =
-        match db::Training::by_id_and_state(ctx, training_id, db::TrainingState::Open).await {
-            Ok(t) => Arc::new(t),
-            Err(diesel::NotFound) => {
-                conv.msg
-                    .reply(
-                        ctx,
-                        format!("No **open** training with id {} found", training_id),
-                    )
-                    .await?;
-                return Err(NOT_OPEN.into());
-            }
-            Err(e) => {
-                conv.unexpected_error(ctx).await?;
-                return Err(e.into());
-            }
-        };
-
-    let signup = match db::Signup::by_user_and_training(ctx, &db_user, &training.clone()).await {
-        Ok(s) => Arc::new(s),
-        Err(diesel::NotFound) => {
-            conv.msg
-                .edit(ctx, |m| {
-                    m.content("");
-                    m.embed(|e| {
-                        e.description(format!("{} No signup found", CROSS_EMOJI));
-                        e.field(
-                            "You are not signed up for training:",
-                            &training.title,
-                            false,
-                        );
-                        e.field(
-                            "If you want to join this training use:",
-                            format!("`{}join {}`", GLOB_COMMAND_PREFIX, training.id),
-                            false,
-                        )
-                    })
-                })
-                .await?;
-            return Ok(LogAction::LogOnly(NOT_SIGNED_UP.into()));
-        }
-        Err(e) => {
-            conv.unexpected_error(ctx).await?;
-            return Err(e.into());
-        }
-    };
-
+pub async fn edit_signup(
+    ctx: &Context,
+    conv: &mut Conversation,
+    training: &db::Training,
+    signup: &db::Signup,
+) -> LogResult {
     let roles = training.active_roles(ctx).await?;
     let roles_lookup: HashMap<String, &db::Role> =
         roles.iter().map(|r| (String::from(&r.repr), r)).collect();
 
+    // Get new roles from user
     let mut selected: HashSet<String> = HashSet::with_capacity(roles.len());
-
-    match signup.get_roles(ctx).await {
-        Ok(v) => {
-            let set = v.into_iter().collect::<HashSet<_>>();
-            for r in &roles {
-                if set.contains(r) {
-                    selected.insert(r.repr.clone());
-                }
-            }
-        }
-        Err(e) => {
-            conv.unexpected_error(ctx).await?;
-            return Err(e.into());
-        }
-    };
-
-    let selected = match select_roles(ctx, &mut conv.msg, &conv.user, &roles, selected).await {
-        Ok(selected) => selected,
-        Err(e) => {
-            if let Some(e) = e.downcast_ref::<ConversationError>() {
-                match e {
-                    ConversationError::TimedOut => {
-                        conv.timeout_msg(ctx).await?;
-                        return Err("Timed out".into());
-                    }
-                    ConversationError::Canceled => {
-                        conv.canceled_msg(ctx).await?;
-                        return Err("Canceled".into());
-                    }
-                    _ => (),
-                }
-            }
-            conv.unexpected_error(ctx).await?;
-            return Err(e.into());
-        }
-    };
-
-    if let Err(e) = signup.clear_roles(ctx).await {
-        conv.unexpected_error(ctx).await?;
-        return Err(e.into());
+    let already_selected = signup.get_roles(ctx).await?;
+    for r in already_selected {
+        selected.insert(r.repr);
     }
+    let selected = select_roles(ctx, &mut conv.msg, &conv.user, &roles, selected).await?;
 
-    match future::try_join_all(
-        selected
-            .iter()
-            .map(|r| signup.add_role(ctx, roles_lookup.get(r).unwrap())),
-    )
-    .await
-    {
-        Ok(_) => {
-            conv.msg
-                .edit(ctx, |m| {
-                    m.content("");
-                    m.embed(|e| {
-                        e.description(format!("{}", CHECK_EMOJI));
-                        e.field("Changed roles for training:", &training.title, false);
-                        e.field(
-                            "New roles:",
-                            selected
-                                .iter()
-                                .map(|r| roles_lookup.get(r).unwrap().title.clone())
-                                .collect::<Vec<_>>()
-                                .join(", "),
-                            false,
-                        )
-                    })
-                })
-                .await?;
-            return Ok(LogAction::LogOnly("Success".into()));
-        }
-        Err(e) => {
-            conv.unexpected_error(ctx).await?;
-            return Err(e.into());
-        }
-    }
+    // Save new roles
+    signup.clear_roles(ctx).await?;
+    // We inserted all roles into the HashMap, so it is save to unwrap
+    let futs = selected.iter().filter_map(|r| {
+        roles_lookup
+            .get(r)
+            .and_then(|r| Some(signup.add_role(ctx, *r)))
+    });
+    future::try_join_all(futs).await?;
+
+    conv.msg
+        .edit(ctx, |m| {
+            m.add_embed(|e| {
+                e.color((0, 255, 0));
+                e.description("Successfully edited");
+                e.field(
+                    "To edit your sign up:",
+                    format!("`{}edit {}`", GLOB_COMMAND_PREFIX, training.id),
+                    false,
+                );
+                e.field(
+                    "To remove your sign up:",
+                    format!("`{}leave {}`", GLOB_COMMAND_PREFIX, training.id),
+                    false,
+                );
+                e.field(
+                    "To list all your current sign ups:",
+                    format!("`{}list`", GLOB_COMMAND_PREFIX),
+                    false,
+                );
+                e
+            })
+        })
+        .await?;
+
+    Ok(LogAction::LogOnly("Signup edited".into()))
 }
 
 pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogResult {
@@ -598,66 +484,33 @@ pub async fn remove_signup(ctx: &Context, user: &User, training_id: i32) -> LogR
     Ok(LogAction::LogOnly("Success".into()))
 }
 
-pub async fn list_signup(ctx: &Context, user: &User) -> LogResult {
-    let mut conv = Conversation::start(ctx, user).await?;
-
-    let db_user = match db::User::by_discord_id(ctx, user.id).await {
-        Ok(u) => u,
-        Err(diesel::NotFound) => {
-            let emb = embeds::not_registered_embed();
-            conv.msg
-                .edit(ctx, |m| {
-                    m.content("");
-                    m.embed(|e| {
-                        e.0 = emb.0;
-                        e
-                    })
-                })
-                .await?;
-            return Ok(LogAction::LogOnly(NOT_REGISTERED.into()));
-        }
-        Err(e) => {
-            conv.unexpected_error(ctx).await?;
-            return Err(e.into());
-        }
-    };
-
-    let signups = match db_user.active_signups(ctx).await {
-        Ok(v) => v
-            .into_iter()
-            .map(|(s, t)| (Arc::new(s), Arc::new(t)))
-            .collect::<Vec<_>>(),
-        Err(e) => {
-            conv.unexpected_error(ctx).await?;
-            return Err(e.into());
-        }
-    };
-
+pub async fn _list_signup(ctx: &Context, conv: &mut Conversation, user: &db::User) -> LogResult {
+    let signups = user.active_signups(ctx).await?;
     let mut roles: HashMap<i32, Vec<db::Role>> = HashMap::with_capacity(signups.len());
     for (s, _) in &signups {
-        let signup_roles = match s.clone().get_roles(ctx).await {
-            Ok(v) => v.into_iter().collect::<Vec<_>>(),
-            Err(e) => {
-                conv.unexpected_error(ctx).await?;
-                return Err(e.into());
-            }
-        };
+        let signup_roles = s.clone().get_roles(ctx).await?;
         roles.insert(s.id, signup_roles);
     }
 
     conv.msg
         .edit(ctx, |m| {
-            m.content("");
-            m.embed(|e| {
+            m.add_embed(|e| {
                 e.description("All current active signups");
+                if signups.is_empty() {
+                    e.field(
+                        "No active sign ups found",
+                        "You should join some trainings ;)",
+                        false,
+                    );
+                }
                 for (s, t) in signups {
                     e.field(
                         &t.title,
                         format!(
-                            "`Date        :` {}\n\
-                         `Time (Utc)  :` {}\n\
-                         `Training Id :` {}\n\
-                         `Roles       :` {}\n",
+                            "`Date (YYYY-MM-DD)`\n{}\n\
+                            `Time (Utc)       `\n{}\n\
+                            `Training Id      `\n{}\n\
+                            `Roles            `\n{}\n",
                             t.date.date(),
                             t.date.time(),
                             t.id,
@@ -686,5 +539,5 @@ pub async fn list_signup(ctx: &Context, user: &User) -> LogResult {
         })
         .await?;
 
-    Ok(LogAction::LogOnly("Success".into()))
+    return Ok(LogAction::LogOnly("Success".into()));
 }

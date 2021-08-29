@@ -355,6 +355,23 @@ async fn select_signup_by_user_and_training(
     .unwrap()
 }
 
+async fn select_signup_by_discord_user_and_training(
+    ctx: &Context,
+    discord_id: i64,
+    training_id: i32,
+) -> QueryResult<Signup> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = signups::table.inner_join(users::table);
+        join.filter(users::discord_id.eq(discord_id))
+            .filter(signups::training_id.eq(training_id))
+            .select(signups::all_columns)
+            .first(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn select_all_tiers(ctx: &Context) -> QueryResult<Vec<Tier>> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || tiers::table.load(&pool.conn()))
@@ -698,6 +715,14 @@ impl Signup {
         t: &Training,
     ) -> QueryResult<Signup> {
         select_signup_by_user_and_training(ctx, u.id, t.id).await
+    }
+
+    pub async fn by_discord_user_and_training(
+        ctx: &Context,
+        u: &UserId,
+        t: &Training,
+    ) -> QueryResult<Signup> {
+        select_signup_by_discord_user_and_training(ctx, *u.as_u64() as i64, t.id).await
     }
 
     pub async fn remove(self, ctx: &Context) -> QueryResult<usize> {

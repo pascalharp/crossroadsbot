@@ -1,4 +1,3 @@
-use crate::conversation;
 use crate::data::LogConfigData;
 use crate::signup_board::SignupBoardAction;
 use diesel::result::Error as DieselError;
@@ -45,6 +44,17 @@ pub trait LogCalls {
         F: FnOnce() -> Fut,
         Fut: Future<Output = LogResult>;
 
+    /// Logs a command. Will reply to another message and not the first one
+    async fn command_separate_reply<F: std::marker::Send, Fut: std::marker::Send>(
+        ctx: &Context,
+        msg_orig: &Message,
+        msg_reply: &Message,
+        f: F,
+    ) -> CommandResult
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = LogResult>;
+
     /// Logs an interaction if there is no initial message from the user
     async fn interaction<F: std::marker::Send, Fut: std::marker::Send>(
         ctx: &Context,
@@ -77,17 +87,6 @@ pub trait LogCalls {
     where
         F: FnOnce() -> Fut,
         Fut: Future<Output = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>>;
-
-    /// Log a conversation
-    async fn conversation<F: std::marker::Send, Fut: std::marker::Send>(
-        ctx: &Context,
-        mut conv: conversation::Conversation,
-        info: String,
-        f: F,
-    ) -> ()
-    where
-        F: FnOnce(conversation::Conversation) -> Fut,
-        Fut: Future<Output = LogResult>;
 }
 
 impl LogAction {
@@ -192,6 +191,23 @@ impl LogCalls for LogResult {
         Ok(())
     }
 
+    async fn command_separate_reply<F: std::marker::Send, Fut: std::marker::Send>(
+        ctx: &Context,
+        msg_orig: &Message,
+        msg_reply: &Message,
+        f: F,
+    ) -> CommandResult
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = LogResult>,
+    {
+        let res = f().await;
+        res.reply(ctx, msg_reply).await?;
+        res.log(ctx, LogType::Command(&msg_orig.content), &msg_orig.author)
+            .await;
+        Ok(())
+    }
+
     async fn interaction<F: std::marker::Send, Fut: std::marker::Send>(
         ctx: &Context,
         action: &SignupBoardAction,
@@ -246,25 +262,6 @@ impl LogCalls for LogResult {
                 None
             }
         }
-    }
-
-    /// Log a conversation
-    async fn conversation<F: std::marker::Send, Fut: std::marker::Send>(
-        ctx: &Context,
-        conv: conversation::Conversation,
-        info: String,
-        f: F,
-    ) -> ()
-    where
-        F: FnOnce(conversation::Conversation) -> Fut,
-        Fut: Future<Output = LogResult>,
-    {
-        // Too lazy to figure out proper lifetimes, TODO
-        let u = conv.user.clone();
-        let m = conv.msg.clone();
-        let res = f(conv).await;
-        res.reply(ctx, &m).await.ok();
-        res.log(ctx, LogType::Conversation(info), &u).await;
     }
 }
 
