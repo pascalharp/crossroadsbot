@@ -174,12 +174,12 @@ pub async fn log_test(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             .await?;
         let cmd = args.single::<String>()?;
         match cmd.as_str() {
-            "ok" => Ok("Everything ok".into()),
+            "ok" => Ok(()),
             "num" => {
-                let num = args.single::<i32>().log_reply(msg)?;
-                Ok(num.to_string())
+                let _num = args.single::<i32>().log_reply(msg)?;
+                Ok(())
             }
-            _ => Ok("Test".to_string()),
+            _ => LogError::new("No command supplied").with_reply(msg).into(),
         }
     })
     .await

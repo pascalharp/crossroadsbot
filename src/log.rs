@@ -82,6 +82,10 @@ impl From<LogError> for Box<dyn std::error::Error + Send + Sync> {
 }
 
 impl LogError {
+    pub fn new(s: &str) -> Self {
+        LogError::LogOnly(s.to_string().into())
+    }
+
     pub fn silent(self) -> Self {
         let err = match self {
             LogError::LogOnly(e) => e,
@@ -145,6 +149,12 @@ pub trait LogResultConversion<T> {
     ) -> _LogResult<T>;
 }
 
+impl<T> From<LogError> for _LogResult<T> {
+    fn from(err: LogError) -> Self {
+        Err(err)
+    }
+}
+
 impl<T, E> LogResultConversion<T> for std::result::Result<T, E>
 where
     E: 'static + std::error::Error + Send + Sync,
@@ -170,7 +180,7 @@ where
     }
 }
 
-async fn log_to_channel<'a, T: std::fmt::Display>(
+async fn log_to_channel<'a, T>(
     ctx: &Context,
     result: &_LogResult<T>,
     kind: _LogType<'a>,
@@ -192,8 +202,12 @@ async fn log_to_channel<'a, T: std::fmt::Display>(
         chan.send_message(ctx, |m| {
             m.allowed_mentions(|m| m.empty_parse());
             m.embed(|e| {
-                e.description("[INFO]");
-                e.field("User", Mention::from(user), true);
+                e.description("[LOG]");
+                e.field(
+                    "User",
+                    format!("`{}`\n{}", user.id, Mention::from(user)),
+                    true,
+                );
                 match kind {
                     _LogType::Interaction(i) => {
                         e.field("Interaction", i, true);
@@ -207,7 +221,7 @@ async fn log_to_channel<'a, T: std::fmt::Display>(
                                 if c.is_private() {
                                     "_In DM's_".to_string()
                                 } else {
-                                    c.link()
+                                    format!("[Link]({})", c.link())
                                 }
                             ),
                             true,
@@ -215,11 +229,24 @@ async fn log_to_channel<'a, T: std::fmt::Display>(
                     }
                 }
                 match result {
-                    Ok(ok) => {
-                        e.field(format!("OK {}", utils::CHECK_EMOJI), ok, false);
+                    Ok(_) => {
+                        e.field(format!("{} OK", utils::CHECK_EMOJI), "\n\u{200b}", false);
                     }
                     Err(err) => {
-                        e.field(format!("Error {}", utils::CROSS_EMOJI), err, false);
+                        e.field(format!("{} Error", utils::CROSS_EMOJI), err, false);
+                        e.field(
+                            format!("Reply"),
+                            match err {
+                                LogError::LogOnly(_) => "_None_",
+                                LogError::LogReply { err: _, reply: _ } => "_Same as Error_",
+                                LogError::LogReplyCustom {
+                                    err: _,
+                                    reply: _,
+                                    reply_msg,
+                                } => &reply_msg,
+                            },
+                            false,
+                        );
                     }
                 }
                 e
@@ -260,11 +287,10 @@ async fn log_reply(ctx: &Context, err: &LogError) {
     }
 }
 
-pub async fn log_command<R, F, Fut>(ctx: &Context, cmd_msg: &Message, f: F) -> CommandResult
+pub async fn log_command<F, Fut>(ctx: &Context, cmd_msg: &Message, f: F) -> CommandResult
 where
     F: FnOnce() -> Fut + Send,
-    R: std::fmt::Display,
-    Fut: Future<Output = _LogResult<R>> + Send,
+    Fut: Future<Output = _LogResult<()>> + Send,
 {
     let res = f().await;
 
