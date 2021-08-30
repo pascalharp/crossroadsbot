@@ -168,25 +168,18 @@ pub async fn multi_embed(ctx: &Context, msg: &Message, _args: Args) -> CommandRe
 
 #[command]
 pub async fn log_test(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
+    log_command(ctx, msg, || async {
         msg.channel_id
             .send_message(ctx, |m| m.content("Testing logs, hmmmm"))
             .await?;
         let cmd = args.single::<String>()?;
         match cmd.as_str() {
-            "ok" => LogResult::Ok(LogAction::Reply("Everything ok".into())),
+            "ok" => Ok("Everything ok".into()),
             "num" => {
-                args.single::<i32>()?;
-                LogResult::Ok(LogAction::Reply("Number provided".into()))
+                let num = args.single::<i32>().log_reply(msg)?;
+                Ok(num.to_string())
             }
-            "del" => {
-                msg.delete(ctx).await?;
-                LogResult::Ok(LogAction::Custom {
-                    log_msg: "Tried to use the del command. sus".into(),
-                    reply_msg: "Lol deleting everyones messages.... kekw".into(),
-                })
-            }
-            _ => Err("Invalid argmunts".into()),
+            _ => Ok("Test".to_string()),
         }
     })
     .await

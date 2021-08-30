@@ -1,5 +1,6 @@
 use crate::data::LogConfigData;
 use crate::signup_board::SignupBoardAction;
+use crate::utils;
 use diesel::result::Error as DieselError;
 use serenity::{async_trait, framework::standard::CommandResult, model::prelude::*, prelude::*};
 use std::future::Future;
@@ -10,6 +11,276 @@ pub enum LogType<'a> {
     Interaction(&'a SignupBoardAction),
     Conversation(String),
     Internal,
+}
+
+pub enum _LogType<'a> {
+    Command(&'a serenity::model::channel::Message),
+    Interaction(&'a str),
+}
+
+#[derive(Debug)]
+pub struct ReplyInfo {
+    msg_id: serenity::model::id::MessageId,
+    channel_id: serenity::model::id::ChannelId,
+}
+
+impl From<&serenity::model::channel::Message> for ReplyInfo {
+    fn from(msg: &serenity::model::channel::Message) -> Self {
+        ReplyInfo {
+            msg_id: msg.id,
+            channel_id: msg.channel_id,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum LogError {
+    LogOnly(Box<dyn std::error::Error + Send + Sync>),
+    LogReply {
+        err: Box<dyn std::error::Error + Send + Sync>,
+        reply: ReplyInfo,
+    },
+    LogReplyCustom {
+        err: Box<dyn std::error::Error + Send + Sync>,
+        reply: ReplyInfo,
+        reply_msg: String,
+    },
+}
+
+impl std::fmt::Display for LogError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogError::LogOnly(err) => write!(f, "{}", err),
+            LogError::LogReply { err, reply: _ } => write!(f, "{}", err),
+            LogError::LogReplyCustom {
+                err,
+                reply: _,
+                reply_msg: _,
+            } => write!(f, "{}", err),
+        }
+    }
+}
+
+impl<E: 'static + std::error::Error + Send + Sync> From<E> for LogError {
+    fn from(err: E) -> Self {
+        LogError::LogOnly(err.into())
+    }
+}
+
+impl From<LogError> for Box<dyn std::error::Error + Send + Sync> {
+    fn from(err: LogError) -> Self {
+        return match err {
+            LogError::LogOnly(err) => err,
+            LogError::LogReply { err, reply: _ } => err,
+            LogError::LogReplyCustom {
+                err,
+                reply: _,
+                reply_msg: _,
+            } => err,
+        };
+    }
+}
+
+impl LogError {
+    pub fn silent(self) -> Self {
+        let err = match self {
+            LogError::LogOnly(e) => e,
+            LogError::LogReply { err, reply: _ } => err,
+            LogError::LogReplyCustom {
+                err,
+                reply: _,
+                reply_msg: _,
+            } => err,
+        };
+        LogError::LogOnly(err)
+    }
+
+    pub fn with_reply(self, msg: &serenity::model::channel::Message) -> Self {
+        let err = match self {
+            LogError::LogOnly(e) => e,
+            LogError::LogReply { err, reply: _ } => err,
+            LogError::LogReplyCustom {
+                err,
+                reply: _,
+                reply_msg: _,
+            } => err,
+        };
+        LogError::LogReply {
+            err,
+            reply: msg.into(),
+        }
+    }
+
+    pub fn with_custom_reply(
+        self,
+        msg: &serenity::model::channel::Message,
+        reply_msg: String,
+    ) -> Self {
+        let err = match self {
+            LogError::LogOnly(e) => e,
+            LogError::LogReply { err, reply: _ } => err,
+            LogError::LogReplyCustom {
+                err,
+                reply: _,
+                reply_msg: _,
+            } => err,
+        };
+        LogError::LogReplyCustom {
+            err,
+            reply: msg.into(),
+            reply_msg,
+        }
+    }
+}
+
+pub type _LogResult<T> = std::result::Result<T, LogError>;
+
+pub trait LogResultConversion<T> {
+    fn log_only(self) -> _LogResult<T>;
+    fn log_reply(self, msg: &serenity::model::channel::Message) -> _LogResult<T>;
+    fn log_custom_reply(
+        self,
+        msg: &serenity::model::channel::Message,
+        reply_msg: String,
+    ) -> _LogResult<T>;
+}
+
+impl<T, E> LogResultConversion<T> for std::result::Result<T, E>
+where
+    E: 'static + std::error::Error + Send + Sync,
+{
+    fn log_only(self) -> _LogResult<T> {
+        match self {
+            Ok(ok) => Ok(ok),
+            Err(err) => Err(err.into()),
+        }
+    }
+
+    fn log_reply(self, msg: &serenity::model::channel::Message) -> _LogResult<T> {
+        self.log_only().map_err(|e| e.with_reply(&msg))
+    }
+
+    fn log_custom_reply(
+        self,
+        msg: &serenity::model::channel::Message,
+        reply_msg: String,
+    ) -> _LogResult<T> {
+        self.log_only()
+            .map_err(|e| e.with_custom_reply(&msg, reply_msg))
+    }
+}
+
+async fn log_to_channel<'a, T: std::fmt::Display>(
+    ctx: &Context,
+    result: &_LogResult<T>,
+    kind: _LogType<'a>,
+    user: &User,
+) -> () {
+    let log_info = {
+        ctx.data
+            .read()
+            .await
+            .get::<LogConfigData>()
+            .unwrap()
+            .clone()
+            .read()
+            .await
+            .info
+    };
+    // We can only log to the discord channel if it is set
+    if let Some(chan) = log_info {
+        chan.send_message(ctx, |m| {
+            m.allowed_mentions(|m| m.empty_parse());
+            m.embed(|e| {
+                e.description("[INFO]");
+                e.field("User", Mention::from(user), true);
+                match kind {
+                    _LogType::Interaction(i) => {
+                        e.field("Interaction", i, true);
+                    }
+                    _LogType::Command(c) => {
+                        e.field(
+                            "Command",
+                            format!(
+                                "`{}`\n{}",
+                                &c.content,
+                                if c.is_private() {
+                                    "_In DM's_".to_string()
+                                } else {
+                                    c.link()
+                                }
+                            ),
+                            true,
+                        );
+                    }
+                }
+                match result {
+                    Ok(ok) => {
+                        e.field(format!("OK {}", utils::CHECK_EMOJI), ok, false);
+                    }
+                    Err(err) => {
+                        e.field(format!("Error {}", utils::CROSS_EMOJI), err, false);
+                    }
+                }
+                e
+            })
+        })
+        .await
+        .ok();
+    }
+}
+
+async fn log_reply(ctx: &Context, err: &LogError) {
+    match err {
+        LogError::LogOnly(_) => (),
+        LogError::LogReply { err, reply } => {
+            reply
+                .channel_id
+                .send_message(ctx, |m| {
+                    m.reference_message((reply.channel_id, reply.msg_id));
+                    m.content(err.to_string())
+                })
+                .await
+                .ok();
+        }
+        LogError::LogReplyCustom {
+            err: _,
+            reply,
+            reply_msg,
+        } => {
+            reply
+                .channel_id
+                .send_message(ctx, |m| {
+                    m.reference_message((reply.channel_id, reply.msg_id));
+                    m.content(reply_msg)
+                })
+                .await
+                .ok();
+        }
+    }
+}
+
+pub async fn log_command<R, F, Fut>(ctx: &Context, cmd_msg: &Message, f: F) -> CommandResult
+where
+    F: FnOnce() -> Fut + Send,
+    R: std::fmt::Display,
+    Fut: Future<Output = _LogResult<R>> + Send,
+{
+    let res = f().await;
+
+    // Reply with error
+    if let Err(err) = &res {
+        log_reply(ctx, err).await;
+    }
+
+    // Log to channel
+    log_to_channel(ctx, &res, _LogType::Command(cmd_msg), &cmd_msg.author).await;
+
+    // Convert to CommandError
+    match res {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }
 
 pub enum LogAction {
