@@ -2,14 +2,10 @@ use crate::{components::*, conversation::*, data::*, db, embeds::*, log::*};
 
 use serenity::{
     builder::CreateEmbed,
-    client::bridge::gateway::ShardMessenger,
-    collector::reaction_collector::*,
     futures::StreamExt,
-    http::CacheHttp,
     model::{
-        channel::{Message, Reaction, ReactionType},
-        guild::{Emoji, Guild},
-        id::{EmojiId, RoleId, UserId},
+        channel::Message,
+        id::RoleId,
         interactions::{
             message_component::MessageComponentInteraction, InteractionResponseType,
             InteractionType,

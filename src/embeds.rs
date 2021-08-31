@@ -5,7 +5,7 @@ use serenity::{
     builder::CreateEmbed,
     model::{id::EmojiId, id::RoleId, misc::Mention},
 };
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashSet};
 
 // Embed helpers
 pub fn select_roles_embed(

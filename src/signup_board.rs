@@ -61,7 +61,7 @@ impl SignupBoard {
         chan: ChannelId,
         training: Arc<db::Training>,
     ) -> Result<Message> {
-        let tier_roles = match training.get_tier(ctx).await {
+        let _tier_roles = match training.get_tier(ctx).await {
             None => None,
             Some(t) => match t {
                 Ok(ok) => {
@@ -122,7 +122,7 @@ impl SignupBoard {
         msg: MessageId,
         training: Arc<db::Training>,
     ) -> Result<()> {
-        let tier_roles = match training.get_tier(ctx).await {
+        let _tier_roles = match training.get_tier(ctx).await {
             None => None,
             Some(t) => match t {
                 Ok(ok) => {

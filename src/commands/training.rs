@@ -1,7 +1,6 @@
 use super::SQUADMAKER_ROLE_CHECK;
 use crate::{
     components,
-    conversation::ConversationError,
     data, db, embeds,
     log::*,
     utils::{self, *},
