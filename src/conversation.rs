@@ -31,6 +31,7 @@ pub enum ConversationError {
     DmBlocked,
     TimedOut,
     Canceled,
+    InvalidInput,
     Other(String),
 }
 
@@ -49,6 +50,9 @@ impl fmt::Display for ConversationError {
             }
             ConversationError::Canceled => {
                 write!(f, "Conversation canceled")
+            }
+            ConversationError::InvalidInput => {
+                write!(f, "Error: Invalid Input")
             }
             ConversationError::Other(s) => {
                 write!(f, "{}", s)

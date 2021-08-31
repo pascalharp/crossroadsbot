@@ -20,25 +20,25 @@ struct Misc;
 
 #[command]
 pub async fn ping(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
+    log_command(ctx, msg, || async {
         msg.channel_id.say(&ctx.http, "pong").await?;
-        LogResult::Ok(LogAction::LogOnly("pong".into()))
+        Ok(())
     })
     .await
 }
 
 #[command]
 pub async fn dudu(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
+    log_command(ctx, msg, || async {
         msg.channel_id.say(&ctx.http, "BONK").await?;
-        LogResult::Ok(LogAction::LogOnly("BONK".into()))
+        Ok(())
     })
     .await
 }
 
 #[command]
 pub async fn button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
+    log_command(ctx, msg, || async {
         let mut msg = msg
             .channel_id
             .send_message(ctx, |m| {
@@ -81,7 +81,7 @@ pub async fn button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult 
                     m
                 })
                 .await?;
-                LogResult::Ok(LogAction::LogOnly(format!("Timed out")))
+                LogError::new("Timed out").with_reply(&msg).into()
             }
             Some(i) => {
                 i.create_interaction_response(ctx, |r| {
@@ -92,7 +92,7 @@ pub async fn button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult 
                     })
                 })
                 .await?;
-                LogResult::Ok(LogAction::LogOnly(format!("Clicked {}", &i.data.custom_id)))
+                Ok(())
             }
         }
     })
@@ -101,7 +101,7 @@ pub async fn button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult 
 
 #[command]
 pub async fn role_button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
+    log_command(ctx, msg, || async {
         let roles = db::Role::all_active(ctx).await?;
         msg.channel_id
             .send_message(ctx, |m| {
@@ -113,15 +113,15 @@ pub async fn role_button(ctx: &Context, msg: &Message, _args: Args) -> CommandRe
                 m
             })
             .await?;
-        LogResult::Ok(LogAction::None)
+        Ok(())
     })
     .await
 }
 
 #[command]
 pub async fn role_select(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
-        let roles = db::Role::all_active(ctx).await?;
+    log_command(ctx, msg, || async {
+        let roles = db::Role::all_active(ctx).await.log_reply(msg)?;
         let selected: HashSet<String> = HashSet::new();
 
         let mut m = msg
@@ -131,15 +131,17 @@ pub async fn role_select(ctx: &Context, msg: &Message, _args: Args) -> CommandRe
             })
             .await?;
 
-        utils::select_roles(ctx, &mut m, &msg.author, &roles, selected).await?;
-        LogResult::Ok(LogAction::None)
+        utils::select_roles(ctx, &mut m, &msg.author, &roles, selected)
+            .await
+            .log_reply(&msg)?;
+        Ok(())
     })
     .await
 }
 
 #[command]
 pub async fn multi_embed(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
+    log_command(ctx, msg, || async {
         msg.channel_id
             .send_message(ctx, |m| {
                 m.content("Sending message with multiple embeds");
@@ -161,7 +163,7 @@ pub async fn multi_embed(ctx: &Context, msg: &Message, _args: Args) -> CommandRe
                 m
             })
             .await?;
-        LogResult::Ok(LogAction::None)
+        Ok(())
     })
     .await
 }
@@ -172,7 +174,7 @@ pub async fn log_test(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
         msg.channel_id
             .send_message(ctx, |m| m.content("Testing logs, hmmmm"))
             .await?;
-        let cmd = args.single::<String>()?;
+        let cmd = args.single::<String>().log_reply(msg)?;
         match cmd.as_str() {
             "ok" => Ok(()),
             "num" => {

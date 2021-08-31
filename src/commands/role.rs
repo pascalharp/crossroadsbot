@@ -1,9 +1,11 @@
 use super::SQUADMAKER_ROLE_CHECK;
 use crate::{
     components,
+    conversation::ConversationError,
     data::ConfigValuesData,
     db, embeds,
     log::*,
+    utils::CHECK_EMOJI,
     utils::{CROSS_EMOJI, DEFAULT_TIMEOUT},
 };
 use serenity::builder::CreateEmbed;
@@ -27,22 +29,23 @@ pub struct Role;
 #[only_in("guild")]
 #[num_args(2)]
 pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
+    log_command(ctx, msg, || async {
         let author = &msg.author;
-        let role_name = args.single_quoted::<String>()?;
-        let role_repr = args.single_quoted::<String>()?;
+        let role_name = args.single_quoted::<String>().log_reply(msg)?;
+        let role_repr = args.single_quoted::<String>().log_reply(msg)?;
 
         if role_repr.contains(" ") {
-            return Err("Identifier must not contain spaces".into());
+            return LogError::new("Identifier must not contain spaces").into();
         }
 
         // load all active roles from db
-        let roles = db::Role::all_active(ctx).await?;
+        let roles = db::Role::all_active(ctx).await.log_reply(msg)?;
         // check if repr already used
         if roles.iter().any(|r| r.repr.eq(&role_repr)) {
-            return Err(
-                "A role with the same repr already exists. The repr has to be unique".into(),
-            );
+            return LogError::new(
+                "A role with the same repr already exists. The repr has to be unique",
+            )
+            .into();
         }
 
         let db_emojis: Vec<EmojiId> = roles
@@ -58,7 +61,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             .get::<ConfigValuesData>()
             .unwrap()
             .emoji_guild_id;
-        let emoji_guild = Guild::get(ctx, gid).await?;
+        let emoji_guild = Guild::get(ctx, gid).await.log_reply(msg)?;
 
         // Remove already used emojis
         let available: Vec<Emoji> = emoji_guild
@@ -69,9 +72,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             .collect();
 
         if available.is_empty() {
-            return Ok(LogAction::Reply(
-                "No more emojis for roles available".into(),
-            ));
+            return LogError::new("No more emojis for roles available").into();
         }
 
         let mut emb = CreateEmbed::default();
@@ -128,7 +129,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
         let emoji_id = match emoji {
             None => {
-                return Err("Timed out".into());
+                return Err(ConversationError::TimedOut).log_reply(&msg);
             }
             Some(r) => {
                 match &r.as_inner_ref().emoji {
@@ -139,13 +140,13 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                     } => *id,
                     ReactionType::Unicode(s) => {
                         if *s == String::from(CROSS_EMOJI) {
-                            return Err("Aborted".into());
+                            return LogError::new("Aborted").into();
                         }
                         // Should never occur since filtered already filtered
-                        return Err("Unexpected emoji".into());
+                        return LogError::new("Unexpected emoji").into();
                     }
                     // Should never occur since filtered already filtered
-                    _ => return Err("Unexpected emoji".into()),
+                    _ => return LogError::new("Unexpected emoji").into(),
                 }
             }
         };
@@ -176,7 +177,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                     m.components(|c| c)
                 })
                 .await?;
-                return Err("Timed out".into());
+                return Err(ConversationError::TimedOut).log_reply(&msg);
             }
             Some(i) => match components::resolve_button_response(&i) {
                 components::ButtonResponse::Confirm => {
@@ -206,7 +207,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                         })
                     })
                     .await?;
-                    return Err("Aborted".into());
+                    return Err(ConversationError::Canceled).log_reply(&msg);
                 }
                 _ => {
                     i.create_interaction_response(ctx, |r| {
@@ -221,18 +222,30 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                         })
                     })
                     .await?;
-                    return Err("Unexpected interaction".into());
+                    return Err(ConversationError::InvalidInput).log_reply(&msg);
                 }
             },
         }
 
-        db::Role::insert(ctx, role_name.clone(), role_repr, *emoji_id.as_u64()).await?;
+        db::Role::insert(
+            ctx,
+            role_name.clone(),
+            role_repr.clone(),
+            *emoji_id.as_u64(),
+        )
+        .await?;
 
-        Ok(LogAction::Reply(format!(
-            "Role added {} {}",
-            Mention::from(emoji_id),
-            role_name
-        )))
+        msg.reply(
+            ctx,
+            format!(
+                "Role added {} {} ({})",
+                Mention::from(emoji_id),
+                &role_name,
+                &role_repr
+            ),
+        )
+        .await?;
+        Ok(())
     })
     .await
 }
@@ -246,19 +259,12 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 #[only_in("guild")]
 #[num_args(1)]
 pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
+    log_command(ctx, msg, || async {
         let role_repr = args.single::<String>()?;
-        let role = match db::Role::by_repr(ctx, role_repr).await {
-            Ok(r) => r,
-            Err(e) => match e {
-                diesel::NotFound => {
-                    return Err("Role not found".into());
-                }
-                _ => return Err(e.into()),
-            },
-        };
-        role.deactivate(ctx).await?;
-        Ok(LogAction::Reply("Role removed".into()))
+        let role = db::Role::by_repr(ctx, role_repr).await.log_reply(&msg)?;
+        role.deactivate(ctx).await.log_unexpected_reply(msg)?;
+        msg.react(ctx, ReactionType::from(CHECK_EMOJI)).await?;
+        Ok(())
     })
     .await
 }
@@ -271,8 +277,15 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
 #[only_in("guild")]
 #[num_args(0)]
 pub async fn list(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
-        let roles = db::Role::all_active(ctx).await?;
+    log_command(ctx, msg, || async {
+        let roles = db::Role::all_active(ctx).await.log_unexpected_reply(msg)?;
+
+        if roles.is_empty() {
+            return LogError::new("No active roles set up")
+                .with_reply(msg)
+                .into();
+        }
+
         let mut embed = CreateEmbed::default();
         embeds::embed_add_roles(&mut embed, &roles, false);
 
@@ -280,7 +293,7 @@ pub async fn list(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResul
             .send_message(ctx, |m| m.set_embed(embed))
             .await?;
 
-        Ok(LogAction::LogOnly("Success".into()))
+        Ok(())
     })
     .await
 }

@@ -141,12 +141,18 @@ pub type _LogResult<T> = std::result::Result<T, LogError>;
 
 pub trait LogResultConversion<T> {
     fn log_only(self) -> _LogResult<T>;
+
     fn log_reply(self, msg: &serenity::model::channel::Message) -> _LogResult<T>;
-    fn log_custom_reply(
+
+    fn log_custom_reply<S>(
         self,
         msg: &serenity::model::channel::Message,
-        reply_msg: String,
-    ) -> _LogResult<T>;
+        reply_msg: S,
+    ) -> _LogResult<T>
+    where
+        S: ToString;
+
+    fn log_unexpected_reply(self, msg: &serenity::model::channel::Message) -> _LogResult<T>;
 }
 
 impl<T> From<LogError> for _LogResult<T> {
@@ -155,14 +161,16 @@ impl<T> From<LogError> for _LogResult<T> {
     }
 }
 
+const UNEXPECTED_ERROR_REPLY: &str = "Unexpected error 😵";
+
 impl<T, E> LogResultConversion<T> for std::result::Result<T, E>
 where
-    E: 'static + std::error::Error + Send + Sync,
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
     fn log_only(self) -> _LogResult<T> {
         match self {
             Ok(ok) => Ok(ok),
-            Err(err) => Err(err.into()),
+            Err(err) => Err(LogError::LogOnly(err.into())),
         }
     }
 
@@ -170,13 +178,20 @@ where
         self.log_only().map_err(|e| e.with_reply(&msg))
     }
 
-    fn log_custom_reply(
+    fn log_custom_reply<S>(
         self,
         msg: &serenity::model::channel::Message,
-        reply_msg: String,
-    ) -> _LogResult<T> {
+        reply_msg: S,
+    ) -> _LogResult<T>
+    where
+        S: ToString,
+    {
         self.log_only()
-            .map_err(|e| e.with_custom_reply(&msg, reply_msg))
+            .map_err(|e| e.with_custom_reply(&msg, reply_msg.to_string()))
+    }
+
+    fn log_unexpected_reply(self, msg: &serenity::model::channel::Message) -> _LogResult<T> {
+        self.log_custom_reply(msg, UNEXPECTED_ERROR_REPLY)
     }
 }
 

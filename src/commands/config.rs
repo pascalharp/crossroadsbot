@@ -1,5 +1,5 @@
 use super::ADMIN_ROLE_CHECK;
-use crate::{data::*, db, log::*, signup_board};
+use crate::{data::*, db, log::*, signup_board, utils};
 use serenity::framework::standard::{
     macros::{command, group},
     Args, CommandResult,
@@ -17,47 +17,6 @@ use serenity::prelude::*;
 )]
 struct Config;
 
-enum LogChannelType {
-    Info,
-    Error,
-}
-
-async fn set_log_channel(ctx: &Context, mut args: Args, kind: LogChannelType) -> LogResult {
-    let channel_id: ChannelId = match args.single::<ChannelId>() {
-        Err(_) => {
-            return Err("No valid channel provided".into());
-        }
-        Ok(c) => c,
-    };
-
-    // save in memory
-    {
-        let write_lock = ctx
-            .data
-            .read()
-            .await
-            .get::<LogConfigData>()
-            .unwrap()
-            .clone();
-        match kind {
-            LogChannelType::Info => write_lock.write().await.info = Some(channel_id),
-            LogChannelType::Error => write_lock.write().await.error = Some(channel_id),
-        }
-    }
-
-    // save to db
-    let conf = db::Config {
-        name: match kind {
-            LogChannelType::Info => String::from(INFO_LOG_NAME),
-            LogChannelType::Error => String::from(ERROR_LOG_NAME),
-        },
-        value: channel_id.to_string(),
-    };
-    conf.save(ctx).await?;
-
-    Ok(LogAction::Reply("Log channel saved".into()))
-}
-
 #[command]
 #[checks(admin_role)]
 #[description = "Sets the log channel for info"]
@@ -65,9 +24,29 @@ async fn set_log_channel(ctx: &Context, mut args: Args, kind: LogChannelType) ->
 #[usage = "channel_mention"]
 #[only_in("guild")]
 #[num_args(1)]
-pub async fn set_log_info(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
-        set_log_channel(ctx, args, LogChannelType::Info).await
+pub async fn set_log_info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    log_command(ctx, msg, || async {
+        let channel_id: ChannelId = args.single::<ChannelId>().log_reply(msg)?;
+        {
+            let write_lock = ctx
+                .data
+                .read()
+                .await
+                .get::<LogConfigData>()
+                .unwrap()
+                .clone();
+            write_lock.write().await.info = Some(channel_id);
+        }
+
+        let conf = db::Config {
+            name: String::from(INFO_LOG_NAME),
+            value: channel_id.to_string(),
+        };
+        conf.save(ctx).await.log_reply(msg)?;
+
+        msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
+            .await?;
+        Ok(())
     })
     .await
 }
@@ -79,9 +58,29 @@ pub async fn set_log_info(ctx: &Context, msg: &Message, args: Args) -> CommandRe
 #[usage = "channel_mention"]
 #[only_in("guild")]
 #[num_args(1)]
-pub async fn set_log_error(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
-        set_log_channel(ctx, args, LogChannelType::Error).await
+pub async fn set_log_error(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    log_command(ctx, msg, || async {
+        let channel_id: ChannelId = args.single::<ChannelId>().log_reply(msg)?;
+        {
+            let write_lock = ctx
+                .data
+                .read()
+                .await
+                .get::<LogConfigData>()
+                .unwrap()
+                .clone();
+            write_lock.write().await.error = Some(channel_id);
+        }
+
+        let conf = db::Config {
+            name: String::from(ERROR_LOG_NAME),
+            value: channel_id.to_string(),
+        };
+        conf.save(ctx).await.log_reply(msg)?;
+
+        msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
+            .await?;
+        Ok(())
     })
     .await
 }
@@ -97,15 +96,9 @@ pub async fn set_signup_board_category(
     msg: &Message,
     mut args: Args,
 ) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
-        let channel_id: ChannelId = match args.single::<ChannelId>() {
-            Err(_) => {
-                return Err("No valid channel provided".into());
-            }
-            Ok(c) => c,
-        };
+    log_command(ctx, msg, || async {
+        let channel_id: ChannelId = args.single::<ChannelId>().log_reply(msg)?;
 
-        // set in memory
         {
             let write_lock = ctx
                 .data
@@ -117,16 +110,16 @@ pub async fn set_signup_board_category(
             write_lock.write().await.set_category_channel(channel_id);
         }
 
-        // save to db
         let conf = db::Config {
             name: String::from(signup_board::SIGNUP_BOARD_NAME),
             value: channel_id.to_string(),
         };
 
-        match conf.save(ctx).await {
-            Ok(_) => Ok(LogAction::Reply("Signup board category saved".into())),
-            Err(e) => Err(e.into()),
-        }
+        conf.save(ctx).await.log_reply(msg)?;
+
+        msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
+            .await?;
+        Ok(())
     })
     .await
 }
@@ -138,7 +131,7 @@ pub async fn set_signup_board_category(
 #[only_in("guild")]
 #[num_args(0)]
 pub async fn signup_board_reset(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
+    log_command(ctx, msg, || async {
         let write_lock = ctx
             .data
             .read()
@@ -147,8 +140,11 @@ pub async fn signup_board_reset(ctx: &Context, msg: &Message, _: Args) -> Comman
             .unwrap()
             .clone();
 
-        write_lock.write().await.reset(ctx).await?;
-        LogResult::Ok(LogAction::Reply("Signup board resetted".into()))
+        write_lock.write().await.reset(ctx).await.log_reply(msg)?;
+
+        msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
+            .await?;
+        Ok(())
     })
     .await
 }
