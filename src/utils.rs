@@ -1,4 +1,4 @@
-use crate::{components::*, conversation::*, data::*, db, embeds::*};
+use crate::{components::*, conversation::*, data::*, db, embeds::*, log::*};
 
 use serenity::{
     builder::CreateEmbed,
@@ -10,7 +10,10 @@ use serenity::{
         channel::{Message, Reaction, ReactionType},
         guild::{Emoji, Guild},
         id::{EmojiId, RoleId, UserId},
-        interactions::{InteractionResponseType, InteractionType},
+        interactions::{
+            message_component::MessageComponentInteraction, InteractionResponseType,
+            InteractionType,
+        },
         user::User,
     },
     prelude::*,
@@ -39,87 +42,6 @@ pub const MEMO_EMOJI: char = '📝';
 pub const GREEN_SQUARE_EMOJI: char = '🟩';
 pub const RED_SQUARE_EMOJI: char = '🟥';
 pub const ALARM_CLOCK_EMOJI: char = '⏰';
-
-pub enum YesOrNo {
-    Yes,
-    No,
-}
-
-/// Reacts with CHECK_EMOJI and CROSS_EMOJI on the provided message
-pub async fn send_yes_or_no<'a>(
-    cache_http: &'a impl CacheHttp,
-    msg: &'a Message,
-) -> Result<(Reaction, Reaction)> {
-    let check = msg.react(cache_http, CHECK_EMOJI).await?;
-    let cross = msg.react(cache_http, CROSS_EMOJI).await?;
-    Ok((check, cross))
-}
-
-/// Awaits the CHECK_EMOJI or CROSS_EMOJI reaction on a message using the default timeout
-pub async fn await_yes_or_no<'a>(
-    shard_messenger: &'a impl AsRef<ShardMessenger>,
-    msg: &'a Message,
-    user_id: Option<UserId>,
-) -> Option<YesOrNo> {
-    let collector = msg
-        .await_reaction(shard_messenger)
-        .timeout(DEFAULT_TIMEOUT)
-        .filter(|r| {
-            r.emoji == ReactionType::from(CHECK_EMOJI) || r.emoji == ReactionType::from(CROSS_EMOJI)
-        });
-
-    let collector = match user_id {
-        Some(u) => collector.author_id(u),
-        None => collector,
-    };
-
-    match collector.await {
-        None => return None,
-        Some(r) => match r.as_ref() {
-            ReactionAction::Added(e) => {
-                if e.emoji == ReactionType::from(CHECK_EMOJI) {
-                    return Some(YesOrNo::Yes);
-                }
-                return Some(YesOrNo::No);
-            }
-            _ => return None,
-        },
-    }
-}
-
-/// Helper struct
-pub struct RoleEmoji {
-    pub role: db::Role,
-    pub emoji: Emoji,
-}
-
-pub type RoleEmojiMap = HashMap<EmojiId, RoleEmoji>;
-
-/// Returns a Hashmap of of Emojis and Roles that overlap with EmojiId as key
-pub async fn role_emojis(ctx: &Context, roles: Vec<db::Role>) -> Result<RoleEmojiMap> {
-    let mut map = HashMap::new();
-    let emojis_guild_id = ctx
-        .data
-        .read()
-        .await
-        .get::<ConfigValuesData>()
-        .unwrap()
-        .emoji_guild_id;
-    let emoji_guild = Guild::get(ctx, emojis_guild_id).await?;
-    let emojis = emoji_guild.emojis;
-
-    for r in roles {
-        if let Some(e) = emojis.get(&EmojiId::from(r.emoji as u64)) {
-            let role_emoji = RoleEmoji {
-                role: r,
-                emoji: e.clone(),
-            };
-            map.insert(e.id, role_emoji);
-        }
-    }
-
-    Ok(map)
-}
 
 /// Verifies if the discord user has the required tier for a training
 pub async fn verify_tier(
@@ -193,8 +115,46 @@ pub async fn filter_trainings(
         .collect())
 }
 
-pub fn format_training_slim(t: &db::Training) -> String {
-    String::from(format!("Name: `{}`\nDate `{} UTC`", t.title, t.date,))
+// Using Deferred since updating the message and Interaction Response
+// doesnt update the original message
+pub async fn clear_components(
+    ctx: &Context,
+    interaction: &MessageComponentInteraction,
+    msg: &mut Message,
+) -> Result<()> {
+    interaction
+        .create_interaction_response(ctx, |r| {
+            r.kind(InteractionResponseType::DeferredUpdateMessage)
+        })
+        .await?;
+
+    msg.edit(ctx, |m| m.components(|c| c)).await?;
+
+    Ok(())
+}
+
+pub async fn await_confirm_abort_interaction(ctx: &Context, msg: &mut Message) -> _LogResult<()> {
+    let interaction = msg
+        .await_component_interaction(ctx)
+        .timeout(DEFAULT_TIMEOUT)
+        .await;
+    match interaction {
+        None => return Err(ConversationError::TimedOut).log_reply(&msg),
+        Some(i) => match resolve_button_response(&i) {
+            ButtonResponse::Confirm => {
+                clear_components(ctx, &i, msg).await.log_only()?;
+            }
+            ButtonResponse::Abort => {
+                clear_components(ctx, &i, msg).await.log_only()?;
+                return Err(ConversationError::Canceled).log_reply(&msg);
+            }
+            _ => {
+                clear_components(ctx, &i, msg).await.log_only()?;
+                return Err(ConversationError::InvalidInput).log_reply(&msg);
+            }
+        },
+    }
+    Ok(())
 }
 
 pub async fn select_roles(
@@ -216,6 +176,9 @@ pub async fn select_roles(
     msg.edit(ctx, |m| {
         m.add_embed(|e| {
             e.0 = select_roles_embed(roles, &selected).0;
+            if selected.is_empty() {
+                e.footer(|f| f.text(format!("{} Select at least one role", WARNING_EMOJI)));
+            }
             e
         });
         m.components(|c| {
@@ -253,21 +216,24 @@ pub async fn select_roles(
             }
             Some(i) => match resolve_button_response(&i) {
                 ButtonResponse::Confirm => {
-                    i.create_interaction_response(ctx, |r| {
-                        r.kind(InteractionResponseType::DeferredUpdateMessage)
-                    })
-                    .await?;
-                    // Edit message with final selection
-                    msg.edit(ctx, |m| {
-                        m.set_embeds(orig_embeds);
-                        m.add_embed(|e| {
-                            e.0 = select_roles_embed(&roles, &selected).0;
-                            e
-                        });
-                        m.components(|c| c)
-                    })
-                    .await?;
-                    break;
+                    // only accept if at least one role selectec
+                    if !selected.is_empty() {
+                        i.create_interaction_response(ctx, |r| {
+                            r.kind(InteractionResponseType::DeferredUpdateMessage)
+                        })
+                        .await?;
+                        // Edit message with final selection
+                        msg.edit(ctx, |m| {
+                            m.set_embeds(orig_embeds);
+                            m.add_embed(|e| {
+                                e.0 = select_roles_embed(&roles, &selected).0;
+                                e
+                            });
+                            m.components(|c| c)
+                        })
+                        .await?;
+                        break;
+                    }
                 }
                 ButtonResponse::Abort => {
                     i.create_interaction_response(ctx, |r| {
@@ -298,6 +264,14 @@ pub async fn select_roles(
                             d.embeds(orig_embeds.clone());
                             d.create_embed(|e| {
                                 e.0 = select_roles_embed(roles, &selected).0;
+                                if selected.is_empty() {
+                                    e.footer(|f| {
+                                        f.text(format!(
+                                            "{} Select at least one role",
+                                            WARNING_EMOJI
+                                        ))
+                                    });
+                                }
                                 e
                             })
                         })

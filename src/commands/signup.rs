@@ -5,8 +5,10 @@ use serenity::framework::standard::{
     macros::{command, group},
     Args, CommandResult,
 };
+use serenity::futures::future;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
+use std::collections::{HashMap, HashSet};
 
 #[group]
 #[commands(register, join, leave, edit, list)]
@@ -18,19 +20,20 @@ struct Signup;
 #[usage = "account_name"]
 #[num_args(1)]
 pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
-        let acc_name = args.single::<String>()?;
+    log_command(ctx, msg, || async {
+        let acc_name = args.single::<String>().log_reply(&msg)?;
         let re = Regex::new("^[a-zA-Z]{3,27}\\.[0-9]{4}$").unwrap();
         if !re.is_match(&acc_name) {
-            return Ok(LogAction::Reply("Invalid gw2 account name format".into()));
+            return LogError::new("Invalid gw2 account name format", msg).into();
         }
 
         // this is an update on conflict
-        let new_user = db::User::upsert(ctx, *msg.author.id.as_u64(), acc_name).await?;
-        Ok(LogAction::Reply(format!(
-            "Gw2 account name set to: {}",
-            new_user.gw2_id
-        )))
+        let new_user = db::User::upsert(ctx, *msg.author.id.as_u64(), acc_name)
+            .await
+            .log_unexpected_reply(msg)?;
+        msg.reply(ctx, format!("Gw2 account name set to: {}", new_user.gw2_id))
+            .await?;
+        Ok(())
     })
     .await
 }
@@ -41,16 +44,8 @@ pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
 #[usage = "training_id"]
 #[num_args(1)]
 pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let (user, training) = match LogResult::value_silent(ctx, &msg.author, || async {
-        let id = match args.single_quoted::<i32>() {
-            Ok(i) => i,
-            Err(_) => {
-                let reply = "Failed to parse trainings id".to_string();
-                msg.reply(ctx, &reply).await.ok();
-                return Err(reply.into());
-            }
-        };
-
+    log_command(ctx, msg, || async {
+        let id = args.single_quoted::<i32>().log_reply(msg)?;
         let db_user = match db::User::by_discord_id(ctx, msg.author.id).await {
             Ok(u) => u,
             Err(diesel::NotFound) => {
@@ -64,48 +59,128 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                         })
                     })
                     .await?;
-                return Err(NOT_REGISTERED.into());
+                return LogError::new_silent(NOT_REGISTERED).into();
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e).log_unexpected_reply(msg),
         };
 
         let training = match db::Training::by_id_and_state(ctx, id, db::TrainingState::Open).await {
             Ok(t) => t,
             Err(diesel::NotFound) => {
                 let reply = format!("No **open** training with id: {}", id);
-                msg.reply(ctx, &reply).await.ok();
-                return Err(reply.into());
+                return LogError::new(&reply, msg).into();
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e).log_unexpected_reply(msg),
         };
-        Ok((db_user, training))
-    })
-    .await
-    {
-        Some(t) => t,
-        None => return Ok(()),
-    };
 
-    let emb = embeds::training_base_embed(&training);
+        let emb = embeds::training_base_embed(&training);
 
-    let mut conv = match LogResult::value(ctx, msg, || async {
-        Ok(Conversation::init(ctx, &msg.author, emb).await?)
-    })
-    .await
-    {
-        Some(c) => c,
-        None => return Ok(()),
-    };
-
-    // if not already in dms give a hint
-    if !msg.is_private() {
-        msg.reply(ctx, format!("Check DM's {}", utils::ENVELOP_EMOJI))
+        let mut conv = Conversation::init(ctx, &msg.author, emb)
             .await
-            .ok();
-    }
+            .log_reply(msg)?;
 
-    LogResult::command_separate_reply(ctx, &msg, &conv.msg.clone(), || async move {
-        join_training(ctx, &mut conv, &training, &user).await
+        // if not already in dms give a hint
+        if !msg.is_private() {
+            msg.reply(ctx, format!("Check DM's {}", utils::ENVELOP_EMOJI))
+                .await
+                .ok();
+        }
+
+        // verify if tier requirements pass
+        match utils::verify_tier(ctx, &training, &conv.user).await {
+            Ok((pass, tier)) => {
+                if !pass {
+                    conv.msg
+                        .edit(ctx, |m| {
+                            m.content("");
+                            m.embed(|e| {
+                                e.description("Tier requirement not fulfilled");
+                                e.field("Missing tier:", tier, false)
+                            })
+                        })
+                        .await?;
+                    return LogError::new("Tier requirement not fulfilled", msg).into();
+                }
+            }
+            Err(e) => return Err(e).log_unexpected_reply(msg),
+        };
+
+        // Check if signup already exist
+        match db::Signup::by_user_and_training(ctx, &db_user, &training).await {
+            Ok(_) => {
+                conv.msg
+                    .edit(ctx, |m| {
+                        m.add_embed(|e| {
+                            e.description("Already signed up for this training");
+                            e.field(
+                                "You can edit your signup with:",
+                                format!("`{}edit {}`", data::GLOB_COMMAND_PREFIX, training.id),
+                                false,
+                            );
+                            e.field(
+                                "You can remove your signup with:",
+                                format!("`{}leave {}`", data::GLOB_COMMAND_PREFIX, training.id),
+                                false,
+                            )
+                        })
+                    })
+                    .await?;
+                return LogError::new_silent("Already signed up").into();
+            }
+            Err(diesel::NotFound) => (), // This is what we want
+            Err(e) => return Err(e).log_unexpected_reply(&conv.msg),
+        };
+
+        let roles = training
+            .active_roles(ctx)
+            .await
+            .log_unexpected_reply(&conv.msg)?;
+        let roles_lookup: HashMap<String, &db::Role> =
+            roles.iter().map(|r| (String::from(&r.repr), r)).collect();
+
+        // Gather selected roles
+        let selected: HashSet<String> = HashSet::with_capacity(roles.len());
+        let selected = utils::select_roles(ctx, &mut conv.msg, &conv.user, &roles, selected)
+            .await
+            .log_reply(&conv.msg)?;
+
+        let signup = db::Signup::insert(ctx, &db_user, &training)
+            .await
+            .log_unexpected_reply(&conv.msg)?;
+
+        // Save roles
+        // We inserted all roles into the HashMap, so it is save to unwrap
+        let futs = selected
+            .iter()
+            .map(|r| signup.add_role(ctx, roles_lookup.get(r).unwrap()));
+        future::try_join_all(futs).await?;
+
+        conv.msg
+            .edit(ctx, |m| {
+                m.add_embed(|e| {
+                    e.color((0, 255, 0));
+                    e.description("Successfully signed up");
+                    e.field(
+                        "To edit your sign up:",
+                        format!("`{}edit {}`", data::GLOB_COMMAND_PREFIX, training.id),
+                        false,
+                    );
+                    e.field(
+                        "To remove your sign up:",
+                        format!("`{}leave {}`", data::GLOB_COMMAND_PREFIX, training.id),
+                        false,
+                    );
+                    e.field(
+                        "To list all your current sign ups:",
+                        format!("`{}list`", data::GLOB_COMMAND_PREFIX),
+                        false,
+                    );
+                    e
+                })
+            })
+            .await?;
+
+        Ok(())
     })
     .await
 }
@@ -116,11 +191,8 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 #[usage = "training_id"]
 #[num_args(1)]
 pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
-        let training_id = match args.single_quoted::<i32>() {
-            Ok(id) => id,
-            Err(_) => return Err("Failed to parse training id".into()),
-        };
+    log_command(ctx, msg, || async {
+        let training_id = args.single_quoted::<i32>().log_reply(msg)?;
 
         let db_user = match db::User::by_discord_id(ctx, msg.author.id).await {
             Ok(u) => u,
@@ -135,20 +207,21 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
                         })
                     })
                     .await?;
-                return Ok(LogAction::LogOnly(NOT_REGISTERED.into()));
+                return LogError::new_silent(NOT_REGISTERED).into();
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e).log_unexpected_reply(msg),
         };
 
         let training =
             match db::Training::by_id_and_state(ctx, training_id, db::TrainingState::Open).await {
                 Ok(t) => t,
                 Err(diesel::NotFound) => {
-                    return Err(
-                        format!("No **open** training with id {} found", training_id).into(),
-                    );
+                    return Err(LogError::new(
+                        &format!("No **open** training with id {} found", training_id),
+                        msg,
+                    ));
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(e).log_unexpected_reply(msg),
             };
 
         let signup = match db::Signup::by_user_and_training(ctx, &db_user, &training).await {
@@ -172,17 +245,21 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
                         })
                     })
                     .await?;
-                return Ok(LogAction::LogOnly(NOT_SIGNED_UP.into()));
+                return Err(LogError::new_silent(NOT_SIGNED_UP));
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e).log_unexpected_reply(&msg),
         };
 
         match signup.remove(ctx).await {
             Ok(1) => (),
             Ok(a) => {
-                return Err(format!("Unexpected amount of signups removed. Amount: {}", a).into())
+                return Err(LogError::new_custom(
+                    format!("Unexpected Error"),
+                    format!("Unexpected amount of signups removed: {}", a),
+                    msg,
+                ))
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e).log_unexpected_reply(&msg),
         }
 
         msg.channel_id
@@ -195,7 +272,7 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
                 })
             })
             .await?;
-        Ok(LogAction::LogOnly("Signup removed".into()))
+        Ok(())
     })
     .await
 }
@@ -206,25 +283,17 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
 #[usage = "training_id"]
 #[num_args(1)]
 pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let (training, signup) = match LogResult::value_silent(ctx, &msg.author, || async {
-        let training_id = match args.single_quoted::<i32>() {
-            Ok(id) => id,
-            Err(_) => {
-                let reply = "Failed to parse training id".to_string();
-                msg.reply(ctx, &reply).await.ok();
-                return Err(reply.into());
-            }
-        };
+    log_command(ctx, msg, || async {
+        let training_id = args.single_quoted::<i32>().log_reply(msg)?;
 
         let training =
             match db::Training::by_id_and_state(ctx, training_id, db::TrainingState::Open).await {
                 Ok(t) => t,
                 Err(diesel::NotFound) => {
                     let reply = format!("No **open** training with id {} found", training_id);
-                    msg.reply(ctx, &reply).await.ok();
-                    return Err(reply.into());
+                    return Err(LogError::new(reply, msg));
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(e).log_unexpected_reply(msg),
             };
 
         let signup =
@@ -249,38 +318,77 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                             })
                         })
                         .await?;
-                    return Err("No signup found".into());
+                    return Err(LogError::new_silent(NOT_SIGNED_UP));
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(e).log_unexpected_reply(msg),
             };
-        Ok((training, signup))
-    })
-    .await
-    {
-        Some(s) => s,
-        None => return Ok(()),
-    };
 
-    let emb = embeds::training_base_embed(&training);
+        let emb = embeds::training_base_embed(&training);
 
-    let mut conv = match LogResult::value(ctx, msg, || async {
-        Ok(Conversation::init(ctx, &msg.author, emb).await?)
-    })
-    .await
-    {
-        Some(c) => c,
-        None => return Ok(()),
-    };
-
-    // if not already in dms give a hint
-    if !msg.is_private() {
-        msg.reply(ctx, format!("Check DM's {}", utils::ENVELOP_EMOJI))
+        let mut conv = Conversation::init(ctx, &msg.author, emb)
             .await
-            .ok();
-    }
+            .log_reply(msg)?;
 
-    LogResult::command_separate_reply(ctx, &msg, &conv.msg.clone(), || async move {
-        edit_signup(ctx, &mut conv, &training, &signup).await
+        // if not already in dms give a hint
+        if !msg.is_private() {
+            msg.reply(ctx, format!("Check DM's {}", utils::ENVELOP_EMOJI))
+                .await
+                .ok();
+        }
+
+        let roles = training.active_roles(ctx).await?;
+        let roles_lookup: HashMap<String, &db::Role> =
+            roles.iter().map(|r| (String::from(&r.repr), r)).collect();
+
+        // Get new roles from user
+        let mut selected: HashSet<String> = HashSet::with_capacity(roles.len());
+        let already_selected = signup.get_roles(ctx).await?;
+        for r in already_selected {
+            selected.insert(r.repr);
+        }
+        let selected = utils::select_roles(ctx, &mut conv.msg, &conv.user, &roles, selected)
+            .await
+            .log_reply(&conv.msg)?;
+
+        // Save new roles
+        signup
+            .clear_roles(ctx)
+            .await
+            .log_unexpected_reply(&conv.msg)?;
+        // We inserted all roles into the HashMap, so it is save to unwrap
+        let futs = selected.iter().filter_map(|r| {
+            roles_lookup
+                .get(r)
+                .and_then(|r| Some(signup.add_role(ctx, *r)))
+        });
+        future::try_join_all(futs).await?;
+
+        conv.msg
+            .edit(ctx, |m| {
+                m.add_embed(|e| {
+                    e.color((0, 255, 0));
+                    e.description("Successfully edited");
+                    e.field(
+                        "To edit your sign up:",
+                        format!("`{}edit {}`", data::GLOB_COMMAND_PREFIX, training.id),
+                        false,
+                    );
+                    e.field(
+                        "To remove your sign up:",
+                        format!("`{}leave {}`", data::GLOB_COMMAND_PREFIX, training.id),
+                        false,
+                    );
+                    e.field(
+                        "To list all your current sign ups:",
+                        format!("`{}list`", data::GLOB_COMMAND_PREFIX),
+                        false,
+                    );
+                    e
+                })
+            })
+            .await?;
+
+        Ok(())
     })
     .await
 }
@@ -291,7 +399,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 #[usage = ""]
 #[num_args(0)]
 pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    let user = match LogResult::value_silent(ctx, &msg.author, || async {
+    log_command(ctx, msg, || async {
         let db_user = match db::User::by_discord_id(ctx, msg.author.id).await {
             Ok(u) => u,
             Err(diesel::NotFound) => {
@@ -305,40 +413,84 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
                         })
                     })
                     .await?;
-                return Err(NOT_REGISTERED.into());
+                return Err(LogError::new_silent(NOT_REGISTERED));
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e).log_unexpected_reply(msg),
         };
-        Ok(db_user)
-    })
-    .await
-    {
-        Some(t) => t,
-        None => return Ok(()),
-    };
 
-    let mut emb = CreateEmbed::default();
-    emb.description(format!("User information"));
-    emb.field("Guild Wars 2 account name", &user.gw2_id, false);
+        let mut emb = CreateEmbed::default();
+        emb.description(format!("User information"));
+        emb.field("Guild Wars 2 account name", &db_user.gw2_id, false);
 
-    let mut conv = match LogResult::value(ctx, msg, || async {
-        Ok(Conversation::init(ctx, &msg.author, emb).await?)
-    })
-    .await
-    {
-        Some(c) => c,
-        None => return Ok(()),
-    };
-
-    // if not already in dms give a hint
-    if !msg.is_private() {
-        msg.reply(ctx, format!("Check DM's {}", utils::ENVELOP_EMOJI))
+        let mut conv = Conversation::init(ctx, &msg.author, emb)
             .await
-            .ok();
-    }
+            .log_reply(msg)?;
 
-    LogResult::command_separate_reply(ctx, &msg, &conv.msg.clone(), || async move {
-        _list_signup(ctx, &mut conv, &user).await
+        // if not already in dms give a hint
+        if !msg.is_private() {
+            msg.reply(ctx, format!("Check DM's {}", utils::ENVELOP_EMOJI))
+                .await
+                .ok();
+        }
+
+        let signups = db_user.active_signups(ctx).await?;
+        let mut roles: HashMap<i32, Vec<db::Role>> = HashMap::with_capacity(signups.len());
+        for (s, _) in &signups {
+            let signup_roles = s
+                .clone()
+                .get_roles(ctx)
+                .await
+                .log_unexpected_reply(&conv.msg)?;
+            roles.insert(s.id, signup_roles);
+        }
+
+        conv.msg
+            .edit(ctx, |m| {
+                m.add_embed(|e| {
+                    e.description("All current active signups");
+                    if signups.is_empty() {
+                        e.field(
+                            "No active sign ups found",
+                            "You should join some trainings ;)",
+                            false,
+                        );
+                    }
+                    for (s, t) in signups {
+                        e.field(
+                            &t.title,
+                            format!(
+                                "`Date (YYYY-MM-DD)`\n{}\n\
+                                `Time (Utc)       `\n{}\n\
+                                `Training Id      `\n{}\n\
+                                `Roles            `\n{}\n",
+                                t.date.date(),
+                                t.date.time(),
+                                t.id,
+                                match roles.get(&s.id) {
+                                    Some(r) => r
+                                        .iter()
+                                        .map(|r| r.repr.clone())
+                                        .collect::<Vec<_>>()
+                                        .join(", "),
+                                    None => String::from("Failed to load roles =("),
+                                }
+                            ),
+                            true,
+                        );
+                    }
+                    e.footer(|f| {
+                        f.text(format!(
+                            "To edit or remove your sign up reply with:\n\
+                            {0}edit <training id>\n\
+                            {0}leave <training id>",
+                            data::GLOB_COMMAND_PREFIX
+                        ))
+                    });
+                    e
+                })
+            })
+            .await?;
+        Ok(())
     })
     .await
 }

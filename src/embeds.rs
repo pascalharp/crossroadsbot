@@ -68,7 +68,7 @@ pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
 // guild channels since pinging wont work in DM's
 pub fn training_embed_add_tier(
     e: &mut CreateEmbed,
-    t: &Option<(Arc<db::Tier>, Arc<Vec<db::TierMapping>>)>,
+    t: &Option<(db::Tier, Vec<db::TierMapping>)>,
     inline: bool,
 ) {
     match t {

@@ -83,7 +83,8 @@ impl SignupBoard {
         };
 
         let mut embed = embeds::training_base_embed(&training);
-        embeds::training_embed_add_tier(&mut embed, &tier_roles, true);
+        // TODO fix
+        //embeds::training_embed_add_tier(&mut embed, &tier_roles, true);
         embeds::training_embed_add_board_footer(&mut embed, &training.state);
 
         // post message
@@ -143,7 +144,8 @@ impl SignupBoard {
         };
 
         let mut embed = embeds::training_base_embed(&training);
-        embeds::training_embed_add_tier(&mut embed, &tier_roles, true);
+        // TODO fix
+        //embeds::training_embed_add_tier(&mut embed, &tier_roles, true);
         embeds::training_embed_add_board_footer(&mut embed, &training.state);
 
         let msg = match chan

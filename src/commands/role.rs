@@ -35,7 +35,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         let role_repr = args.single_quoted::<String>().log_reply(msg)?;
 
         if role_repr.contains(" ") {
-            return LogError::new("Identifier must not contain spaces").into();
+            return LogError::new("Identifier must not contain spaces", msg).into();
         }
 
         // load all active roles from db
@@ -44,6 +44,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         if roles.iter().any(|r| r.repr.eq(&role_repr)) {
             return LogError::new(
                 "A role with the same repr already exists. The repr has to be unique",
+                msg,
             )
             .into();
         }
@@ -72,7 +73,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             .collect();
 
         if available.is_empty() {
-            return LogError::new("No more emojis for roles available").into();
+            return LogError::new("No more emojis for roles available", msg).into();
         }
 
         let mut emb = CreateEmbed::default();
@@ -140,13 +141,13 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                     } => *id,
                     ReactionType::Unicode(s) => {
                         if *s == String::from(CROSS_EMOJI) {
-                            return LogError::new("Aborted").into();
+                            return Err(ConversationError::Canceled).log_reply(&msg);
                         }
                         // Should never occur since filtered already filtered
-                        return LogError::new("Unexpected emoji").into();
+                        return LogError::new("Unexpected emoji", &msg).into();
                     }
                     // Should never occur since filtered already filtered
-                    _ => return LogError::new("Unexpected emoji").into(),
+                    _ => return LogError::new("Unexpected emoji", &msg).into(),
                 }
             }
         };
@@ -281,9 +282,7 @@ pub async fn list(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResul
         let roles = db::Role::all_active(ctx).await.log_unexpected_reply(msg)?;
 
         if roles.is_empty() {
-            return LogError::new("No active roles set up")
-                .with_reply(msg)
-                .into();
+            return LogError::new("No active roles set up", msg).into();
         }
 
         let mut embed = CreateEmbed::default();

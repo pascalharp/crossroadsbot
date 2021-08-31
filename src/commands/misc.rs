@@ -8,6 +8,7 @@ use serenity::model::prelude::*;
 use serenity::prelude::*;
 
 use crate::components::*;
+use crate::conversation::ConversationError;
 use crate::db;
 use crate::log::*;
 use crate::utils::{self, ALARM_CLOCK_EMOJI, DEFAULT_TIMEOUT};
@@ -81,7 +82,9 @@ pub async fn button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult 
                     m
                 })
                 .await?;
-                LogError::new("Timed out").with_reply(&msg).into()
+                LogError::from(ConversationError::TimedOut)
+                    .with_reply(&msg)
+                    .into()
             }
             Some(i) => {
                 i.create_interaction_response(ctx, |r| {
@@ -181,7 +184,7 @@ pub async fn log_test(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
                 let _num = args.single::<i32>().log_reply(msg)?;
                 Ok(())
             }
-            _ => LogError::new("No command supplied").with_reply(msg).into(),
+            _ => LogError::new("No command supplied", msg).into(),
         }
     })
     .await

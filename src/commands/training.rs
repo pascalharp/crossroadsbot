@@ -1,5 +1,7 @@
 use super::SQUADMAKER_ROLE_CHECK;
 use crate::{
+    components,
+    conversation::ConversationError,
     data, db, embeds,
     log::*,
     utils::{self, *},
@@ -32,15 +34,19 @@ pub struct Training;
 #[min_args(3)]
 #[only_in(guild)]
 pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
+    log_command(ctx, msg, || async {
         let discord_user = &msg.author;
-        let training_name = args.single_quoted::<String>()?;
+        let training_name = args.single_quoted::<String>().log_reply(msg)?;
 
         let training_time = match args.single_quoted::<chrono::NaiveDateTime>() {
             Ok(r) => r,
             Err(e) => match e {
                 ArgError::Parse(_) => {
-                    return Err("Failed to parse date. Required Format: %Y-%m-%dT%H:%M:%S%".into())
+                    return LogError::new(
+                        "Failed to parse date. Required Format: %Y-%m-%dT%H:%M:%S%",
+                        msg,
+                    )
+                    .into();
                 }
                 _ => {
                     return Err(e.into());
@@ -53,18 +59,11 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             if training_tier.to_lowercase().eq("none") {
                 None
             } else {
-                match db::Tier::by_name(ctx, training_tier).await {
-                    Err(diesel::NotFound) => return Err(
-                        "Tier not found. You can use \"none\" to open the training for everyone"
-                            .into(),
-                    ),
-                    Err(e) => return Err(e.into()),
-                    Ok(t) => Some(t),
-                }
+                Some(db::Tier::by_name(ctx, training_tier).await.log_reply(msg)?)
             }
         };
 
-        let roles = db::Role::all_active(ctx).await?;
+        let roles = db::Role::all_active(ctx).await.log_reply(msg)?;
         let roles_lookup: HashMap<String, &db::Role> =
             roles.iter().map(|r| (String::from(&r.repr), r)).collect();
         let mut selected: HashSet<String> = HashSet::with_capacity(roles.len());
@@ -95,7 +94,9 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             })
             .await?;
 
-        let selected = utils::select_roles(ctx, &mut m, discord_user, &roles, selected).await?;
+        let selected = utils::select_roles(ctx, &mut m, discord_user, &roles, selected)
+            .await
+            .log_reply(msg)?;
 
         // Do all the database stuff
         let training = {
@@ -105,7 +106,9 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             };
 
             let training =
-                db::Training::insert(ctx, training_name, training_time, training_tier_id).await?;
+                db::Training::insert(ctx, training_name, training_time, training_tier_id)
+                    .await
+                    .log_reply(msg)?;
 
             for r in &selected {
                 training
@@ -117,7 +120,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         };
 
         // Update with new roles from db
-        let roles = training.active_roles(ctx).await?;
+        let roles = training.active_roles(ctx).await.log_reply(msg)?;
 
         let mut emb = embeds::training_base_embed(&training);
         embeds::embed_add_roles(&mut emb, &roles, false);
@@ -133,10 +136,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         })
         .await?;
 
-        Ok(LogAction::LogOnly(format!(
-            "New training added with id {}",
-            training.id
-        )))
+        Ok(())
     })
     .await
 }
@@ -147,31 +147,28 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 #[example = "121"]
 #[usage = "training_id"]
 pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    LogResult::command(ctx, msg, || async {
-        let training_id = args.single::<i32>()?;
+    log_command(ctx, msg, || async {
+        let training_id = args.single::<i32>().log_reply(msg)?;
 
-        let training = match db::Training::by_id(ctx, training_id).await {
-            Ok(t) => t,
-            Err(diesel::NotFound) => return Err("Unable to find training with this id".into()),
-            Err(e) => return Err(e.into()),
-        };
+        let training = db::Training::by_id(ctx, training_id).await.log_reply(msg)?;
 
         match training.state {
             db::TrainingState::Created | db::TrainingState::Finished => {
-                return Err("Information for this training is not public".into())
+                return LogError::new("Information for this training is not public", msg).into();
             }
             _ => (),
         }
 
-        let roles = training.active_roles(ctx).await?;
+        let roles = training.active_roles(ctx).await.log_unexpected_reply(msg)?;
 
         let tiers = {
             let tier = training.get_tier(ctx).await;
             match tier {
                 None => None,
                 Some(t) => {
-                    let t = Arc::new(t?);
-                    Some((t.clone(), Arc::new(t.get_discord_roles(ctx).await?)))
+                    let t = t.log_unexpected_reply(msg)?;
+                    let r = t.get_discord_roles(ctx).await.log_unexpected_reply(msg)?;
+                    Some((t, r))
                 }
             }
         };
@@ -187,67 +184,61 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             })
             .await?;
 
-        Ok(LogAction::None)
+        Ok(())
     })
     .await
 }
 
 #[command]
 #[checks(squadmaker_role)]
-#[description = "sets the training with the specified id to the specified state"]
+#[description = "set one or multiple training(s) with the specified id to the specified state"]
 #[example = "19832 started"]
-#[usage = "training_id ( created | open | closed | started | finished )"]
-#[num_args(2)]
+#[usage = "( created | open | closed | started | finished ) training_id [ training_id ...]"]
+#[min_args(2)]
 pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let training_id = match args.single::<i32>() {
-        Ok(i) => i,
-        Err(_) => {
-            msg.reply(ctx, "Unable to parse training id").await?;
-            return Ok(());
-        }
-    };
+    log_command(ctx, msg, || async {
+        let state = args.single::<db::TrainingState>().log_reply(msg)?;
 
-    let state = match args.single::<db::TrainingState>() {
-        Ok(s) => s,
-        Err(_) => {
-            msg.reply(ctx, "Not a training state").await?;
-            return Ok(());
-        }
-    };
+        let training_id: Result<Vec<i32>, _> = args.iter::<i32>().collect();
+        let training_id = training_id.log_reply(msg)?;
 
-    let training = match db::Training::by_id(ctx, training_id).await {
-        Ok(t) => t,
-        Err(_) => {
-            msg.reply(ctx, "Failed to load training, double check id")
-                .await?;
-            return Ok(());
-        }
-    };
+        // load trainings
+        let futs = training_id
+            .into_iter()
+            .map(|id| db::Training::by_id(ctx, id))
+            .collect::<Vec<_>>();
+        let trainings = future::try_join_all(futs).await.log_reply(msg)?;
 
-    training.set_state(ctx, state).await?;
+        // set states
+        let futs = trainings
+            .into_iter()
+            .map(|t| t.set_state(ctx, state.clone()))
+            .collect::<Vec<_>>();
+        future::try_join_all(futs).await.log_unexpected_reply(msg)?;
 
-    // inform the SignupBoard
-    let board_lock = {
-        let read_lock = ctx.data.read().await;
-        read_lock.get::<data::SignupBoardData>().unwrap().clone()
-    };
-    let res = {
-        let mut board = board_lock.write().await;
-        board.update(ctx, training_id).await
-    };
+        // inform the SignupBoard TODO
+        //let board_lock = {
+        //    let read_lock = ctx.data.read().await;
+        //    read_lock.get::<data::SignupBoardData>().unwrap().clone()
+        //};
+        //let res = {
+        //    let mut board = board_lock.write().await;
+        //    board.update(ctx, training_id).await
+        //};
 
-    if let Err(_) = res {
-        msg.reply(ctx, "State changed but error updating signup board")
-            .await?;
-    }
-    msg.react(ctx, CHECK_EMOJI).await?;
+        //if let Err(_) = res {
+        //    msg.reply(ctx, "State changed but error updating signup board")
+        //        .await?;
+        //}
+        msg.react(ctx, CHECK_EMOJI).await?;
 
-    Ok(())
+        Ok(())
+    })
+    .await
 }
 
-async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -> CommandResult {
-    let author_id = msg.author.id;
-    let trainings = { db::Training::by_state(ctx, state.clone()).await? };
+async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -> _LogResult<()> {
+    let trainings = db::Training::by_state(ctx, state.clone()).await?;
 
     // An embed can only have 25 fields. So partition the training to be sent
     // over multiple messages if needed
@@ -259,7 +250,7 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -
     }
 
     if partitioned.len() > 1 {
-        let msg = msg.channel_id.send_message(ctx, |m| {
+        let mut msg = msg.channel_id.send_message(ctx, |m| {
             m.embed( |f| {
                 f.description("**WARNING**");
                 f.color( (230, 160, 20) );
@@ -273,21 +264,10 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -
                             CHECK_EMOJI,
                             CROSS_EMOJI))
                 })
-            })
+            });
+            m.components( |c| c.add_action_row(components::confirm_abort_action_row()))
         }).await?;
-
-        utils::send_yes_or_no(ctx, &msg).await?;
-        match utils::await_yes_or_no(ctx, &msg, Some(author_id)).await {
-            None => {
-                msg.reply(ctx, "Timed out").await?;
-                return Ok(());
-            }
-            Some(utils::YesOrNo::Yes) => (),
-            Some(utils::YesOrNo::No) => {
-                msg.reply(ctx, "Aborted").await?;
-                return Ok(());
-            }
-        }
+        utils::await_confirm_abort_interaction(ctx, &mut msg).await?;
     }
 
     let state = &state;
@@ -320,20 +300,15 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -
     Ok(())
 }
 
-async fn list_amounts(ctx: &Context, msg: &Message) -> CommandResult {
-    let (created, open, closed, started, finished) = match try_join!(
+async fn list_amounts(ctx: &Context, msg: &Message) -> _LogResult<()> {
+    let (created, open, closed, started, finished) = try_join!(
         db::Training::amount_by_state(ctx, db::TrainingState::Created),
         db::Training::amount_by_state(ctx, db::TrainingState::Open),
         db::Training::amount_by_state(ctx, db::TrainingState::Closed),
         db::Training::amount_by_state(ctx, db::TrainingState::Started),
         db::Training::amount_by_state(ctx, db::TrainingState::Finished),
-    ) {
-        Ok(ok) => ok,
-        Err(e) => {
-            msg.reply(ctx, "Unexpected error loading trainings").await?;
-            return Err(e.into());
-        }
-    };
+    )
+    .log_reply(msg)?;
 
     let total = created + open + closed + started + finished;
     let active = open + closed + started;
@@ -367,23 +342,19 @@ async fn list_amounts(ctx: &Context, msg: &Message) -> CommandResult {
 #[checks(squadmaker_role)]
 #[max_args(1)]
 async fn list(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let state: Option<db::TrainingState> = match args.single_quoted::<db::TrainingState>() {
-        Ok(s) => Some(s),
-        Err(ArgError::Eos) => None,
-        Err(_) => {
-            msg.reply(
-                ctx,
-                "Failed to parse state. Make sure its a valid training state",
-            )
-            .await?;
-            return Ok(());
-        }
-    };
+    log_command(ctx, msg, || async {
+        let state: Option<db::TrainingState> = match args.single_quoted::<db::TrainingState>() {
+            Ok(s) => Some(s),
+            Err(ArgError::Eos) => None,
+            Err(e) => return Err(e.into()),
+        };
 
-    match state {
-        Some(s) => return list_by_state(ctx, msg, s).await,
-        None => return list_amounts(ctx, msg).await,
-    }
+        match state {
+            Some(s) => return list_by_state(ctx, msg, s).await.into(),
+            None => return list_amounts(ctx, msg).await.into(),
+        }
+    })
+    .await
 }
 
 #[command]
@@ -393,71 +364,58 @@ async fn list(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
 #[usage = "training_id"]
 #[num_args(1)]
 pub async fn info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let training_id = match args.single_quoted::<i32>() {
-        Ok(id) => id,
-        Err(_) => {
-            msg.reply(ctx, "Failed to parse training id").await?;
-            return Ok(());
+    log_command(ctx, msg, || async {
+        let training_id = args.single_quoted::<i32>().log_reply(msg)?;
+
+        let training = db::Training::by_id(ctx, training_id).await.log_reply(msg)?;
+
+        let signups = training
+            .get_signups(ctx)
+            .await
+            .log_unexpected_reply(msg)?
+            .into_iter()
+            .map(|s| Arc::new(s))
+            .collect::<Vec<_>>();
+
+        let mut roles = training
+            .all_roles(ctx)
+            .await?
+            .into_iter()
+            .map(|r| (r, 0))
+            .collect::<HashMap<db::Role, u32>>();
+
+        let signed_up_roles = future::try_join_all(signups.iter().map(|s| s.get_roles(ctx)))
+            .await?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+
+        for sr in signed_up_roles {
+            roles.entry(sr).and_modify(|e| *e += 1);
         }
-    };
 
-    let training = match db::Training::by_id(ctx, training_id).await {
-        // TODO without Arc
-        Ok(t) => Arc::new(t),
-        Err(diesel::NotFound) => {
-            msg.reply(ctx, "Training not found").await?;
-            return Ok(());
-        }
-        Err(_) => {
-            msg.reply(ctx, "Unexpected error").await?;
-            return Ok(());
-        }
-    };
+        let embed = embeds::training_base_embed(&training);
 
-    let signups = training
-        .get_signups(ctx)
-        .await?
-        .into_iter()
-        .map(|s| Arc::new(s))
-        .collect::<Vec<_>>();
-
-    let mut roles = training
-        .all_roles(ctx)
-        .await?
-        .into_iter()
-        .map(|r| (r, 0))
-        .collect::<HashMap<db::Role, u32>>();
-
-    let signed_up_roles = future::try_join_all(signups.iter().map(|s| s.get_roles(ctx)))
-        .await?
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
-
-    for sr in signed_up_roles {
-        roles.entry(sr).and_modify(|e| *e += 1);
-    }
-
-    let embed = embeds::training_base_embed(training.as_ref());
-
-    msg.channel_id
-        .send_message(ctx, |m| {
-            m.embed(|e| {
-                e.0 = embed.0;
-                e.field("Total sign ups", format!("**{}**", signups.len()), false);
-                e.fields(roles.iter().map(|(role, count)| {
-                    (
-                        format!("Role: {}", role.repr),
-                        format!("Count: {}", count),
-                        true,
-                    )
-                }));
-                e
+        msg.channel_id
+            .send_message(ctx, |m| {
+                m.embed(|e| {
+                    e.0 = embed.0;
+                    e.field("Total sign ups", format!("**{}**", signups.len()), false);
+                    e.fields(roles.iter().map(|(role, count)| {
+                        (
+                            format!("Role: {}", role.repr),
+                            format!("Count: {}", count),
+                            true,
+                        )
+                    }));
+                    e
+                })
             })
-        })
-        .await?;
+            .await?;
 
-    Ok(())
+        Ok(())
+    })
+    .await
 }
 
 struct SignupCsv {
@@ -495,158 +453,125 @@ impl Serialize for SignupCsv {
 #[usage = "training_id"]
 #[min_args(1)]
 pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let guild_id = match ctx.data.read().await.get::<data::ConfigValuesData>() {
-        Some(conf) => conf.main_guild_id,
-        None => {
-            msg.reply(
-                ctx,
-                "Configuration not found. Main guild could not be loaded",
-            )
-            .await?;
-            return Ok(());
-        }
-    };
-
-    let guild = match PartialGuild::get(ctx, guild_id).await {
-        Ok(g) => g,
-        Err(e) => {
-            msg.reply(ctx, "Error loading guild information").await?;
-            return Err(e.into());
-        }
-    };
-
-    let mut trainings: Vec<Arc<db::Training>> = Vec::with_capacity(args.len());
-    let mut log: Vec<String> = vec![];
-    let mut signup_csv: Vec<SignupCsv> = vec![];
-
-    for id in args.iter::<i32>() {
-        match id {
-            Ok(id) => match db::Training::by_id(ctx, id).await {
-                Ok(t) => trainings.push(Arc::new(t)),
-                Err(diesel::NotFound) => {
-                    msg.reply(ctx, format!("Training with id {} not found", id))
-                        .await?;
-                    return Ok(());
-                }
-                Err(e) => {
-                    msg.reply(ctx, "Unexpected error loading training").await?;
-                    return Err(e.into());
-                }
-            },
-            Err(_) => {
-                msg.reply(ctx, "Failed to parse training id").await?;
-                return Ok(());
-            }
-        }
-    }
-
-    for training in trainings {
-        let signups = match training.get_signups(ctx).await {
-            Ok(s) => s,
-            Err(e) => {
-                msg.reply(ctx, "Unexpected error loading signups").await?;
-                return Err(e.into());
-            }
+    log_command(ctx, msg, || async {
+        let guild_id = match ctx.data.read().await.get::<data::ConfigValuesData>() {
+            Some(conf) => conf.main_guild_id,
+            None => return LogError::new("Guild configuration could not be loaded", msg).into(),
         };
 
-        for s in signups {
-            let user = match s.get_user(ctx).await {
-                Ok(u) => u,
-                Err(_) => {
+        let guild = PartialGuild::get(ctx, guild_id)
+            .await
+            .log_custom_reply(msg, "Guild information could not be loaded")?;
+
+        let mut log: Vec<String> = vec![];
+        let mut signup_csv: Vec<SignupCsv> = vec![];
+
+        let training_ids = args
+            .iter::<i32>()
+            .collect::<Result<Vec<i32>, _>>()
+            .log_reply(msg)?;
+
+        let training_futs: Vec<_> = training_ids
+            .into_iter()
+            .map(|id| db::Training::by_id(ctx, id))
+            .collect();
+
+        let trainings = future::try_join_all(training_futs).await.log_reply(msg)?;
+
+        for training in trainings {
+            let training = Arc::new(training);
+            let signups = match training.get_signups(ctx).await {
+                Ok(s) => s,
+                Err(e) => {
+                    msg.reply(ctx, "Unexpected error loading signups").await?;
+                    return Err(e.into());
+                }
+            };
+
+            for s in signups {
+                let user = match s.get_user(ctx).await {
+                    Ok(u) => u,
+                    Err(_) => {
+                        log.push(String::from(format!(
+                            "Error loading user entry for signup with id {}. Skipped",
+                            s.id
+                        )));
+                        continue;
+                    }
+                };
+
+                let roles = match s.get_roles(ctx).await {
+                    Ok(r) => r,
+                    Err(_) => {
+                        log.push(String::from(format!(
+                            "Error loading roles for signup with id {}. Skipped",
+                            s.id
+                        )));
+                        continue;
+                    }
+                };
+
+                if roles.is_empty() {
                     log.push(String::from(format!(
-                        "Error loading user entry for signup with id {}. Skipped",
+                        "No roles selected for signup with id {}. Skipped",
                         s.id
                     )));
                     continue;
                 }
-            };
 
-            let s = Arc::new(s);
-            let roles = match s.clone().get_roles(ctx).await {
-                Ok(v) => v.into_iter().collect::<Vec<db::Role>>(),
-                Err(_) => {
-                    log.push(String::from(format!(
-                        "Error loading roles for signup with id {}. Skipped",
-                        s.id
-                    )));
-                    continue;
-                }
-            };
+                let member = match guild.member(ctx, user.discord_id()).await {
+                    Ok(du) => du,
+                    Err(_) => {
+                        log.push(String::from(format!(
+                            "Did not find user with id {} in discord guild. Skipped",
+                            user.discord_id()
+                        )));
+                        continue;
+                    }
+                };
 
-            if roles.is_empty() {
-                log.push(String::from(format!(
-                    "No roles selected for signup with id {}. Skipped",
-                    s.id
-                )));
-                continue;
+                signup_csv.push(SignupCsv {
+                    user,
+                    member,
+                    training: training.clone(),
+                    roles,
+                });
             }
-
-            let member = match guild.member(ctx, user.discord_id()).await {
-                Ok(du) => du,
-                Err(_) => {
-                    log.push(String::from(format!(
-                        "Did not find user with id {} in discord guild. Skipped",
-                        user.discord_id()
-                    )));
-                    continue;
-                }
-            };
-
-            let training = training.clone();
-
-            signup_csv.push(SignupCsv {
-                user,
-                member,
-                training,
-                roles,
-            });
         }
-    }
 
-    let mut wtr = csv::Writer::from_writer(vec![]);
+        let mut wtr = csv::Writer::from_writer(vec![]);
 
-    for s in signup_csv {
-        if let Err(e) = wtr.serialize(s) {
-            msg.reply(ctx, "Error converting to csv").await?;
-            return Err(e.into());
+        for s in signup_csv {
+            if let Err(e) = wtr.serialize(s) {
+                msg.reply(ctx, "Error converting to csv").await?;
+                return Err(e.into());
+            }
         }
-    }
 
-    let wtr_inner = match wtr.into_inner() {
-        Ok(w) => w,
-        Err(e) => {
-            msg.reply(ctx, "Unexpected error").await?;
-            return Err(e.into());
-        }
-    };
+        let wtr_inner = wtr.into_inner().log_reply(msg)?;
+        let bytes_csv = String::from_utf8(wtr_inner).log_reply(msg)?.into_bytes();
 
-    let bytes_csv = match String::from_utf8(wtr_inner) {
-        Ok(s) => s.into_bytes(),
-        Err(e) => {
-            msg.reply(ctx, "Unexpected error").await?;
-            return Err(e.into());
-        }
-    };
+        let file = AttachmentType::Bytes {
+            data: Cow::from(bytes_csv),
+            filename: String::from("signups.csv"),
+        };
 
-    let file = AttachmentType::Bytes {
-        data: Cow::from(bytes_csv),
-        filename: String::from("signups.csv"),
-    };
+        msg.channel_id
+            .send_message(ctx, |m| {
+                m.content(format!(
+                    "Log:\n ```\n{}\n```",
+                    if log.is_empty() {
+                        "No errors".to_string()
+                    } else {
+                        log.join("\n")
+                    }
+                ));
+                m.add_file(file);
+                m
+            })
+            .await?;
 
-    msg.channel_id
-        .send_message(ctx, |m| {
-            m.content(format!(
-                "Log:\n ```\n{}\n```",
-                if log.is_empty() {
-                    "No errors".to_string()
-                } else {
-                    log.join("\n")
-                }
-            ));
-            m.add_file(file);
-            m
-        })
-        .await?;
-
-    Ok(())
+        Ok(())
+    })
+    .await
 }

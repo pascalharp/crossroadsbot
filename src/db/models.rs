@@ -67,7 +67,7 @@ impl fmt::Display for TrainingState {
 }
 
 impl str::FromStr for TrainingState {
-    type Err = ();
+    type Err = String;
 
     fn from_str(input: &str) -> Result<TrainingState, Self::Err> {
         match input {
@@ -76,7 +76,7 @@ impl str::FromStr for TrainingState {
             "closed" => Ok(TrainingState::Closed),
             "started" => Ok(TrainingState::Started),
             "finished" => Ok(TrainingState::Finished),
-            _ => Err(()),
+            e => Err(format!("unknown training state: {}", e)),
         }
     }
 }

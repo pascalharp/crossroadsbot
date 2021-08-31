@@ -77,7 +77,7 @@ pub fn role_action_row(roles: &Vec<db::Role>) -> Vec<CreateActionRow> {
     let chunk_count = role_chunks.len();
 
     // If there are too much just return none. So it will be realized XD
-    if chunk_count > 5 {
+    if chunk_count > 4 {
         return Vec::with_capacity(0);
     }
 

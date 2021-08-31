@@ -82,8 +82,30 @@ impl From<LogError> for Box<dyn std::error::Error + Send + Sync> {
 }
 
 impl LogError {
-    pub fn new(s: &str) -> Self {
+    pub fn new<S>(s: S, reply: &serenity::model::channel::Message) -> Self
+    where
+        S: ToString,
+    {
+        LogError::LogOnly(s.to_string().into()).with_reply(reply)
+    }
+
+    pub fn new_silent<S>(s: S) -> Self
+    where
+        S: ToString,
+    {
         LogError::LogOnly(s.to_string().into())
+    }
+
+    pub fn new_custom<S>(
+        log_text: S,
+        reply_text: S,
+        reply: &serenity::model::channel::Message,
+    ) -> Self
+    where
+        S: ToString,
+    {
+        LogError::LogOnly(log_text.to_string().into())
+            .with_custom_reply(reply, reply_text.to_string())
     }
 
     pub fn silent(self) -> Self {
