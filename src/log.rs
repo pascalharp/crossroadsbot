@@ -258,7 +258,7 @@ async fn log_to_channel<'a, T>(
                 }
                 match result {
                     Ok(_) => {
-                        e.field(format!("{} OK", utils::CHECK_EMOJI), "\n\u{200b}", false);
+                        e.field(format!("{} OK", utils::CHECK_EMOJI), "\u{200b}", false);
                     }
                     Err(err) => {
                         e.field(format!("{} Error", utils::CROSS_EMOJI), err, false);
@@ -336,4 +336,3 @@ where
         Err(e) => Err(e.into()),
     }
 }
-

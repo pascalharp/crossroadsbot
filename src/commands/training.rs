@@ -1,7 +1,7 @@
 use super::SQUADMAKER_ROLE_CHECK;
 use crate::{
-    components,
-    data, db, embeds,
+    components, data, db,
+    embeds::*,
     log::*,
     utils::{self, *},
 };
@@ -80,6 +80,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             .send_message(ctx, |m| {
                 m.allowed_mentions(|a| a.empty_parse());
                 m.add_embed(|e| {
+                    e.xstyle();
                     e.description("New Training");
                     e.field("Name", &training_name, true);
                     e.field("Date", &training_time, true);
@@ -121,8 +122,8 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         // Update with new roles from db
         let roles = training.active_roles(ctx).await.log_reply(msg)?;
 
-        let mut emb = embeds::training_base_embed(&training);
-        embeds::embed_add_roles(&mut emb, &roles, false);
+        let mut emb = training_base_embed(&training);
+        embed_add_roles(&mut emb, &roles, false);
 
         m.edit(ctx, |m| {
             m.embed(|e| {
@@ -172,9 +173,9 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             }
         };
 
-        let mut embed = embeds::training_base_embed(&training);
-        embeds::training_embed_add_tier(&mut embed, &tiers, true);
-        embeds::embed_add_roles(&mut embed, &roles, false);
+        let mut embed = training_base_embed(&training);
+        training_embed_add_tier(&mut embed, &tiers, true);
+        embed_add_roles(&mut embed, &roles, false);
 
         msg.channel_id
             .send_message(ctx, |m| {
@@ -251,6 +252,7 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -
     if partitioned.len() > 1 {
         let mut msg = msg.channel_id.send_message(ctx, |m| {
             m.embed( |f| {
+                f.xstyle();
                 f.description("**WARNING**");
                 f.color( (230, 160, 20) );
                 f.field(
@@ -274,6 +276,7 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -
         msg.channel_id
             .send_message(ctx, |m| {
                 m.embed(move |f| {
+                    f.xstyle();
                     f.title(format!(
                         "{} Trainings",
                         match state {
@@ -314,6 +317,7 @@ async fn list_amounts(ctx: &Context, msg: &Message) -> LogResult<()> {
 
     msg.channel_id.send_message(ctx, |m| {
         m.embed( |e| {
+            e.xstyle();
             e.description("Amount of trainings");
             e.field("Total and listed per state",
                 format!("`{}`\n`{}`\n\n`{}`\n`{}`\n`{}`\n`{}`\n`{}`\n",
@@ -393,7 +397,7 @@ pub async fn info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             roles.entry(sr).and_modify(|e| *e += 1);
         }
 
-        let embed = embeds::training_base_embed(&training);
+        let embed = training_base_embed(&training);
 
         msg.channel_id
             .send_message(ctx, |m| {

@@ -10,6 +10,7 @@ use serenity::prelude::*;
 use crate::components::*;
 use crate::conversation::ConversationError;
 use crate::db;
+use crate::embeds::*;
 use crate::log::*;
 use crate::utils::{self, ALARM_CLOCK_EMOJI, DEFAULT_TIMEOUT};
 
@@ -149,16 +150,19 @@ pub async fn multi_embed(ctx: &Context, msg: &Message, _args: Args) -> CommandRe
             .send_message(ctx, |m| {
                 m.content("Sending message with multiple embeds");
                 m.add_embed(|e| {
+                    e.xstyle();
                     e.description("Embed numer 1");
                     e.field("Embed", "one", false);
                     e
                 });
                 m.add_embed(|e| {
+                    e.xstyle();
                     e.description("Embed numer 2");
                     e.field("Embed", "two", false);
                     e
                 });
                 m.add_embed(|e| {
+                    e.xstyle();
                     e.description("Embed numer 3");
                     e.field("Embed", "three", false);
                     e

@@ -1,4 +1,4 @@
-use crate::{conversation::*, data, db, embeds, log::*, utils};
+use crate::{conversation::*, data, db, embeds::*, log::*, utils};
 use regex::Regex;
 use serenity::builder::CreateEmbed;
 use serenity::framework::standard::{
@@ -49,7 +49,7 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         let db_user = match db::User::by_discord_id(ctx, msg.author.id).await {
             Ok(u) => u,
             Err(diesel::NotFound) => {
-                let embed = embeds::not_registered_embed();
+                let embed = not_registered_embed();
                 msg.channel_id
                     .send_message(ctx, |m| {
                         m.reference_message(msg);
@@ -73,7 +73,7 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             Err(e) => return Err(e).log_unexpected_reply(msg),
         };
 
-        let emb = embeds::training_base_embed(&training);
+        let emb = training_base_embed(&training);
 
         let mut conv = Conversation::init(ctx, &msg.author, emb)
             .await
@@ -158,6 +158,7 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         conv.msg
             .edit(ctx, |m| {
                 m.add_embed(|e| {
+                    e.xstyle();
                     e.color((0, 255, 0));
                     e.description("Successfully signed up");
                     e.field(
@@ -197,7 +198,7 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
         let db_user = match db::User::by_discord_id(ctx, msg.author.id).await {
             Ok(u) => u,
             Err(diesel::NotFound) => {
-                let emb = embeds::not_registered_embed();
+                let emb = not_registered_embed();
                 msg.channel_id
                     .send_message(ctx, |m| {
                         m.reference_message(msg);
@@ -230,19 +231,7 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
                 msg.channel_id
                     .send_message(ctx, |m| {
                         m.reference_message(msg);
-                        m.embed(|e| {
-                            e.description(format!("{} No signup found", utils::CROSS_EMOJI));
-                            e.field(
-                                "You are not yet signed up for training:",
-                                &training.title,
-                                false,
-                            );
-                            e.field(
-                                "If you want to join this training use:",
-                                format!("`{}join {}`", data::GLOB_COMMAND_PREFIX, training.id),
-                                false,
-                            )
-                        })
+                        m.set_embed(not_signed_up_embed(&training))
                     })
                     .await?;
                 return Err(LogError::new_silent(NOT_SIGNED_UP));
@@ -267,6 +256,7 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
                 m.reference_message(msg);
                 m.content("");
                 m.embed(|e| {
+                    e.xstyle();
                     e.description(format!("{} Signup removed", utils::CHECK_EMOJI));
                     e.field("Signup removed for training:", &training.title, false)
                 })
@@ -303,19 +293,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                     msg.channel_id
                         .send_message(ctx, |m| {
                             m.reference_message(msg);
-                            m.embed(|e| {
-                                e.description(format!("{} No signup found", utils::CROSS_EMOJI));
-                                e.field(
-                                    "You are not yet signed up for training:",
-                                    &training.title,
-                                    false,
-                                );
-                                e.field(
-                                    "If you want to join this training use:",
-                                    format!("`{}join {}`", data::GLOB_COMMAND_PREFIX, training.id),
-                                    false,
-                                )
-                            })
+                            m.set_embed(not_signed_up_embed(&training))
                         })
                         .await?;
                     return Err(LogError::new_silent(NOT_SIGNED_UP));
@@ -323,7 +301,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 Err(e) => return Err(e).log_unexpected_reply(msg),
             };
 
-        let emb = embeds::training_base_embed(&training);
+        let emb = training_base_embed(&training);
 
         let mut conv = Conversation::init(ctx, &msg.author, emb)
             .await
@@ -366,6 +344,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         conv.msg
             .edit(ctx, |m| {
                 m.add_embed(|e| {
+                    e.xstyle();
                     e.color((0, 255, 0));
                     e.description("Successfully edited");
                     e.field(
@@ -403,7 +382,7 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
         let db_user = match db::User::by_discord_id(ctx, msg.author.id).await {
             Ok(u) => u,
             Err(diesel::NotFound) => {
-                let embed = embeds::not_registered_embed();
+                let embed = not_registered_embed();
                 msg.channel_id
                     .send_message(ctx, |m| {
                         m.reference_message(msg);
@@ -419,6 +398,7 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
         };
 
         let mut emb = CreateEmbed::default();
+        emb.xstyle();
         emb.description(format!("User information"));
         emb.field("Guild Wars 2 account name", &db_user.gw2_id, false);
 
@@ -447,10 +427,11 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
         conv.msg
             .edit(ctx, |m| {
                 m.add_embed(|e| {
+                    e.xstyle();
                     e.description("All current active signups");
                     if signups.is_empty() {
                         e.field(
-                            "No active sign ups found",
+                            "Zero sign ups found",
                             "You should join some trainings ;)",
                             false,
                         );

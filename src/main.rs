@@ -230,9 +230,7 @@ async fn main() {
             squadmaker_role_id,
             emoji_guild_id,
         }));
-        data.insert::<LogConfigData>(Arc::new(RwLock::new(LogConfig {
-            log: None,
-        })));
+        data.insert::<LogConfigData>(Arc::new(RwLock::new(LogConfig { log: None })));
         data.insert::<SignupBoardData>(Arc::new(RwLock::new(SignupBoard::new())));
         data.insert::<DBPoolData>(Arc::new(db::DBPool::new()));
     }

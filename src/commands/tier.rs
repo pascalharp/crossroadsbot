@@ -3,6 +3,7 @@ use crate::{
     components::*,
     conversation::ConversationError,
     db,
+    embeds::*,
     log::*,
     utils::{self, *},
 };
@@ -47,6 +48,7 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
             .send_message(ctx, |m| {
                 m.allowed_mentions(|am| am.empty_parse());
                 m.embed(|e| {
+                    e.xstyle();
                     e.description("Current Tiers for trainings");
                     e.fields(tier_roles.into_iter().map(|(t, r)| {
                         (
@@ -93,6 +95,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             .send_message(ctx, |m| {
                 m.allowed_mentions(|am| am.empty_parse());
                 m.embed(|e| {
+                    e.xstyle();
                     e.description("New Tier role");
                     e.field("Tier name", &tier_name, false);
                     e.field(
@@ -194,6 +197,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
 
         let mut msg = msg.channel_id.send_message(ctx, |m| {
             m.embed( |e| {
+                e.xstyle();
                 e.description("Removing tier");
                 e.field(
                     "Tier information",

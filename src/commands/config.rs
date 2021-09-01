@@ -9,11 +9,7 @@ use serenity::prelude::*;
 
 #[group]
 #[only_in(guilds)]
-#[commands(
-    set_log_channel,
-    set_signup_board_category,
-    signup_board_reset
-)]
+#[commands(set_log_channel, set_signup_board_category, signup_board_reset)]
 struct Config;
 
 #[command]

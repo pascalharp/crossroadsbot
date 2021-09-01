@@ -4,6 +4,7 @@ use crate::{
     conversation::ConversationError,
     data::ConfigValuesData,
     db, embeds,
+    embeds::*,
     log::*,
     utils::CHECK_EMOJI,
     utils::{CROSS_EMOJI, DEFAULT_TIMEOUT},
@@ -77,6 +78,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         }
 
         let mut emb = CreateEmbed::default();
+        emb.xstyle();
         emb.description("New Role");
         emb.field("Full role name", &role_name, true);
         emb.field("Short role identifier", &role_repr, true);
@@ -286,6 +288,7 @@ pub async fn list(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResul
         }
 
         let mut embed = CreateEmbed::default();
+        embed.xstyle();
         embeds::embed_add_roles(&mut embed, &roles, false);
 
         msg.channel_id

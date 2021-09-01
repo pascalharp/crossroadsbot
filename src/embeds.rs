@@ -2,17 +2,46 @@ use crate::{data::GLOB_COMMAND_PREFIX, db, utils::*};
 use chrono::{DateTime, Utc};
 use chrono_tz::Europe::{London, Paris};
 use serenity::{
-    builder::CreateEmbed,
+    builder::{CreateEmbed, CreateEmbedAuthor},
     model::{id::EmojiId, id::RoleId, misc::Mention},
 };
-use std::{collections::HashSet};
+use std::collections::HashSet;
+
+const EMBED_AUTHOR_ICON_URL: &str = "https://cdn.discordapp.com/avatars/512706205647372302/eb7a7f2de9a97006e8217b73ab5c7836.webp?size=128";
+const EMBED_AUTHOR_NAME: &str = "Crossroads Bot";
+const EMBED_STYLE_COLOR: (u8, u8, u8) = (99, 51, 45);
+
+pub trait CrossroadsEmbeds {
+    fn xdefault() -> Self;
+    fn xstyle(&mut self) -> &mut Self;
+}
+
+fn xstyle_author() -> CreateEmbedAuthor {
+    let mut author = CreateEmbedAuthor::default();
+    author.name(EMBED_AUTHOR_NAME);
+    author.icon_url(EMBED_AUTHOR_ICON_URL);
+    author
+}
+
+impl CrossroadsEmbeds for CreateEmbed {
+    fn xstyle(&mut self) -> &mut Self {
+        self.set_author(xstyle_author());
+        self.color(EMBED_STYLE_COLOR);
+        self
+    }
+    fn xdefault() -> Self {
+        let mut e = CreateEmbed::default();
+        e.xstyle();
+        e
+    }
+}
 
 // Embed helpers
 pub fn select_roles_embed(
     roles: &Vec<db::Role>, // all roles
     sel: &HashSet<String>, // selected roles
 ) -> CreateEmbed {
-    let mut e = CreateEmbed::default();
+    let mut e = CreateEmbed::xdefault();
     let field_str = roles
         .iter()
         .map(|r| {
@@ -36,7 +65,7 @@ pub fn select_roles_embed(
 const TRAINING_TIME_FMT: &str = "%a, %v at %H:%M %Z";
 // Does not display roles
 pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
-    let mut e = CreateEmbed::default();
+    let mut e = CreateEmbed::xdefault();
     let utc = DateTime::<Utc>::from_utc(training.date, Utc);
     e.description(format!(
         "{} {}",
@@ -134,14 +163,32 @@ pub fn training_embed_add_board_footer(e: &mut CreateEmbed, ts: &db::TrainingSta
 }
 
 pub fn not_registered_embed() -> CreateEmbed {
-    let mut e = CreateEmbed::default();
+    let mut e = CreateEmbed::xdefault();
     e.description("Not yet registerd");
+    e.color((255, 0, 0));
     e.field(
         "User not found. Use the register command first",
         format!(
             "For more information type: __{}help register__",
             GLOB_COMMAND_PREFIX
         ),
+        false,
+    );
+    e
+}
+
+pub fn not_signed_up_embed(training: &db::Training) -> CreateEmbed {
+    let mut e = CreateEmbed::xdefault();
+    e.color((255, 0, 0));
+    e.description(format!("{} No signup found", CROSS_EMOJI));
+    e.field(
+        "You are not yet signed up for training:",
+        &training.title,
+        false,
+    );
+    e.field(
+        "If you want to join this training use:",
+        format!("`{}join {}`", GLOB_COMMAND_PREFIX, training.id),
         false,
     );
     e
