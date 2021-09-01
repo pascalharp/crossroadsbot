@@ -129,7 +129,7 @@ pub async fn clear_components(
     Ok(())
 }
 
-pub async fn await_confirm_abort_interaction(ctx: &Context, msg: &mut Message) -> _LogResult<()> {
+pub async fn await_confirm_abort_interaction(ctx: &Context, msg: &mut Message) -> LogResult<()> {
     let interaction = msg
         .await_component_interaction(ctx)
         .timeout(DEFAULT_TIMEOUT)

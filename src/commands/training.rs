@@ -236,7 +236,7 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     .await
 }
 
-async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -> _LogResult<()> {
+async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -> LogResult<()> {
     let trainings = db::Training::by_state(ctx, state.clone()).await?;
 
     // An embed can only have 25 fields. So partition the training to be sent
@@ -299,7 +299,7 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -
     Ok(())
 }
 
-async fn list_amounts(ctx: &Context, msg: &Message) -> _LogResult<()> {
+async fn list_amounts(ctx: &Context, msg: &Message) -> LogResult<()> {
     let (created, open, closed, started, finished) = try_join!(
         db::Training::amount_by_state(ctx, db::TrainingState::Created),
         db::Training::amount_by_state(ctx, db::TrainingState::Open),
