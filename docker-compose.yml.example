@@ -1,3 +1,6 @@
+volumes:
+  dbdata:
+
 services:
   bot:
     build: .
@@ -5,22 +8,45 @@ services:
     network_mode: "service:db"
     environment:
       - DISCORD_TOKEN=
-      - DATABASE_URL=postgres://crossroads_user:crossroads_pwd@127.0.0.1/crossroads_db
+      - DATABASE_URL=postgres://crossroads:crossroads@127.0.0.1/crossroads
+      - APPLICATION_ID=
       - MAIN_GUILD_ID=
       - EMOJI_GUILD_ID=
       - ADMIN_ROLE_ID=
       - SQUADMAKER_ROLE_ID=
       - RUST_LOG=info
     depends_on:
-      - db
-  postgresql:
+      db:
+        condition: service_healthy
+
+  db:
     image: "postgres"
-    restart: always
     environment:
-      - POSTGRES_USER=root
-      - POSTGRES_PASSWORD=password
-      - APP_DB_USER=crossroads_user
-      - APP_DB_PASS=crossroads_pwd
-      - APP_DB_NAME=crossroads_db
+      - POSTGRES_USER=docker
+      - POSTGRES_PASSWORD=docker
+      - APP_DB_USER=crossroads
+      - APP_DB_PASS=crossroads
+      - APP_DB_NAME=crossroads
+      - ALLOW_IP_RANGE=0.0.0.0/0
     volumes:
+      - dbdata:/var/lib/postgresql
       - ./docker_db:/docker-entrypoint-initdb.d/
+    healthcheck:
+      test: "exit 0"
+    restart: on_failure
+
+  backup:
+    image: "kartoza/pg-backup:latest"
+    network_mode: "service:db"
+    enviroment:
+      - POSTGRES_USER=docker
+      - POSTGRES_PASS=docker
+      - POSTGRES_DBNAME=crossraods
+      - POSTGRES_HOST=db
+    volumes:
+      - ./dbbackups:/backups
+    restart: on_failure
+    depends_on:
+      db:
+        condition: service_healthy
+
