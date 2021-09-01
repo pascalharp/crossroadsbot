@@ -223,7 +223,7 @@ async fn log_to_channel<'a, T>(
             .clone()
             .read()
             .await
-            .info
+            .log
     };
     // We can only log to the discord channel if it is set
     if let Some(chan) = log_info {

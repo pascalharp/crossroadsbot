@@ -13,12 +13,10 @@ pub struct ConfigValues {
     pub emoji_guild_id: GuildId,
 }
 
-pub static INFO_LOG_NAME: &str = "info_log";
-pub static ERROR_LOG_NAME: &str = "error_log";
+pub static INFO_LOG_NAME: &str = "log_channel_id";
 
 pub struct LogConfig {
-    pub info: Option<ChannelId>,
-    pub error: Option<ChannelId>,
+    pub log: Option<ChannelId>,
 }
 
 pub struct ConversationLock;

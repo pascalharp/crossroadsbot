@@ -6,7 +6,7 @@ use dotenv::dotenv;
 use serenity::{
     async_trait,
     client::{Client, EventHandler},
-    framework::standard::{macros::hook, CommandResult, DispatchError, StandardFramework},
+    framework::standard::{macros::hook, DispatchError, StandardFramework},
     model::prelude::*,
     prelude::*,
 };
@@ -27,31 +27,21 @@ impl EventHandler for Handler {
         info!("Connected as {}", ready.user.name);
         info!("Refreshing config values");
 
-        let log_info = db::Config::load(&ctx, String::from(INFO_LOG_NAME))
+        let log_channel = db::Config::load(&ctx, String::from(INFO_LOG_NAME))
             .await
             .ok();
-        let log_error = db::Config::load(&ctx, String::from(ERROR_LOG_NAME))
-            .await
-            .ok();
+
         let signup_board_category = db::Config::load(&ctx, String::from(SIGNUP_BOARD_NAME))
             .await
             .ok();
         let data_read = ctx.data.read().await;
         let mut log_write = data_read.get::<LogConfigData>().unwrap().write().await;
 
-        match log_info {
+        match log_channel {
             None => info!("Log info not found in db. skipped"),
             Some(info) => match ChannelId::from_str(&info.value) {
                 Err(e) => error!("Failed to parse info channel id: {}", e),
-                Ok(id) => log_write.info = Some(id),
-            },
-        }
-
-        match log_error {
-            None => info!("Log info not found in db. skipped"),
-            Some(error) => match ChannelId::from_str(&error.value) {
-                Err(e) => error!("Failed to parse error channel id: {}", e),
-                Ok(id) => log_write.error = Some(id),
+                Ok(id) => log_write.log = Some(id),
             },
         }
 
@@ -136,47 +126,6 @@ impl EventHandler for Handler {
 }
 
 #[hook]
-async fn after(ctx: &Context, msg: &Message, command_name: &str, command_result: CommandResult) {
-    let author = &msg.author;
-    let command = msg.content_safe(ctx).await;
-    // Log to subscriber
-    match command_result {
-        Ok(_) => (),
-        Err(why) => {
-            error!(
-                "{}",
-                format!("{} used command {}: {}", author.name, command_name, why)
-            );
-            let err_info = {
-                ctx.data
-                    .read()
-                    .await
-                    .get::<LogConfigData>()
-                    .unwrap()
-                    .clone()
-                    .read()
-                    .await
-                    .error
-            };
-            if let Some(chan) = err_info {
-                chan.send_message(ctx, |m| {
-                    m.allowed_mentions(|m| m.empty_parse());
-                    m.embed(|e| {
-                        e.description("[ERROR] Command failed");
-                        e.field("User", Mention::from(author), true);
-                        e.field("Command", format!("`{}`", command), true);
-                        e.field("Error", why, false);
-                        e
-                    })
-                })
-                .await
-                .ok();
-            }
-        }
-    }
-}
-
-#[hook]
 async fn dispatch_error_hook(ctx: &Context, msg: &Message, error: DispatchError) {
     match error {
         DispatchError::NotEnoughArguments { min, given } => {
@@ -257,7 +206,6 @@ async fn main() {
             c.no_dm_prefix(true)
         })
         .on_dispatch_error(dispatch_error_hook)
-        .after(after)
         .help(&commands::HELP_CMD)
         .group(&commands::SIGNUP_GROUP)
         .group(&commands::TRAINING_GROUP)
@@ -283,8 +231,7 @@ async fn main() {
             emoji_guild_id,
         }));
         data.insert::<LogConfigData>(Arc::new(RwLock::new(LogConfig {
-            info: None,
-            error: None,
+            log: None,
         })));
         data.insert::<SignupBoardData>(Arc::new(RwLock::new(SignupBoard::new())));
         data.insert::<DBPoolData>(Arc::new(db::DBPool::new()));

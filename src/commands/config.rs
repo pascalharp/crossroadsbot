@@ -10,8 +10,7 @@ use serenity::prelude::*;
 #[group]
 #[only_in(guilds)]
 #[commands(
-    set_log_info,
-    set_log_error,
+    set_log_channel,
     set_signup_board_category,
     signup_board_reset
 )]
@@ -20,11 +19,11 @@ struct Config;
 #[command]
 #[checks(admin_role)]
 #[description = "Sets the log channel for info"]
-#[example = "#logs_info"]
+#[example = "#logs"]
 #[usage = "channel_mention"]
 #[only_in("guild")]
 #[num_args(1)]
-pub async fn set_log_info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+pub async fn set_log_channel(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     log_command(ctx, msg, || async {
         let channel_id: ChannelId = args.single::<ChannelId>().log_reply(msg)?;
         {
@@ -35,45 +34,11 @@ pub async fn set_log_info(ctx: &Context, msg: &Message, mut args: Args) -> Comma
                 .get::<LogConfigData>()
                 .unwrap()
                 .clone();
-            write_lock.write().await.info = Some(channel_id);
+            write_lock.write().await.log = Some(channel_id);
         }
 
         let conf = db::Config {
             name: String::from(INFO_LOG_NAME),
-            value: channel_id.to_string(),
-        };
-        conf.save(ctx).await.log_reply(msg)?;
-
-        msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
-            .await?;
-        Ok(())
-    })
-    .await
-}
-
-#[command]
-#[checks(admin_role)]
-#[description = "Sets the log channel for error"]
-#[example = "#logs_error"]
-#[usage = "channel_mention"]
-#[only_in("guild")]
-#[num_args(1)]
-pub async fn set_log_error(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    log_command(ctx, msg, || async {
-        let channel_id: ChannelId = args.single::<ChannelId>().log_reply(msg)?;
-        {
-            let write_lock = ctx
-                .data
-                .read()
-                .await
-                .get::<LogConfigData>()
-                .unwrap()
-                .clone();
-            write_lock.write().await.error = Some(channel_id);
-        }
-
-        let conf = db::Config {
-            name: String::from(ERROR_LOG_NAME),
             value: channel_id.to_string(),
         };
         conf.save(ctx).await.log_reply(msg)?;
