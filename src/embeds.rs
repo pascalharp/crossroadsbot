@@ -9,6 +9,7 @@ use std::collections::HashSet;
 
 const EMBED_AUTHOR_ICON_URL: &str = "https://cdn.discordapp.com/avatars/512706205647372302/eb7a7f2de9a97006e8217b73ab5c7836.webp?size=128";
 const EMBED_AUTHOR_NAME: &str = "Crossroads Bot";
+const EMBED_THUMBNAIL: &str = "https://cdn.discordapp.com/icons/226398442082140160/03fe915815e9dbb6cdd18fe577fc6dd9.webp";
 const EMBED_STYLE_COLOR: (u8, u8, u8) = (99, 51, 45);
 
 pub trait CrossroadsEmbeds {
@@ -27,6 +28,7 @@ impl CrossroadsEmbeds for CreateEmbed {
     fn xstyle(&mut self) -> &mut Self {
         self.set_author(xstyle_author());
         self.color(EMBED_STYLE_COLOR);
+        self.thumbnail(EMBED_THUMBNAIL);
         self
     }
     fn xdefault() -> Self {

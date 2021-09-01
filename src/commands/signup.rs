@@ -111,6 +111,7 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 conv.msg
                     .edit(ctx, |m| {
                         m.add_embed(|e| {
+                            e.xstyle();
                             e.description("Already signed up for this training");
                             e.field(
                                 "You can edit your signup with:",
