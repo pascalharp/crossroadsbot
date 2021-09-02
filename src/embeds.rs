@@ -96,7 +96,11 @@ pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
     e
 }
 
-pub fn signupboard_embed(training: &db::Training, roles: &Vec<db::Role>, tier: &Option<(db::Tier, Vec<db::TierMapping>)> ) -> CreateEmbed {
+pub fn signupboard_embed(
+    training: &db::Training,
+    roles: &Vec<db::Role>,
+    tier: &Option<(db::Tier, Vec<db::TierMapping>)>,
+) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
     let utc = DateTime::<Utc>::from_utc(training.date, Utc);
     let title = format!(

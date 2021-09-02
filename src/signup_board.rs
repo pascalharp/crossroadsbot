@@ -1,4 +1,4 @@
-use crate::{data, db, embeds, utils, components};
+use crate::{components, data, db, embeds, utils};
 use chrono::prelude::*;
 use dashmap::DashMap;
 use serenity::{futures::StreamExt, model::prelude::*, prelude::*};
@@ -22,14 +22,18 @@ pub struct SignupBoard {
 
 impl SignupBoard {
     pub fn new() -> Self {
-        SignupBoard{
-            current: DashMap::new()
+        SignupBoard {
+            current: DashMap::new(),
         }
     }
     // This updates or inserts a training to the signup board
     // Try to avoid calling this too often since it does a lot of networking
     // TODO remove training if state
-    pub async fn update_training(&self, ctx: &Context, training_id: i32) -> Result<Option<Message>> {
+    pub async fn update_training(
+        &self,
+        ctx: &Context,
+        training_id: i32,
+    ) -> Result<Option<Message>> {
         let training = db::Training::by_id(ctx, training_id).await?;
         // only accept correct state
         match training.state {
@@ -60,10 +64,13 @@ impl SignupBoard {
             .collect::<Vec<_>>();
 
         // now check if one channel already matches the date string
-        let time_fmt = training.date.format(CHANNEL_TIME_FORMAT).to_string().to_lowercase().replace(" ", "");
-        let channel = channels.into_iter().find(|ch| {
-            ch.name.eq(&time_fmt)
-        });
+        let time_fmt = training
+            .date
+            .format(CHANNEL_TIME_FORMAT)
+            .to_string()
+            .to_lowercase()
+            .replace(" ", "");
+        let channel = channels.into_iter().find(|ch| ch.name.eq(&time_fmt));
 
         // Use channel or create new one if none found
         let channel = match channel {
@@ -82,7 +89,6 @@ impl SignupBoard {
             }
         };
 
-
         // check if Training is on the board yet.
         // 100 is discord limit but that should be easily enough
         // if we actually ever get more than 100 trainings on one day I am happy to rework this ;)
@@ -99,7 +105,6 @@ impl SignupBoard {
                 })
             })
         });
-
 
         // load tier and roles information
         let roles = training.active_roles(ctx).await?;
@@ -119,26 +124,35 @@ impl SignupBoard {
         let msg = match msg {
             Some(mut msg) => {
                 msg.edit(ctx, |m| {
-                    m.embed( |e| { e.0 = embeds::signupboard_embed(&training, &roles, &tiers).0; e });
-                    m.components( |c| {
+                    m.embed(|e| {
+                        e.0 = embeds::signupboard_embed(&training, &roles, &tiers).0;
+                        e
+                    });
+                    m.components(|c| {
                         if training.state.eq(&db::TrainingState::Open) {
                             c.add_action_row(components::signup_action_row());
                         }
                         c
                     })
-                }).await?;
+                })
+                .await?;
                 msg
             }
             None => {
-                channel.send_message(ctx, |m| {
-                    m.embed( |e| { e.0 = embeds::signupboard_embed(&training, &roles, &tiers).0; e });
-                    m.components( |c| {
-                        if training.state.eq(&db::TrainingState::Open) {
-                            c.add_action_row(components::signup_action_row());
-                        }
-                        c
+                channel
+                    .send_message(ctx, |m| {
+                        m.embed(|e| {
+                            e.0 = embeds::signupboard_embed(&training, &roles, &tiers).0;
+                            e
+                        });
+                        m.components(|c| {
+                            if training.state.eq(&db::TrainingState::Open) {
+                                c.add_action_row(components::signup_action_row());
+                            }
+                            c
+                        })
                     })
-                }).await?
+                    .await?
             }
         };
 

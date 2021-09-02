@@ -1,5 +1,5 @@
 use crate::db;
-use crate::utils::{CHECK_EMOJI, X_EMOJI, MEMO_EMOJI};
+use crate::utils::{CHECK_EMOJI, MEMO_EMOJI, X_EMOJI};
 use serenity::builder::{CreateActionRow, CreateButton};
 use serenity::model::interactions::message_component::ButtonStyle;
 use serenity::model::interactions::message_component::MessageComponentInteraction;
