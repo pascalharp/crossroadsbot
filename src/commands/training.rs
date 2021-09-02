@@ -204,8 +204,8 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
         // load trainings
         let futs = training_id
-            .into_iter()
-            .map(|id| db::Training::by_id(ctx, id))
+            .iter()
+            .map(|id| db::Training::by_id(ctx, *id))
             .collect::<Vec<_>>();
         let trainings = future::try_join_all(futs).await.log_reply(msg)?;
 
@@ -216,20 +216,14 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             .collect::<Vec<_>>();
         future::try_join_all(futs).await.log_unexpected_reply(msg)?;
 
-        // inform the SignupBoard TODO
-        //let board_lock = {
-        //    let read_lock = ctx.data.read().await;
-        //    read_lock.get::<data::SignupBoardData>().unwrap().clone()
-        //};
-        //let res = {
-        //    let mut board = board_lock.write().await;
-        //    board.update(ctx, training_id).await
-        //};
+        let board = {
+            let read_lock = ctx.data.read().await;
+            read_lock.get::<data::SignupBoardData>().unwrap().clone()
+        };
 
-        //if let Err(_) = res {
-        //    msg.reply(ctx, "State changed but error updating signup board")
-        //        .await?;
-        //}
+        for id in training_id {
+            board.update_training(ctx, id).await.log_reply(msg)?;
+        }
         msg.react(ctx, CHECK_EMOJI).await?;
 
         Ok(())

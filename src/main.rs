@@ -31,97 +31,29 @@ impl EventHandler for Handler {
             .await
             .ok();
 
-        let signup_board_category = db::Config::load(&ctx, String::from(SIGNUP_BOARD_NAME))
-            .await
-            .ok();
         let data_read = ctx.data.read().await;
         let mut log_write = data_read.get::<LogConfigData>().unwrap().write().await;
 
         match log_channel {
-            None => info!("Log info not found in db. skipped"),
+            None => info!("Log channel not found in db. skipped"),
             Some(info) => match ChannelId::from_str(&info.value) {
-                Err(e) => error!("Failed to parse info channel id: {}", e),
+                Err(e) => error!("Failed to parse log channel id: {}", e),
                 Ok(id) => log_write.log = Some(id),
             },
         }
 
-        let mut board_write = data_read.get::<SignupBoardData>().unwrap().write().await;
-        match signup_board_category {
-            None => info!("Signup board category not found in db. Skipped"),
-            Some(category) => match ChannelId::from_str(&category.value) {
-                Err(e) => error!("Failed to parse signup board channel id: {}", e),
-                Ok(id) => {
-                    board_write.set_category_channel(id);
-                    info!("Resetting signup board");
-                    if let Err(e) = board_write.reset(&ctx).await {
-                        error!("Failed to reset signup board {}", e);
-                    }
-                }
-            },
+        let signup_board_category = db::Config::load(&ctx, String::from(SIGNUP_BOARD_NAME))
+            .await
+            .ok();
+
+        if signup_board_category.is_none() {
+            info!("Signup board category not found in db")
         }
     }
 
+
     async fn resume(&self, _: Context, _: ResumedEvent) {
         info!("Resumed");
-    }
-
-    // TODO remove and rework with buttons
-    async fn reaction_add(&self, _ctx: Context, _added_reaction: Reaction) {
-        //let user = added_reaction.user(&ctx).await;
-        //let user = match user {
-        //    Err(_) => return,
-        //    Ok(u) => {
-        //        if u.bot {
-        //            return;
-        //        } else {
-        //            u
-        //        }
-        //    }
-        //};
-
-        //// Keep locks only as long as needed
-        //let board_lock = {
-        //    let data_read = ctx.data.read().await;
-        //    data_read.get::<SignupBoardData>().unwrap().clone()
-        //};
-        //let board_action = {
-        //    let board = board_lock.read().await;
-        //    board.on_reaction(&added_reaction)
-        //};
-        //drop(board_lock);
-
-        //let ctx = Arc::new(ctx);
-        //let rm_ctx = ctx.clone();
-        //let result = match &board_action {
-        //    SignupBoardAction::Ignore => return,
-        //    SignupBoardAction::None => {
-        //        tokio::task::spawn(async move {
-        //            added_reaction.delete(&*rm_ctx.clone()).await.ok();
-        //        });
-        //        return; // Nothing to log. just a random emoji
-        //    }
-        //    SignupBoardAction::JoinSignup(training) => {
-        //        tokio::task::spawn(async move {
-        //            added_reaction.delete(&*rm_ctx.clone()).await.ok();
-        //        });
-        //        conversation::join_training(&*ctx, &user, training.id).await
-        //    }
-        //    SignupBoardAction::EditSignup(training) => {
-        //        tokio::task::spawn(async move {
-        //            added_reaction.delete(&*rm_ctx.clone()).await.ok();
-        //        });
-        //        conversation::edit_signup(&*ctx, &user, training.id).await
-        //    }
-        //    SignupBoardAction::RemoveSignup(training) => {
-        //        tokio::task::spawn(async move {
-        //            added_reaction.delete(&*rm_ctx.clone()).await.ok();
-        //        });
-        //        conversation::remove_signup(&*ctx, &user, training.id).await
-        //    }
-        //};
-        //result
-        //    .log(&ctx, LogType::Interaction(&board_action), &user)
-        //    .await;
     }
 }
 
@@ -231,7 +163,7 @@ async fn main() {
             emoji_guild_id,
         }));
         data.insert::<LogConfigData>(Arc::new(RwLock::new(LogConfig { log: None })));
-        data.insert::<SignupBoardData>(Arc::new(RwLock::new(SignupBoard::new())));
+        data.insert::<SignupBoardData>(Arc::new(SignupBoard::new()));
         data.insert::<DBPoolData>(Arc::new(db::DBPool::new()));
     }
 

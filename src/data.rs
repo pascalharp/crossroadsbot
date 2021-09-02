@@ -36,7 +36,7 @@ impl TypeMapKey for LogConfigData {
 
 pub struct SignupBoardData;
 impl TypeMapKey for SignupBoardData {
-    type Value = Arc<RwLock<SignupBoard>>;
+    type Value = Arc<SignupBoard>;
 }
 
 pub struct DBPoolData;

@@ -9,7 +9,8 @@ use std::collections::HashSet;
 
 const EMBED_AUTHOR_ICON_URL: &str = "https://cdn.discordapp.com/avatars/512706205647372302/eb7a7f2de9a97006e8217b73ab5c7836.webp?size=128";
 const EMBED_AUTHOR_NAME: &str = "Crossroads Bot";
-const EMBED_THUMBNAIL: &str = "https://cdn.discordapp.com/icons/226398442082140160/03fe915815e9dbb6cdd18fe577fc6dd9.webp";
+const EMBED_THUMBNAIL: &str =
+    "https://cdn.discordapp.com/icons/226398442082140160/03fe915815e9dbb6cdd18fe577fc6dd9.webp";
 const EMBED_STYLE_COLOR: (u8, u8, u8) = (99, 51, 45);
 
 pub trait CrossroadsEmbeds {
@@ -92,6 +93,40 @@ pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
     );
     e.field("**State**", &training.state, true);
     e.field("**Training Id**", &training.id, true);
+    e
+}
+
+pub fn signupboard_embed(training: &db::Training, roles: &Vec<db::Role>, tier: &Option<(db::Tier, Vec<db::TierMapping>)> ) -> CreateEmbed {
+    let mut e = CreateEmbed::xdefault();
+    let utc = DateTime::<Utc>::from_utc(training.date, Utc);
+    let title = format!(
+        "{} {}",
+        match training.state {
+            db::TrainingState::Created => CONSTRUCTION_SITE_EMOJI,
+            db::TrainingState::Open => GREEN_CIRCLE_EMOJI,
+            db::TrainingState::Closed => RED_CIRCLE_EMOJI,
+            db::TrainingState::Started => RUNNING_EMOJI,
+            db::TrainingState::Finished => CROSS_EMOJI,
+        },
+        training.title
+    );
+    let title_len = title.chars().count();
+    e.title(title);
+    e.description(format!("||{:0>width$}||", training.id, width = title_len));
+    e.field(
+        "**Date**",
+        format!(
+            "{}\n{}\n{}",
+            utc.format(TRAINING_TIME_FMT),
+            utc.with_timezone(&London).format(TRAINING_TIME_FMT),
+            utc.with_timezone(&Paris).format(TRAINING_TIME_FMT),
+        ),
+        false,
+    );
+    e.field("**State**", &training.state, true);
+    e.field("**Training Id**", &training.id, true);
+    training_embed_add_tier(&mut e, tier, true);
+    embed_add_roles(&mut e, roles, false);
     e
 }
 

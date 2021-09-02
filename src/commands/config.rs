@@ -60,17 +60,6 @@ pub async fn set_signup_board_category(
     log_command(ctx, msg, || async {
         let channel_id: ChannelId = args.single::<ChannelId>().log_reply(msg)?;
 
-        {
-            let write_lock = ctx
-                .data
-                .read()
-                .await
-                .get::<SignupBoardData>()
-                .unwrap()
-                .clone();
-            write_lock.write().await.set_category_channel(channel_id);
-        }
-
         let conf = db::Config {
             name: String::from(signup_board::SIGNUP_BOARD_NAME),
             value: channel_id.to_string(),
@@ -101,11 +90,9 @@ pub async fn signup_board_reset(ctx: &Context, msg: &Message, _: Args) -> Comman
             .unwrap()
             .clone();
 
-        write_lock.write().await.reset(ctx).await.log_reply(msg)?;
-
         msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
             .await?;
-        Ok(())
+        unimplemented!()
     })
     .await
 }

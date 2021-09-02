@@ -1,4 +1,4 @@
-use crate::{data, db, embeds, utils, components};
+use crate::{data, db, embeds, utils};
 use chrono::prelude::*;
 use dashmap::DashMap;
 use serenity::{futures::StreamExt, model::prelude::*, prelude::*};
@@ -17,32 +17,18 @@ const CHANNEL_TIME_FORMAT: &str = "%a-%e-%b-%Y";
 // sign up board rarely happen
 
 pub struct SignupBoard {
-    current: DashMap<MessageId, Arc<db::Training>>,
+    listed: DashMap<MessageId, Arc<db::Training>>,
 }
 
 impl SignupBoard {
-    pub fn new() -> Self {
-        SignupBoard{
-            current: DashMap::new()
-        }
-    }
-    // This updates or inserts a training to the signup board
-    // Try to avoid calling this too often since it does a lot of networking
-    // TODO remove training if state
-    pub async fn update_training(&self, ctx: &Context, training_id: i32) -> Result<Option<Message>> {
+    pub async fn add_training(&self, ctx: &Context, training_id: i32) -> Result<()> {
         let training = db::Training::by_id(ctx, training_id).await?;
-        // only accept correct state
-        match training.state {
-            db::TrainingState::Open | db::TrainingState::Closed | db::TrainingState::Started => (),
-            _ => return Err("Invalid training state for signup board".into()),
-        };
         // Load all channels for category from the guild that are in the category
         let channel_category: ChannelId = db::Config::load(ctx, SIGNUP_BOARD_NAME.to_string())
             .await?
             .value
             .parse::<u64>()?
             .into();
-        // Load guild id provided on startup
         let guild_id = ctx
             .data
             .read()
@@ -50,7 +36,6 @@ impl SignupBoard {
             .get::<data::ConfigValuesData>()
             .unwrap()
             .main_guild_id;
-        // Load all channels in the signup board category
         let channels = guild_id
             .channels(ctx)
             .await?
@@ -60,91 +45,11 @@ impl SignupBoard {
             .collect::<Vec<_>>();
 
         // now check if one channel already matches the date string
-        let time_fmt = training.date.format(CHANNEL_TIME_FORMAT).to_string().to_lowercase().replace(" ", "");
-        let channel = channels.into_iter().find(|ch| {
-            ch.name.eq(&time_fmt)
-        });
+        let time_fmt = training.date.format(CHANNEL_TIME_FORMAT).to_string();
+        let channel = channels.into_iter().find(|ch| ch.name.eq(&time_fmt));
 
-        // Use channel or create new one if none found
-        let channel = match channel {
-            Some(ch) => ch,
-            None => {
-                guild_id
-                    .create_channel(ctx, |ch| {
-                        ch.category(channel_category);
-                        ch.kind(ChannelType::Text);
-                        ch.topic("Use the buttons to join/edite/delete signups");
-                        ch.name(time_fmt);
-                        // TODO figure out position
-                        ch
-                    })
-                    .await?
-            }
-        };
-
-
-        // check if Training is on the board yet.
-        // 100 is discord limit but that should be easily enough
-        // if we actually ever get more than 100 trainings on one day I am happy to rework this ;)
-        let channel_msgs = channel.messages(ctx, |msg| msg.limit(100)).await?;
-
-        let msg = channel_msgs.into_iter().find(|m| {
-            m.embeds.get(0).map_or(false, |e| {
-                e.description.as_ref().map_or(false, |d| {
-                    // clone is good here to not change orig msg if we use it to update
-                    d.clone()
-                        .replace("||", "")
-                        .parse::<i32>()
-                        .map_or(false, |id| id.eq(&training.id))
-                })
-            })
-        });
-
-
-        // load tier and roles information
-        let roles = training.active_roles(ctx).await?;
-        let tiers = {
-            let tier = training.get_tier(ctx).await;
-            match tier {
-                None => None,
-                Some(t) => {
-                    let t = t?;
-                    let r = t.get_discord_roles(ctx).await?;
-                    Some((t, r))
-                }
-            }
-        };
-
-        // TODO add components
-        let msg = match msg {
-            Some(mut msg) => {
-                msg.edit(ctx, |m| {
-                    m.embed( |e| { e.0 = embeds::signupboard_embed(&training, &roles, &tiers).0; e });
-                    m.components( |c| {
-                        if training.state.eq(&db::TrainingState::Open) {
-                            c.add_action_row(components::signup_action_row());
-                        }
-                        c
-                    })
-                }).await?;
-                msg
-            }
-            None => {
-                channel.send_message(ctx, |m| {
-                    m.embed( |e| { e.0 = embeds::signupboard_embed(&training, &roles, &tiers).0; e });
-                    m.components( |c| {
-                        if training.state.eq(&db::TrainingState::Open) {
-                            c.add_action_row(components::signup_action_row());
-                        }
-                        c
-                    })
-                }).await?
-            }
-        };
-
-        self.current.insert(msg.id, Arc::new(training));
-
-        Ok(Some(msg))
+        // TODO
+        unimplemented!();
     }
 }
 
