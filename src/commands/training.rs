@@ -221,10 +221,45 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             read_lock.get::<data::SignupBoardData>().unwrap().clone()
         };
 
+        let mut embed = serenity::builder::CreateEmbed::default();
         for id in training_id {
-            board.update_training(ctx, id).await.log_reply(msg)?;
+            let res = board.update_training(ctx, id).await.log_reply(msg);
+            match res {
+                Ok(some) => match some {
+                    Some(msg) => {
+                        embed.field(
+                            format!("Training id: {}", id),
+                            format!("[Message on Board]({})", msg.link()),
+                            false,
+                        );
+                    }
+                    None => {
+                        embed.field(
+                            format!("Training id: {}", id),
+                            format!("_Message removed_"),
+                            false,
+                        );
+                    }
+                },
+                Err(err) => {
+                    embed.field(
+                        format!("Training id: {}", id),
+                        format!("_Error_: {}", err.to_string()),
+                        false,
+                    );
+                }
+            }
         }
-        msg.react(ctx, CHECK_EMOJI).await?;
+
+        msg.channel_id
+            .send_message(ctx, |m| {
+                m.embed(|e| {
+                    e.0 = embed.0;
+                    e.color((255, 255, 0));
+                    e.description("Signup board updates:")
+                })
+            })
+            .await?;
 
         Ok(())
     })

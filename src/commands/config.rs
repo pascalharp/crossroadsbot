@@ -82,17 +82,19 @@ pub async fn set_signup_board_category(
 #[num_args(0)]
 pub async fn signup_board_reset(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
     log_command(ctx, msg, || async {
-        let write_lock = ctx
-            .data
+        ctx.data
             .read()
             .await
             .get::<SignupBoardData>()
             .unwrap()
-            .clone();
+            .clone()
+            .reset(ctx)
+            .await
+            .log_reply(msg)?;
 
         msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
             .await?;
-        unimplemented!()
+        Ok(())
     })
     .await
 }

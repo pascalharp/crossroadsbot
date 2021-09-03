@@ -172,7 +172,7 @@ pub fn embed_add_roles(e: &mut CreateEmbed, r: &Vec<db::Role>, inline: bool) {
         .iter()
         .map(|r| {
             format!(
-                "{} `| {:^rwidth$} | {:^twidth$} |`",
+                "{} `| {:^rwidth$} |` `| {:^twidth$} |`",
                 Mention::from(EmojiId::from(r.emoji as u64)),
                 &r.repr,
                 &r.title,

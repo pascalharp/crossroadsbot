@@ -47,12 +47,42 @@ impl EventHandler for Handler {
             .ok();
 
         if signup_board_category.is_none() {
-            info!("Signup board category not found in db")
+            info!("Signup board category not found in db");
+        } else {
+            info!("Resetting signup board");
+            ctx.data
+                .read()
+                .await
+                .get::<SignupBoardData>()
+                .unwrap()
+                .clone()
+                .reset(&ctx)
+                .await
+                .ok();
         }
     }
 
     async fn resume(&self, _: Context, _: ResumedEvent) {
         info!("Resumed");
+    }
+
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        // we only care about message interactions for now
+        let interaction = match interaction.message_component() {
+            Some(i) => i,
+            None => return,
+        };
+
+        let board = {
+            ctx.data
+                .read()
+                .await
+                .get::<SignupBoardData>()
+                .unwrap()
+                .clone()
+        };
+
+        board.interaction(&ctx, &interaction).await;
     }
 }
 
