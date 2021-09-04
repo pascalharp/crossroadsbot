@@ -1,4 +1,10 @@
-use crossroadsbot::{commands, data::*, db, signup_board::*, utils::{self, DIZZY_EMOJI}};
+use crossroadsbot::{
+    commands,
+    data::*,
+    db,
+    signup_board::*,
+    utils::{self, DIZZY_EMOJI},
+};
 use dashmap::DashSet;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;

@@ -47,9 +47,9 @@ pub async fn button_interaction(ctx: &Context, i: &MessageComponentInteraction) 
         Ok(a) => a,
     };
 
-    log_interaction(ctx, &i, &bi, || async {
-        Ok(())
-    }).await.ok();
+    log_interaction(ctx, &i, &bi, || async { Ok(()) })
+        .await
+        .ok();
 }
 
 /// Verifies if the discord user has the required tier for a training

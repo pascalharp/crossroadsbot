@@ -1,12 +1,5 @@
 use crate::{components, data, db, embeds};
-use serenity::{
-    model::interactions::{
-        message_component::*,
-        InteractionApplicationCommandCallbackDataFlags as InteractionDataFlags,
-    },
-    model::prelude::*,
-    prelude::*,
-};
+use serenity::{model::prelude::*, prelude::*};
 use std::sync::Arc;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -18,7 +11,6 @@ const CHANNEL_TIME_FORMAT: &str = "%a-%e-%b-%Y";
 pub struct SignupBoard {}
 
 impl SignupBoard {
-
     // posts a training to the signup board
     async fn post_training(ctx: &Context, training: &db::Training) -> Result<Message> {
         // Load all channels for category from the guild that are in the category
@@ -226,7 +218,7 @@ impl SignupBoard {
                 Ok(Some(msg))
             }
             _ => {
-                let msg = Self::delete_training(ctx, &training).await?;
+                let _msg = Self::delete_training(ctx, &training).await?;
                 Ok(None)
             }
         }
