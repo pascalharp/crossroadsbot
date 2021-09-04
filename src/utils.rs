@@ -39,6 +39,19 @@ pub const GREEN_SQUARE_EMOJI: char = '🟩';
 pub const RED_SQUARE_EMOJI: char = '🟥';
 pub const ALARM_CLOCK_EMOJI: char = '⏰';
 
+pub async fn button_interaction(ctx: &Context, i: &MessageComponentInteraction) {
+    // Check first if it is an interaction to handle
+
+    let bi = match i.data.custom_id.parse::<ButtonTrainingInteraction>() {
+        Err(_) => return,
+        Ok(a) => a,
+    };
+
+    log_interaction(ctx, &i, &bi, || async {
+        Ok(())
+    }).await.ok();
+}
+
 /// Verifies if the discord user has the required tier for a training
 pub async fn verify_tier(
     ctx: &Context,

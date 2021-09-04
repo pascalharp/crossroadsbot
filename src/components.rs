@@ -23,6 +23,83 @@ pub enum ButtonResponse {
     Other(String),
 }
 
+#[derive(Debug)]
+pub struct ButtonTrainingInteractionParseError {}
+
+impl std::fmt::Display for ButtonTrainingInteractionParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Invalid format")
+    }
+}
+
+impl std::error::Error for ButtonTrainingInteractionParseError {}
+
+#[derive(Debug)]
+pub enum ButtonTrainingInteraction {
+    Join(i32),
+    Edit(i32),
+    Leave(i32),
+}
+
+impl ButtonTrainingInteraction {
+    pub fn button(&self) -> CreateButton {
+        let mut b = CreateButton::default();
+        match self {
+            ButtonTrainingInteraction::Join(_) => {
+                b.style(ButtonStyle::Success);
+                b.label(COMPONENT_LABEL_SIGNUP_JOIN);
+                b.emoji(ReactionType::from(CHECK_EMOJI));
+            }
+            ButtonTrainingInteraction::Edit(_) => {
+                b.style(ButtonStyle::Primary);
+                b.label(COMPONENT_LABEL_SIGNUP_EDIT);
+                b.emoji(ReactionType::from(MEMO_EMOJI));
+            }
+            ButtonTrainingInteraction::Leave(_) => {
+                b.style(ButtonStyle::Danger);
+                b.label(COMPONENT_LABEL_SIGNUP_LEAVE);
+                b.emoji(ReactionType::from(X_EMOJI));
+            }
+        };
+        b.custom_id(self.to_string());
+        b
+    }
+}
+
+impl std::fmt::Display for ButtonTrainingInteraction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ButtonTrainingInteraction::Join(id) => write!(f, "training_join_{}", id),
+            ButtonTrainingInteraction::Edit(id) => write!(f, "training_edit_{}", id),
+            ButtonTrainingInteraction::Leave(id) => write!(f, "training_leave_{}", id),
+        }
+    }
+}
+
+impl std::str::FromStr for ButtonTrainingInteraction {
+    type Err = ButtonTrainingInteractionParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<_> = s.split('_').collect();
+        if parts.len() != 3 {
+            return Err(ButtonTrainingInteractionParseError {});
+        }
+        if !(*parts.get(0).unwrap()).eq("training") {
+            return Err(ButtonTrainingInteractionParseError {});
+        }
+        let training_id = match parts.get(2).unwrap().parse::<i32>() {
+            Ok(i) => i,
+            Err(_) => return Err(ButtonTrainingInteractionParseError {}),
+        };
+        match *parts.get(1).unwrap() {
+            "join" => Ok(ButtonTrainingInteraction::Join(training_id)),
+            "edit" => Ok(ButtonTrainingInteraction::Edit(training_id)),
+            "leave" => Ok(ButtonTrainingInteraction::Leave(training_id)),
+            _ => Err(ButtonTrainingInteractionParseError {}),
+        }
+    }
+}
+
 impl fmt::Display for ButtonResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -68,33 +145,6 @@ pub fn role_button(role: &db::Role) -> CreateButton {
     b
 }
 
-pub fn signup_join_button() -> CreateButton {
-    let mut b = CreateButton::default();
-    b.style(ButtonStyle::Success);
-    b.label(COMPONENT_LABEL_SIGNUP_JOIN);
-    b.custom_id(COMPONENT_ID_SIGNUP_JOIN);
-    b.emoji(ReactionType::from(CHECK_EMOJI));
-    b
-}
-
-pub fn signup_edit_button() -> CreateButton {
-    let mut b = CreateButton::default();
-    b.style(ButtonStyle::Primary);
-    b.label(COMPONENT_LABEL_SIGNUP_EDIT);
-    b.custom_id(COMPONENT_ID_SIGNUP_EDIT);
-    b.emoji(ReactionType::from(MEMO_EMOJI));
-    b
-}
-
-pub fn signup_leave_button() -> CreateButton {
-    let mut b = CreateButton::default();
-    b.style(ButtonStyle::Danger);
-    b.label(COMPONENT_LABEL_SIGNUP_LEAVE);
-    b.custom_id(COMPONENT_ID_SIGNUP_LEAVE);
-    b.emoji(ReactionType::from(X_EMOJI));
-    b
-}
-
 pub fn confirm_abort_action_row() -> CreateActionRow {
     let mut ar = CreateActionRow::default();
     ar.add_button(confirm_button());
@@ -102,11 +152,11 @@ pub fn confirm_abort_action_row() -> CreateActionRow {
     ar
 }
 
-pub fn signup_action_row() -> CreateActionRow {
+pub fn signup_action_row(training_id: i32) -> CreateActionRow {
     let mut ar = CreateActionRow::default();
-    ar.add_button(signup_join_button());
-    ar.add_button(signup_edit_button());
-    ar.add_button(signup_leave_button());
+    ar.add_button(ButtonTrainingInteraction::Join(training_id).button());
+    ar.add_button(ButtonTrainingInteraction::Edit(training_id).button());
+    ar.add_button(ButtonTrainingInteraction::Leave(training_id).button());
     ar
 }
 

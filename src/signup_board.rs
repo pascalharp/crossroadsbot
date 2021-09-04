@@ -1,5 +1,4 @@
 use crate::{components, data, db, embeds};
-use dashmap::DashMap;
 use serenity::{
     model::interactions::{
         message_component::*,
@@ -15,58 +14,13 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 pub const SIGNUP_BOARD_NAME: &str = "signup_board_id";
 const CHANNEL_TIME_FORMAT: &str = "%a-%e-%b-%Y";
 
-// There should be way more interactions compared to adding/deleting messages
-// So it is optimized around reading
-// instead of holding on to a lot of information needed for managing the signup board
-// we load the data on changes since creating/deleting/updating trainings on the
-// sign up board rarely happen
-pub struct SignupBoard {
-    // maps a message to a training id
-    current: DashMap<MessageId, i32>,
-}
-
-enum SignupBoardInteraction {
-    Join,
-    Edit,
-    Leave,
-}
+// We are not holding on to any information
+pub struct SignupBoard {}
 
 impl SignupBoard {
-    pub fn new() -> Self {
-        SignupBoard {
-            current: DashMap::new(),
-        }
-    }
-
-    pub async fn interaction(&self, ctx: &Context, i: &MessageComponentInteraction) {
-        let msg_id = i.message.id();
-
-        // check if the message is even associated with a training
-        let training = match self.current.get(&msg_id) {
-            Some(s) => s,
-            None => return (),
-        };
-
-        // what button got pressed
-        let action = match i.data.custom_id.as_ref() {
-            components::COMPONENT_ID_SIGNUP_JOIN => SignupBoardInteraction::Join,
-            components::COMPONENT_ID_SIGNUP_EDIT => SignupBoardInteraction::Edit,
-            components::COMPONENT_ID_SIGNUP_LEAVE => SignupBoardInteraction::Leave,
-            _ => return (),
-        };
-
-        i.create_interaction_response(ctx, |r| {
-            r.interaction_response_data(|d| {
-                d.flags(InteractionDataFlags::EPHEMERAL);
-                d.content("TODO but sneaky already ;)")
-            })
-        })
-        .await
-        .unwrap(); // TODO remove unwrap with logging
-    }
 
     // posts a training to the signup board
-    async fn post_training(&self, ctx: &Context, training: &db::Training) -> Result<Message> {
+    async fn post_training(ctx: &Context, training: &db::Training) -> Result<Message> {
         // Load all channels for category from the guild that are in the category
         let channel_category: ChannelId = db::Config::load(ctx, SIGNUP_BOARD_NAME.to_string())
             .await?
@@ -157,7 +111,7 @@ impl SignupBoard {
                     });
                     m.components(|c| {
                         if training.state.eq(&db::TrainingState::Open) {
-                            c.add_action_row(components::signup_action_row());
+                            c.add_action_row(components::signup_action_row(training.id));
                         }
                         c
                     })
@@ -174,7 +128,7 @@ impl SignupBoard {
                         });
                         m.components(|c| {
                             if training.state.eq(&db::TrainingState::Open) {
-                                c.add_action_row(components::signup_action_row());
+                                c.add_action_row(components::signup_action_row(training.id));
                             }
                             c
                         })
@@ -185,7 +139,7 @@ impl SignupBoard {
         Ok(msg)
     }
 
-    async fn delete_training(&self, ctx: &Context, training: &db::Training) -> Result<Message> {
+    async fn delete_training(ctx: &Context, training: &db::Training) -> Result<Message> {
         // Load all channels for category from the guild that are in the category
         let channel_category: ChannelId = db::Config::load(ctx, SIGNUP_BOARD_NAME.to_string())
             .await?
@@ -263,30 +217,22 @@ impl SignupBoard {
 
     // This updates or inserts a training to the signup board
     // Try to avoid calling this too often since it does a lot of networking
-    pub async fn update_training(
-        &self,
-        ctx: &Context,
-        training_id: i32,
-    ) -> Result<Option<Message>> {
+    pub async fn update_training(ctx: &Context, training_id: i32) -> Result<Option<Message>> {
         let training = db::Training::by_id(ctx, training_id).await?;
         // only accept correct state
         match training.state {
             db::TrainingState::Open | db::TrainingState::Closed | db::TrainingState::Started => {
-                let msg = self.post_training(ctx, &training).await?;
-                // Message posted, register for button interactions
-                self.current.insert(msg.id, training.id);
+                let msg = Self::post_training(ctx, &training).await?;
                 Ok(Some(msg))
             }
             _ => {
-                let msg = self.delete_training(ctx, &training).await?;
-                // Message removed. No more buttons reactions
-                self.current.remove(&msg.id);
+                let msg = Self::delete_training(ctx, &training).await?;
                 Ok(None)
             }
         }
     }
 
-    pub async fn reset(&self, ctx: &Context) -> Result<()> {
+    pub async fn reset(ctx: &Context) -> Result<()> {
         // Load all channels for category from the guild that are in the category
         let channel_category: ChannelId = db::Config::load(ctx, SIGNUP_BOARD_NAME.to_string())
             .await?
@@ -319,7 +265,7 @@ impl SignupBoard {
         let trainings = db::Training::all_active(ctx).await?;
         for t in trainings {
             // rather inefficient since update_training calls the db again
-            self.update_training(ctx, t.id).await?;
+            SignupBoard::update_training(ctx, t.id).await?;
         }
 
         Ok(())

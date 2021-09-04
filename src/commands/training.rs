@@ -3,6 +3,7 @@ use crate::{
     components, data, db,
     embeds::*,
     log::*,
+    signup_board::SignupBoard,
     utils::{self, *},
 };
 use serde::ser::{Serialize, SerializeStruct, Serializer};
@@ -216,14 +217,9 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             .collect::<Vec<_>>();
         future::try_join_all(futs).await.log_unexpected_reply(msg)?;
 
-        let board = {
-            let read_lock = ctx.data.read().await;
-            read_lock.get::<data::SignupBoardData>().unwrap().clone()
-        };
-
         let mut embed = serenity::builder::CreateEmbed::default();
         for id in training_id {
-            let res = board.update_training(ctx, id).await.log_reply(msg);
+            let res = SignupBoard::update_training(ctx, id).await.log_reply(msg);
             match res {
                 Ok(some) => match some {
                     Some(msg) => {

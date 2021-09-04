@@ -1,3 +1,4 @@
+use crate::components::ButtonTrainingInteraction;
 use crate::data::LogConfigData;
 use crate::utils;
 use serenity::{framework::standard::CommandResult, model::prelude::*, prelude::*};
@@ -6,7 +7,10 @@ use std::ops::FnOnce;
 
 pub enum LogType<'a> {
     Command(&'a serenity::model::channel::Message),
-    Interaction(&'a str),
+    Interaction {
+        i: &'a ButtonTrainingInteraction,
+        m: &'a serenity::model::interactions::message_component::InteractionMessage,
+    },
 }
 
 #[derive(Debug)]
@@ -237,8 +241,21 @@ async fn log_to_channel<'a, T>(
                     true,
                 );
                 match kind {
-                    LogType::Interaction(i) => {
-                        e.field("Interaction", i, true);
+                    LogType::Interaction { i, m } => {
+                        e.field(
+                            "Interaction",
+                            format!(
+                                "`{}`\n{}",
+                                i,
+                                match m.clone().regular() {
+                                    Some(m) => {
+                                        format!("[Link]({})", m.link())
+                                    }
+                                    None => "Hidden message".to_string(),
+                                }
+                            ),
+                            true,
+                        );
                     }
                     LogType::Command(c) => {
                         e.field(
@@ -329,6 +346,41 @@ where
 
     // Log to channel
     log_to_channel(ctx, &res, LogType::Command(cmd_msg), &cmd_msg.author).await;
+
+    // Convert to CommandError
+    match res {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e.into()),
+    }
+}
+
+pub async fn log_interaction<F, Fut>(
+    ctx: &Context,
+    action: &serenity::model::interactions::message_component::MessageComponentInteraction,
+    i: &ButtonTrainingInteraction,
+    f: F,
+) -> CommandResult
+where
+    F: FnOnce() -> Fut + Send,
+    Fut: Future<Output = LogResult<()>> + Send,
+{
+    let res = f().await;
+
+    // Reply with error
+    if let Err(err) = &res {
+        log_reply(ctx, err).await;
+    }
+
+    log_to_channel(
+        ctx,
+        &res,
+        LogType::Interaction {
+            i,
+            m: &action.message,
+        },
+        &action.user,
+    )
+    .await;
 
     // Convert to CommandError
     match res {

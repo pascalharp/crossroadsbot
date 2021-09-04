@@ -1,4 +1,4 @@
-use crossroadsbot::{commands, data::*, db, signup_board::*, utils::DIZZY_EMOJI};
+use crossroadsbot::{commands, data::*, db, signup_board::*, utils::{self, DIZZY_EMOJI}};
 use dashmap::DashSet;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
@@ -50,15 +50,7 @@ impl EventHandler for Handler {
             info!("Signup board category not found in db");
         } else {
             info!("Resetting signup board");
-            ctx.data
-                .read()
-                .await
-                .get::<SignupBoardData>()
-                .unwrap()
-                .clone()
-                .reset(&ctx)
-                .await
-                .ok();
+            SignupBoard::reset(&ctx).await.ok();
         }
     }
 
@@ -73,16 +65,7 @@ impl EventHandler for Handler {
             None => return,
         };
 
-        let board = {
-            ctx.data
-                .read()
-                .await
-                .get::<SignupBoardData>()
-                .unwrap()
-                .clone()
-        };
-
-        board.interaction(&ctx, &interaction).await;
+        utils::button_interaction(&ctx, &interaction).await;
     }
 }
 
@@ -192,7 +175,6 @@ async fn main() {
             emoji_guild_id,
         }));
         data.insert::<LogConfigData>(Arc::new(RwLock::new(LogConfig { log: None })));
-        data.insert::<SignupBoardData>(Arc::new(SignupBoard::new()));
         data.insert::<DBPoolData>(Arc::new(db::DBPool::new()));
     }
 
