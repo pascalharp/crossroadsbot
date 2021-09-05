@@ -160,6 +160,13 @@ pub fn signup_action_row(training_id: i32) -> CreateActionRow {
     ar
 }
 
+pub fn edit_leave_action_row(training_id: i32) -> CreateActionRow {
+    let mut ar = CreateActionRow::default();
+    ar.add_button(ButtonTrainingInteraction::Edit(training_id).button());
+    ar.add_button(ButtonTrainingInteraction::Leave(training_id).button());
+    ar
+}
+
 // Only 5 buttons per row possible
 // will never return more than 4 row to leave space or confirm/abort
 pub fn role_action_row(roles: &Vec<db::Role>) -> Vec<CreateActionRow> {

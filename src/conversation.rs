@@ -31,11 +31,14 @@ impl fmt::Display for ConversationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ConversationError::ConversationLocked => {
-                write!(f, "Already in another DM conversation")
+                write!(
+                    f,
+                    "Already in another DM conversation. Please finish that one first =D"
+                )
             }
             ConversationError::NoDmChannel => write!(f, "Unable to load DM channel"),
             ConversationError::DmBlocked => {
-                write!(f, "Unable to send message in DM channel")
+                write!(f, "Unable to send message in DM's. Make sure DM's are allowed or add me (the bot) as a friend")
             }
             ConversationError::TimedOut => {
                 write!(f, "Conversation timed out")

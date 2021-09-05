@@ -234,3 +234,51 @@ pub fn not_signed_up_embed(training: &db::Training) -> CreateEmbed {
     );
     e
 }
+
+pub fn already_signed_up_embed(training: &db::Training) -> CreateEmbed {
+    let mut e = CreateEmbed::xdefault();
+    e.color((255, 0, 0));
+    e.title(format!("Already signed up"));
+    e.field(
+        "You are already signed up for training:",
+        &training.title,
+        false,
+    );
+    e.field(
+        "If you want to edit this training use:",
+        format!("`{}edit {}`", GLOB_COMMAND_PREFIX, training.id),
+        false,
+    );
+    e.field(
+        "If you want to leave this training use:",
+        format!("`{}leave {}`", GLOB_COMMAND_PREFIX, training.id),
+        false,
+    );
+    e
+}
+
+pub fn success_signed_up(training: &db::Training) -> CreateEmbed {
+    let mut e = CreateEmbed::xdefault();
+    e.xstyle();
+    e.color((0, 255, 0));
+    e.title("Successfully signed up");
+    e.description(
+        "To edit your signup or to sign out use the buttons below or one of the following command",
+    );
+    e.field(
+        "To edit your sign up:",
+        format!("`{}edit {}`", GLOB_COMMAND_PREFIX, training.id),
+        false,
+    );
+    e.field(
+        "To remove your sign up:",
+        format!("`{}leave {}`", GLOB_COMMAND_PREFIX, training.id),
+        false,
+    );
+    e.field(
+        "To list all your current sign ups:",
+        format!("`{}list`", GLOB_COMMAND_PREFIX),
+        false,
+    );
+    e
+}
