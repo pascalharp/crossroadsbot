@@ -221,12 +221,13 @@ pub fn not_registered_embed() -> CreateEmbed {
 pub fn not_signed_up_embed(training: &db::Training) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
     e.color((255, 0, 0));
-    e.description(format!("{} No signup found", CROSS_EMOJI));
-    e.field(
-        "You are not yet signed up for training:",
-        &training.title,
-        false,
-    );
+    e.title(format!(
+        "{} No signup found for: {} {}",
+        DIZZY_EMOJI,
+        training.title,
+        training.date.date()
+    ));
+    e.description("To sign up use the button below or one of the following commands");
     e.field(
         "If you want to join this training use:",
         format!("`{}join {}`", GLOB_COMMAND_PREFIX, training.id),
@@ -238,7 +239,14 @@ pub fn not_signed_up_embed(training: &db::Training) -> CreateEmbed {
 pub fn already_signed_up_embed(training: &db::Training) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
     e.color((255, 0, 0));
-    e.title(format!("Already signed up"));
+    e.title(format!(
+        "Already signed up for: {} {}",
+        training.title,
+        training.date.date()
+    ));
+    e.description(
+        "To edit your signup or to sign out use the buttons below or one of the following commands",
+    );
     e.field(
         "You are already signed up for training:",
         &training.title,
@@ -261,7 +269,11 @@ pub fn success_signed_up(training: &db::Training) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
     e.xstyle();
     e.color((0, 255, 0));
-    e.title("Successfully signed up");
+    e.title(format!(
+        "Successfully signed up for: {} {}",
+        training.title,
+        training.date.date()
+    ));
     e.description(
         "To edit your signup or to sign out use the buttons below or one of the following commands",
     );
@@ -287,7 +299,11 @@ pub fn signed_out_embed(training: &db::Training) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
     e.xstyle();
     e.color((0, 255, 0));
-    e.title("Successfully signed out");
+    e.title(format!(
+        "Successfully signed out from {} {}",
+        training.title,
+        training.date.date()
+    ));
     e.description("To sign up again use the button below or one of the following commands");
     e.field(
         "To join the training:",
