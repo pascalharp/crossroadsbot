@@ -1,11 +1,14 @@
 use crate::{components, data, db, embeds};
+use chrono::Datelike;
+use chrono::NaiveDate;
 use serenity::{model::prelude::*, prelude::*};
+use std::convert::TryFrom;
 use std::sync::Arc;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub const SIGNUP_BOARD_NAME: &str = "signup_board_id";
-const CHANNEL_TIME_FORMAT: &str = "%a-%e-%b-%Y";
+const CHANNEL_TIME_FORMAT: &str = "%a-%d-%b-%Y";
 
 // We are not holding on to any information
 pub struct SignupBoard {}
@@ -49,16 +52,13 @@ impl SignupBoard {
         let channel = match channel {
             Some(ch) => ch,
             None => {
-                guild_id
-                    .create_channel(ctx, |ch| {
-                        ch.category(channel_category);
-                        ch.kind(ChannelType::Text);
-                        ch.topic("Use the buttons to join/edite/delete signups");
-                        ch.name(time_fmt);
-                        // TODO figure out position
-                        ch
-                    })
-                    .await?
+                SignupBoard::insert_channel_ordered(
+                    ctx,
+                    guild_id,
+                    channel_category,
+                    training.date.date(),
+                )
+                .await?
             }
         };
 
@@ -222,6 +222,34 @@ impl SignupBoard {
                 Ok(None)
             }
         }
+    }
+
+    // cit is ChannelCategory Id
+    async fn insert_channel_ordered(
+        ctx: &Context,
+        gid: GuildId,
+        cit: ChannelId,
+        date: NaiveDate,
+    ) -> Result<GuildChannel> {
+        let date_num =
+            date.day0() + (date.month0() << 6u32) + (u32::try_from(date.year())? << (6u32 + 5u32));
+
+        let time_fmt = date
+            .format(CHANNEL_TIME_FORMAT)
+            .to_string()
+            .to_lowercase()
+            .replace(" ", "");
+
+        Ok(gid
+            .create_channel(ctx, |ch| {
+                ch.category(cit);
+                ch.kind(ChannelType::Text);
+                ch.topic("Use the buttons to join/edite/delete signups");
+                ch.name(time_fmt);
+                ch.position(date_num);
+                ch
+            })
+            .await?)
     }
 
     pub async fn reset(ctx: &Context) -> Result<()> {

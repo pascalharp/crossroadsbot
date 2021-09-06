@@ -82,9 +82,7 @@ pub async fn set_signup_board_category(
 #[num_args(0)]
 pub async fn signup_board_reset(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
     log_command(ctx, msg, || async {
-        // TODO
-        msg.react(ctx, ReactionType::from(utils::DIZZY_EMOJI))
-            .await?;
+        signup_board::SignupBoard::reset(ctx).await.log_reply(msg)?;
         Ok(())
     })
     .await
