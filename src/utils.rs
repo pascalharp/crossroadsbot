@@ -193,6 +193,204 @@ async fn join_button_interaction(
     Ok(())
 }
 
+pub async fn edit_button_interaction(
+    ctx: &Context,
+    mci: &MessageComponentInteraction,
+    tid: i32,
+    db_user: &db::User,
+) -> LogResult<()> {
+    let training = match db::Training::by_id_and_state(ctx, tid, db::TrainingState::Open).await {
+        Ok(t) => t,
+        Err(diesel::NotFound) => {
+            return mci
+                .create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        d.flags(CallbackDataFlags::EPHEMERAL);
+                        d.content(Mention::from(&mci.user));
+                        d.content(format!(
+                            "{} This training is not open for sign up right now",
+                            Mention::from(&mci.user)
+                        ));
+                        d
+                    })
+                })
+                .await
+                .log_only();
+        }
+        Err(e) => return Err(e).log_only(),
+    };
+
+    // check that there is a signup already
+    let signup = match db::Signup::by_user_and_training(ctx, db_user, &training).await {
+        Err(diesel::NotFound) => {
+            return mci
+                .create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        d.flags(CallbackDataFlags::EPHEMERAL);
+                        d.content(Mention::from(&mci.user));
+                        d.add_embed(not_signed_up_embed(&training));
+                        d.components(|c| c.add_action_row(join_action_row(training.id)));
+                        d
+                    })
+                })
+                .await
+                .log_only();
+        }
+        Ok(o) => o,
+        Err(e) => return Err(e).log_only(),
+    };
+
+    let mut conv = match Conversation::init(ctx, &mci.user, training_base_embed(&training)).await {
+        Ok(conv) => {
+            if mci
+                .channel_id
+                .to_channel(ctx)
+                .await
+                .map_or(false, |c| c.private().is_none())
+            {
+                // Give user hint
+                mci.create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        d.flags(CallbackDataFlags::EPHEMERAL);
+                        d.content(format!(
+                            "{} Check DM's {}",
+                            Mention::from(&mci.user),
+                            ENVELOP_EMOJI
+                        ));
+                        d
+                    })
+                })
+                .await
+                .ok();
+            }
+            conv
+        }
+        Err(e) => {
+            mci.create_interaction_response(ctx, |r| {
+                r.kind(InteractionResponseType::ChannelMessageWithSource);
+                r.interaction_response_data(|d| {
+                    d.flags(CallbackDataFlags::EPHEMERAL);
+                    d.content(format!("{} {}", Mention::from(&mci.user), e.to_string()));
+                    d
+                })
+            })
+            .await
+            .ok();
+            return Err(e).log_only();
+        }
+    };
+
+    let roles = training
+        .all_roles(ctx)
+        .await
+        .log_unexpected_reply(&conv.msg)?;
+    let roles_lookup: HashMap<String, &db::Role> =
+        roles.iter().map(|r| (String::from(&r.repr), r)).collect();
+
+    // Get new roles from user
+    let mut selected: HashSet<String> = HashSet::with_capacity(roles.len());
+    let already_selected = signup.get_roles(ctx).await?;
+    for r in already_selected {
+        selected.insert(r.repr);
+    }
+    let selected = select_roles(ctx, &mut conv.msg, &conv.user, &roles, selected)
+        .await
+        .log_reply(&conv.msg)?;
+
+    // Save new roles
+    signup
+        .clear_roles(ctx)
+        .await
+        .log_unexpected_reply(&conv.msg)?;
+    let futs = selected.iter().filter_map(|r| {
+        roles_lookup
+            .get(r)
+            .and_then(|r| Some(signup.add_role(ctx, *r)))
+    });
+    future::try_join_all(futs).await?;
+
+    conv.msg
+        .edit(ctx, |m| {
+            m.add_embed(|e| {
+                e.0 = success_signed_up(&training).0;
+                e
+            });
+            m.components(|c| c.add_action_row(edit_leave_action_row(training.id)));
+            m
+        })
+        .await?;
+
+    Ok(())
+}
+
+pub async fn leave_button_interaction(
+    ctx: &Context,
+    mci: &MessageComponentInteraction,
+    tid: i32,
+    db_user: &db::User,
+) -> LogResult<()> {
+    let training = match db::Training::by_id_and_state(ctx, tid, db::TrainingState::Open).await {
+        Ok(t) => t,
+        Err(diesel::NotFound) => {
+            return mci
+                .create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        d.flags(CallbackDataFlags::EPHEMERAL);
+                        d.content(Mention::from(&mci.user));
+                        d.content(format!(
+                            "{} This training is not open right now",
+                            Mention::from(&mci.user)
+                        ));
+                        d
+                    })
+                })
+                .await
+                .log_only();
+        }
+        Err(e) => return Err(e).log_only(),
+    };
+
+    // check that there is a signup already
+    let signup = match db::Signup::by_user_and_training(ctx, db_user, &training).await {
+        Err(diesel::NotFound) => {
+            return mci
+                .create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        d.flags(CallbackDataFlags::EPHEMERAL);
+                        d.content(Mention::from(&mci.user));
+                        d.add_embed(not_signed_up_embed(&training));
+                        d.components(|c| c.add_action_row(join_action_row(training.id)));
+                        d
+                    })
+                })
+                .await
+                .log_only();
+        }
+        Ok(o) => o,
+        Err(e) => return Err(e).log_only(),
+    };
+
+    signup.remove(ctx).await.log_only()?;
+    mci.create_interaction_response(ctx, |r| {
+        r.kind(InteractionResponseType::ChannelMessageWithSource);
+        r.interaction_response_data(|d| {
+            d.flags(CallbackDataFlags::EPHEMERAL);
+            d.content(Mention::from(&mci.user));
+            d.add_embed(signed_out_embed(&training));
+            d.components(|c| c.add_action_row(join_action_row(training.id)));
+            d
+        })
+    })
+    .await
+    .log_only()?;
+    Ok(())
+}
+
 pub async fn button_interaction(ctx: &Context, mci: &MessageComponentInteraction) {
     // Check first if it is an interaction to handle
 
@@ -227,7 +425,12 @@ pub async fn button_interaction(ctx: &Context, mci: &MessageComponentInteraction
             ButtonTrainingInteraction::Join(id) => {
                 join_button_interaction(ctx, &mci, id, &db_user).await?
             }
-            _ => unimplemented!(), // TODO
+            ButtonTrainingInteraction::Edit(id) => {
+                edit_button_interaction(ctx, &mci, id, &db_user).await?
+            }
+            ButtonTrainingInteraction::Leave(id) => {
+                leave_button_interaction(ctx, &mci, id, &db_user).await?
+            }
         }
 
         Ok(())

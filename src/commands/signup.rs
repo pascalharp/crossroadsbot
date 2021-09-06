@@ -1,4 +1,4 @@
-use crate::{conversation::*, data, db, embeds::*, log::*, utils};
+use crate::{components::*, conversation::*, data, db, embeds::*, log::*, utils};
 use regex::Regex;
 use serenity::builder::CreateEmbed;
 use serenity::framework::standard::{
@@ -161,7 +161,9 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 m.add_embed(|e| {
                     e.0 = success_signed_up(&training).0;
                     e
-                })
+                });
+                m.components(|c| c.add_action_row(edit_leave_action_row(training.id)));
+                m
             })
             .await?;
 
@@ -240,10 +242,11 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
                 m.reference_message(msg);
                 m.content("");
                 m.embed(|e| {
-                    e.xstyle();
-                    e.description(format!("{} Signup removed", utils::CHECK_EMOJI));
-                    e.field("Signup removed for training:", &training.title, false)
-                })
+                    e.0 = signed_out_embed(&training).0;
+                    e
+                });
+                m.components(|c| c.add_action_row(join_action_row(training.id)));
+                m
             })
             .await?;
         Ok(())
@@ -328,26 +331,11 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         conv.msg
             .edit(ctx, |m| {
                 m.add_embed(|e| {
-                    e.xstyle();
-                    e.color((0, 255, 0));
-                    e.description("Successfully edited");
-                    e.field(
-                        "To edit your sign up:",
-                        format!("`{}edit {}`", data::GLOB_COMMAND_PREFIX, training.id),
-                        false,
-                    );
-                    e.field(
-                        "To remove your sign up:",
-                        format!("`{}leave {}`", data::GLOB_COMMAND_PREFIX, training.id),
-                        false,
-                    );
-                    e.field(
-                        "To list all your current sign ups:",
-                        format!("`{}list`", data::GLOB_COMMAND_PREFIX),
-                        false,
-                    );
+                    e.0 = success_signed_up(&training).0;
                     e
-                })
+                });
+                m.components(|c| c.add_action_row(edit_leave_action_row(training.id)));
+                m
             })
             .await?;
 

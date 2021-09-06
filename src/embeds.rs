@@ -263,7 +263,7 @@ pub fn success_signed_up(training: &db::Training) -> CreateEmbed {
     e.color((0, 255, 0));
     e.title("Successfully signed up");
     e.description(
-        "To edit your signup or to sign out use the buttons below or one of the following command",
+        "To edit your signup or to sign out use the buttons below or one of the following commands",
     );
     e.field(
         "To edit your sign up:",
@@ -273,6 +273,25 @@ pub fn success_signed_up(training: &db::Training) -> CreateEmbed {
     e.field(
         "To remove your sign up:",
         format!("`{}leave {}`", GLOB_COMMAND_PREFIX, training.id),
+        false,
+    );
+    e.field(
+        "To list all your current sign ups:",
+        format!("`{}list`", GLOB_COMMAND_PREFIX),
+        false,
+    );
+    e
+}
+
+pub fn signed_out_embed(training: &db::Training) -> CreateEmbed {
+    let mut e = CreateEmbed::xdefault();
+    e.xstyle();
+    e.color((0, 255, 0));
+    e.title("Successfully signed out");
+    e.description("To sign up again use the button below or one of the following commands");
+    e.field(
+        "To join the training:",
+        format!("`{}join {}`", GLOB_COMMAND_PREFIX, training.id),
         false,
     );
     e.field(
