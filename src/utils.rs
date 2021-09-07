@@ -47,6 +47,7 @@ async fn join_button_interaction(
     tid: i32,
     db_user: &db::User,
 ) -> LogResult<()> {
+    let in_pub = in_public_channel(ctx, mci).await;
     let training = match db::Training::by_id_and_state(ctx, tid, db::TrainingState::Open).await {
         Ok(t) => t,
         Err(diesel::NotFound) => {
@@ -54,7 +55,9 @@ async fn join_button_interaction(
                 .create_interaction_response(ctx, |r| {
                     r.kind(InteractionResponseType::ChannelMessageWithSource);
                     r.interaction_response_data(|d| {
-                        d.flags(CallbackDataFlags::EPHEMERAL);
+                        if in_pub {
+                            d.flags(CallbackDataFlags::EPHEMERAL);
+                        }
                         d.content(Mention::from(&mci.user));
                         d.content(format!(
                             "{} This training is not open for sign up right now",
@@ -77,7 +80,9 @@ async fn join_button_interaction(
                 .create_interaction_response(ctx, |r| {
                     r.kind(InteractionResponseType::ChannelMessageWithSource);
                     r.interaction_response_data(|d| {
-                        d.flags(CallbackDataFlags::EPHEMERAL);
+                        if in_pub {
+                            d.flags(CallbackDataFlags::EPHEMERAL);
+                        }
                         d.content(Mention::from(&mci.user));
                         d.add_embed(already_signed_up_embed(&training));
                         d.components(|c| c.add_action_row(edit_leave_action_row(training.id)));
@@ -98,7 +103,9 @@ async fn join_button_interaction(
                     .create_interaction_response(ctx, |r| {
                         r.kind(InteractionResponseType::ChannelMessageWithSource);
                         r.interaction_response_data(|d| {
-                            d.flags(CallbackDataFlags::EPHEMERAL);
+                            if in_pub {
+                                d.flags(CallbackDataFlags::EPHEMERAL);
+                            }
                             d.content(format!(
                                 "{} Tier requirement not passed! Required tier: {}",
                                 Mention::from(&mci.user),
@@ -116,24 +123,28 @@ async fn join_button_interaction(
 
     let mut conv = match Conversation::init(ctx, &mci.user, training_base_embed(&training)).await {
         Ok(conv) => {
-            if mci
-                .channel_id
-                .to_channel(ctx)
-                .await
-                .map_or(false, |c| c.private().is_none())
-            {
+            if in_pub {
                 // Give user hint
                 mci.create_interaction_response(ctx, |r| {
                     r.kind(InteractionResponseType::ChannelMessageWithSource);
                     r.interaction_response_data(|d| {
                         d.flags(CallbackDataFlags::EPHEMERAL);
                         d.content(format!(
-                            "{} Check DM's {}",
+                            "{} Check [DM's]({}) {}",
                             Mention::from(&mci.user),
+                            conv.msg.link(),
                             ENVELOP_EMOJI
                         ));
                         d
                     })
+                })
+                .await
+                .ok();
+            } else
+            // Just confirm the button interaction
+            {
+                mci.create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::DeferredUpdateMessage)
                 })
                 .await
                 .ok();
@@ -144,7 +155,9 @@ async fn join_button_interaction(
             mci.create_interaction_response(ctx, |r| {
                 r.kind(InteractionResponseType::ChannelMessageWithSource);
                 r.interaction_response_data(|d| {
-                    d.flags(CallbackDataFlags::EPHEMERAL);
+                    if in_pub {
+                        d.flags(CallbackDataFlags::EPHEMERAL);
+                    }
                     d.content(format!("{} {}", Mention::from(&mci.user), e.to_string()));
                     d
                 })
@@ -199,6 +212,7 @@ pub async fn edit_button_interaction(
     tid: i32,
     db_user: &db::User,
 ) -> LogResult<()> {
+    let in_pub = in_public_channel(ctx, mci).await;
     let training = match db::Training::by_id_and_state(ctx, tid, db::TrainingState::Open).await {
         Ok(t) => t,
         Err(diesel::NotFound) => {
@@ -206,7 +220,9 @@ pub async fn edit_button_interaction(
                 .create_interaction_response(ctx, |r| {
                     r.kind(InteractionResponseType::ChannelMessageWithSource);
                     r.interaction_response_data(|d| {
-                        d.flags(CallbackDataFlags::EPHEMERAL);
+                        if in_pub {
+                            d.flags(CallbackDataFlags::EPHEMERAL);
+                        }
                         d.content(Mention::from(&mci.user));
                         d.content(format!(
                             "{} This training is not open for sign up right now",
@@ -228,7 +244,9 @@ pub async fn edit_button_interaction(
                 .create_interaction_response(ctx, |r| {
                     r.kind(InteractionResponseType::ChannelMessageWithSource);
                     r.interaction_response_data(|d| {
-                        d.flags(CallbackDataFlags::EPHEMERAL);
+                        if in_pub {
+                            d.flags(CallbackDataFlags::EPHEMERAL);
+                        }
                         d.content(Mention::from(&mci.user));
                         d.add_embed(not_signed_up_embed(&training));
                         d.components(|c| c.add_action_row(join_action_row(training.id)));
@@ -244,24 +262,26 @@ pub async fn edit_button_interaction(
 
     let mut conv = match Conversation::init(ctx, &mci.user, training_base_embed(&training)).await {
         Ok(conv) => {
-            if mci
-                .channel_id
-                .to_channel(ctx)
-                .await
-                .map_or(false, |c| c.private().is_none())
-            {
+            if in_pub {
                 // Give user hint
                 mci.create_interaction_response(ctx, |r| {
                     r.kind(InteractionResponseType::ChannelMessageWithSource);
                     r.interaction_response_data(|d| {
                         d.flags(CallbackDataFlags::EPHEMERAL);
                         d.content(format!(
-                            "{} Check DM's {}",
+                            "{} Check [DM's]({}) {}",
                             Mention::from(&mci.user),
+                            conv.msg.link(),
                             ENVELOP_EMOJI
                         ));
                         d
                     })
+                })
+                .await
+                .ok();
+            } else {
+                mci.create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::DeferredUpdateMessage)
                 })
                 .await
                 .ok();
@@ -272,7 +292,9 @@ pub async fn edit_button_interaction(
             mci.create_interaction_response(ctx, |r| {
                 r.kind(InteractionResponseType::ChannelMessageWithSource);
                 r.interaction_response_data(|d| {
-                    d.flags(CallbackDataFlags::EPHEMERAL);
+                    if in_pub {
+                        d.flags(CallbackDataFlags::EPHEMERAL);
+                    }
                     d.content(format!("{} {}", Mention::from(&mci.user), e.to_string()));
                     d
                 })
@@ -332,6 +354,7 @@ pub async fn leave_button_interaction(
     tid: i32,
     db_user: &db::User,
 ) -> LogResult<()> {
+    let in_pub = in_public_channel(ctx, mci).await;
     let training = match db::Training::by_id_and_state(ctx, tid, db::TrainingState::Open).await {
         Ok(t) => t,
         Err(diesel::NotFound) => {
@@ -339,7 +362,9 @@ pub async fn leave_button_interaction(
                 .create_interaction_response(ctx, |r| {
                     r.kind(InteractionResponseType::ChannelMessageWithSource);
                     r.interaction_response_data(|d| {
-                        d.flags(CallbackDataFlags::EPHEMERAL);
+                        if in_pub {
+                            d.flags(CallbackDataFlags::EPHEMERAL);
+                        }
                         d.content(Mention::from(&mci.user));
                         d.content(format!(
                             "{} This training is not open right now",
@@ -361,7 +386,9 @@ pub async fn leave_button_interaction(
                 .create_interaction_response(ctx, |r| {
                     r.kind(InteractionResponseType::ChannelMessageWithSource);
                     r.interaction_response_data(|d| {
-                        d.flags(CallbackDataFlags::EPHEMERAL);
+                        if in_pub {
+                            d.flags(CallbackDataFlags::EPHEMERAL);
+                        }
                         d.content(Mention::from(&mci.user));
                         d.add_embed(not_signed_up_embed(&training));
                         d.components(|c| c.add_action_row(join_action_row(training.id)));
@@ -379,7 +406,9 @@ pub async fn leave_button_interaction(
     mci.create_interaction_response(ctx, |r| {
         r.kind(InteractionResponseType::ChannelMessageWithSource);
         r.interaction_response_data(|d| {
-            d.flags(CallbackDataFlags::EPHEMERAL);
+            if in_pub {
+                d.flags(CallbackDataFlags::EPHEMERAL);
+            }
             d.content(Mention::from(&mci.user));
             d.add_embed(signed_out_embed(&training));
             d.components(|c| c.add_action_row(join_action_row(training.id)));
@@ -399,6 +428,8 @@ pub async fn button_interaction(ctx: &Context, mci: &MessageComponentInteraction
         Ok(a) => a,
     };
 
+    let in_pub = in_public_channel(ctx, mci).await;
+
     log_interaction(ctx, &mci, &bti, || async {
         // Check if user is registerd
         let db_user = match db::User::by_discord_id(ctx, mci.user.id).await {
@@ -408,7 +439,9 @@ pub async fn button_interaction(ctx: &Context, mci: &MessageComponentInteraction
                     .create_interaction_response(ctx, |r| {
                         r.kind(InteractionResponseType::ChannelMessageWithSource);
                         r.interaction_response_data(|d| {
-                            d.flags(CallbackDataFlags::EPHEMERAL);
+                            if in_pub {
+                                d.flags(CallbackDataFlags::EPHEMERAL);
+                            }
                             d.content(Mention::from(&mci.user));
                             d.add_embed(not_registered_embed())
                         })
@@ -467,6 +500,13 @@ pub async fn verify_tier(
         .iter()
         .any(|t| roles_set.contains(&RoleId::from(t.discord_role_id as u64)));
     Ok((passed, tier.name.clone()))
+}
+
+async fn in_public_channel(ctx: &Context, mci: &MessageComponentInteraction) -> bool {
+    mci.channel_id
+        .to_channel(ctx)
+        .await
+        .map_or(false, |c| c.private().is_none())
 }
 
 /// Looks at the user permissions and filters out trainings the user has not sufficient permissions

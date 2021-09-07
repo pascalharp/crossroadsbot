@@ -93,7 +93,6 @@ impl SignupBoard {
             }
         };
 
-        // TODO add components
         let msg = match msg {
             Some(mut msg) => {
                 msg.edit(ctx, |m| {
