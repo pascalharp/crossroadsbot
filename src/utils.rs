@@ -40,6 +40,8 @@ pub const MEMO_EMOJI: char = '📝';
 pub const GREEN_SQUARE_EMOJI: char = '🟩';
 pub const RED_SQUARE_EMOJI: char = '🟥';
 pub const ALARM_CLOCK_EMOJI: char = '⏰';
+pub const RIGHT_ARROW_EMOJI: char = '➡';
+pub const LEFT_ARROW_EMOJI: char = '⬅';
 
 async fn join_button_interaction(
     ctx: &Context,
@@ -603,6 +605,12 @@ pub async fn select_roles(
     // HashShet with unique reprs of roles
     mut selected: HashSet<String>,
 ) -> Result<HashSet<String>> {
+    let role_pages = role_action_row(roles);
+    if role_pages.is_empty() {
+        return Err("No roles provided".into());
+    }
+    let mut role_page_curr: usize = 0;
+
     let orig_embeds = msg
         .embeds
         .clone()
@@ -612,14 +620,32 @@ pub async fn select_roles(
     msg.edit(ctx, |m| {
         m.add_embed(|e| {
             e.0 = select_roles_embed(roles, &selected).0;
-            if selected.is_empty() {
-                e.footer(|f| f.text(format!("{} Select at least one role", WARNING_EMOJI)));
-            }
+            e.footer(|f| {
+                if selected.is_empty() {
+                    f.text(format!(
+                        "Page {}/{}\n{} Select at least one role",
+                        role_page_curr + 1,
+                        role_pages.len(),
+                        WARNING_EMOJI
+                    ))
+                } else {
+                    f.text(format!("Page {}/{}", role_page_curr + 1, role_pages.len()))
+                }
+            });
             e
         });
         m.components(|c| {
-            c.set_action_rows(role_action_row(roles));
-            c.add_action_row(confirm_abort_action_row());
+            c.set_action_rows(role_pages.get(role_page_curr).unwrap().to_vec());
+            let mut ca_ar = confirm_abort_action_row();
+            if role_pages.len() > 1 {
+                if role_page_curr > 0 {
+                    ca_ar.add_button(prev_button());
+                }
+                if role_page_curr < role_pages.len() - 1 {
+                    ca_ar.add_button(next_button());
+                }
+            }
+            c.add_action_row(ca_ar);
             c
         });
         m
@@ -688,6 +714,98 @@ pub async fn select_roles(
                     .await?;
                     return Err(Box::new(ConversationError::Canceled));
                 }
+                ButtonResponse::Next => {
+                    if role_page_curr < (role_pages.len() - 1) {
+                        role_page_curr = role_page_curr + 1;
+                    }
+                    i.create_interaction_response(ctx, |r| {
+                        r.kind(InteractionResponseType::UpdateMessage);
+                        r.interaction_response_data(|d| {
+                            d.embeds(orig_embeds.clone());
+                            d.create_embed(|e| {
+                                e.0 = select_roles_embed(roles, &selected).0;
+                                e.footer(|f| {
+                                    if selected.is_empty() {
+                                        f.text(format!(
+                                            "Page {}/{}\n{} Select at least one role",
+                                            role_page_curr + 1,
+                                            role_pages.len(),
+                                            WARNING_EMOJI
+                                        ))
+                                    } else {
+                                        f.text(format!(
+                                            "Page {}/{}",
+                                            role_page_curr + 1,
+                                            role_pages.len()
+                                        ))
+                                    }
+                                });
+                                e
+                            });
+                            d.components(|c| {
+                                c.set_action_rows(role_pages.get(role_page_curr).unwrap().to_vec());
+                                let mut ca_ar = confirm_abort_action_row();
+                                if role_pages.len() > 1 {
+                                    if role_page_curr > 0 {
+                                        ca_ar.add_button(prev_button());
+                                    }
+                                    if role_page_curr < role_pages.len() - 1 {
+                                        ca_ar.add_button(next_button());
+                                    }
+                                }
+                                c.add_action_row(ca_ar);
+                                c
+                            })
+                        })
+                    })
+                    .await?;
+                }
+                ButtonResponse::Prev => {
+                    if role_page_curr > 0 {
+                        role_page_curr = role_page_curr - 1;
+                    }
+                    i.create_interaction_response(ctx, |r| {
+                        r.kind(InteractionResponseType::UpdateMessage);
+                        r.interaction_response_data(|d| {
+                            d.embeds(orig_embeds.clone());
+                            d.create_embed(|e| {
+                                e.0 = select_roles_embed(roles, &selected).0;
+                                e.footer(|f| {
+                                    if selected.is_empty() {
+                                        f.text(format!(
+                                            "Page {}/{}\n{} Select at least one role",
+                                            role_page_curr + 1,
+                                            role_pages.len(),
+                                            WARNING_EMOJI
+                                        ))
+                                    } else {
+                                        f.text(format!(
+                                            "Page {}/{}",
+                                            role_page_curr + 1,
+                                            role_pages.len()
+                                        ))
+                                    }
+                                });
+                                e
+                            });
+                            d.components(|c| {
+                                c.set_action_rows(role_pages.get(role_page_curr).unwrap().to_vec());
+                                let mut ca_ar = confirm_abort_action_row();
+                                if role_pages.len() > 1 {
+                                    if role_page_curr > 0 {
+                                        ca_ar.add_button(prev_button());
+                                    }
+                                    if role_page_curr < role_pages.len() - 1 {
+                                        ca_ar.add_button(next_button());
+                                    }
+                                }
+                                c.add_action_row(ca_ar);
+                                c
+                            })
+                        })
+                    })
+                    .await?;
+                }
                 ButtonResponse::Other(repr) => {
                     if selected.contains(&repr) {
                         selected.remove(&repr);
@@ -700,14 +818,22 @@ pub async fn select_roles(
                             d.embeds(orig_embeds.clone());
                             d.create_embed(|e| {
                                 e.0 = select_roles_embed(roles, &selected).0;
-                                if selected.is_empty() {
-                                    e.footer(|f| {
+                                e.footer(|f| {
+                                    if selected.is_empty() {
                                         f.text(format!(
-                                            "{} Select at least one role",
+                                            "Page {}/{}\n{} Select at least one role",
+                                            role_page_curr + 1,
+                                            role_pages.len(),
                                             WARNING_EMOJI
                                         ))
-                                    });
-                                }
+                                    } else {
+                                        f.text(format!(
+                                            "Page {}/{}",
+                                            role_page_curr + 1,
+                                            role_pages.len()
+                                        ))
+                                    }
+                                });
                                 e
                             })
                         })

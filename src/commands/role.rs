@@ -1,13 +1,7 @@
 use super::SQUADMAKER_ROLE_CHECK;
 use crate::{
-    components,
-    conversation::ConversationError,
-    data::ConfigValuesData,
-    db, embeds,
-    embeds::*,
-    log::*,
-    utils::CHECK_EMOJI,
-    utils::{CROSS_EMOJI, DEFAULT_TIMEOUT},
+    components, conversation::ConversationError, data::ConfigValuesData, db, embeds, embeds::*,
+    log::*, utils::CHECK_EMOJI, utils::DEFAULT_TIMEOUT,
 };
 use serenity::builder::CreateEmbed;
 use serenity::framework::standard::{
@@ -16,6 +10,7 @@ use serenity::framework::standard::{
 };
 use serenity::model::prelude::*;
 use serenity::prelude::*;
+use std::collections::HashSet;
 
 #[group]
 #[prefix = "role"]
@@ -50,7 +45,8 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             .into();
         }
 
-        let db_emojis: Vec<EmojiId> = roles
+        // collecting into a HashSet removes duplicates
+        let db_emojis: HashSet<EmojiId> = roles
             .iter()
             .map(|r| EmojiId::from(r.emoji as u64))
             .collect();
@@ -65,24 +61,34 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             .emoji_guild_id;
         let emoji_guild = Guild::get(ctx, gid).await.log_reply(msg)?;
 
-        // Remove already used emojis
+        // Load emojis from emoji guild for non nitro users to select
+        // Emojis from other servers are also allowed
         let available: Vec<Emoji> = emoji_guild
             .emojis
-            .values()
-            .cloned()
-            .filter(|e| !db_emojis.contains(&e.id))
+            .into_iter()
+            .map(|(_, v)| v)
             .collect();
-
-        if available.is_empty() {
-            return LogError::new("No more emojis for roles available", msg).into();
-        }
 
         let mut emb = CreateEmbed::default();
         emb.xstyle();
         emb.description("New Role");
         emb.field("Full role name", &role_name, true);
         emb.field("Short role identifier", &role_repr, true);
-        emb.footer(|f| f.text(format!("Loading emojis, please wait....")));
+        emb.field(
+            "Emojis already in use",
+            if db_emojis.is_empty() {
+                "_None_".to_string()
+            } else {
+                db_emojis.into_iter().map( |e| Mention::from(e).to_string() ).collect::<Vec<_>>().join("|")
+            },
+            false);
+        emb.footer(|f| f.text(
+            format!(
+            "{}\n{}\n{}",
+            "Emojis can be used multiple times, but should be avoided for roles that can appear in the same training",
+            "Only custom emojis are allowed. Make sure that the bot has access to the emoji!",
+            "Loading emojis, please wait...."))
+        );
 
         let mut msg = msg
             .channel_id
@@ -92,16 +98,17 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         // Present all available emojis
         // Not using buttons here, since there is a limited amount for them
         // and there might be a lot of emojis
-        for e in available.clone() {
+        for e in available {
             msg.react(ctx, e).await?;
         }
-        msg.react(ctx, CROSS_EMOJI).await?;
 
         emb.footer(|f| {
-            f.text(format!(
-                "Choose an emoji for the role. {} to abort",
-                CROSS_EMOJI
-            ))
+            f.text(
+                format!(
+                "{}\n{}\n{}",
+                "Emojis can be used multiple times, but should be avoided for roles that can appear in the same training",
+                "Only custom emojis are allowed. Make sure that the bot has access to the emoji!",
+                "Choose an emoji (no necessarily a listed one)"))
         });
 
         msg.edit(ctx, |m| m.set_embed(emb.clone())).await?;
@@ -112,19 +119,12 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             .timeout(DEFAULT_TIMEOUT)
             .author_id(author.id)
             .filter(move |r| {
-                if r.emoji == ReactionType::from(CROSS_EMOJI) {
-                    return true;
-                }
                 match r.emoji {
                     ReactionType::Custom {
                         animated: _,
-                        id,
+                        id: _,
                         name: _,
-                    } => available
-                        .iter()
-                        .map(|e| e.id)
-                        .collect::<Vec<EmojiId>>()
-                        .contains(&id),
+                    } => true, // only allow Custom Emojis
                     _ => false,
                 }
             })
@@ -141,22 +141,15 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                         id,
                         name: _,
                     } => *id,
-                    ReactionType::Unicode(s) => {
-                        if *s == String::from(CROSS_EMOJI) {
-                            return Err(ConversationError::Canceled).log_reply(&msg);
-                        }
-                        // Should never occur since filtered already filtered
-                        return LogError::new("Unexpected emoji", &msg).into();
-                    }
                     // Should never occur since filtered already filtered
-                    _ => return LogError::new("Unexpected emoji", &msg).into(),
+                    _ => return LogError::new("Invalid emoji. Only custom emojis are allowed for roles", &msg).into(),
                 }
             }
         };
 
         msg.delete_reactions(ctx).await?;
 
-        emb.field("Role Emoji", Mention::from(emoji_id), true);
+        emb.field("New Role Emoji", Mention::from(emoji_id), true);
         emb.footer(|f| f);
 
         msg.edit(ctx, |m| {

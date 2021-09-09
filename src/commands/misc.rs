@@ -17,7 +17,7 @@ use crate::utils::{self, ALARM_CLOCK_EMOJI, DEFAULT_TIMEOUT};
 use std::collections::HashSet;
 
 #[group]
-#[commands(ping, dudu, button, role_button, role_select, multi_embed, log_test)]
+#[commands(ping, dudu, button, role_select, multi_embed, log_test)]
 struct Misc;
 
 #[command]
@@ -99,25 +99,6 @@ pub async fn button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult 
                 Ok(())
             }
         }
-    })
-    .await
-}
-
-#[command]
-pub async fn role_button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
-    log_command(ctx, msg, || async {
-        let roles = db::Role::all_active(ctx).await?;
-        msg.channel_id
-            .send_message(ctx, |m| {
-                m.content("Here are all role buttons");
-                m.components(|c| {
-                    c.set_action_rows(role_action_row(&roles));
-                    c
-                });
-                m
-            })
-            .await?;
-        Ok(())
     })
     .await
 }

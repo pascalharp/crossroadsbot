@@ -1,5 +1,5 @@
 use crate::db;
-use crate::utils::{CHECK_EMOJI, MEMO_EMOJI, X_EMOJI};
+use crate::utils::{CHECK_EMOJI, LEFT_ARROW_EMOJI, MEMO_EMOJI, RIGHT_ARROW_EMOJI, X_EMOJI};
 use serenity::builder::{CreateActionRow, CreateButton};
 use serenity::model::interactions::message_component::ButtonStyle;
 use serenity::model::interactions::message_component::MessageComponentInteraction;
@@ -8,11 +8,15 @@ use std::fmt;
 
 pub const COMPONENT_LABEL_CONFIRM: &str = "Confirm";
 pub const COMPONENT_LABEL_ABORT: &str = "Abort";
+pub const COMPONENT_LABEL_NEXT: &str = "Next Page";
+pub const COMPONENT_LABEL_PREV: &str = "Previous Page";
 pub const COMPONENT_LABEL_SIGNUP_JOIN: &str = "SIGN UP";
 pub const COMPONENT_LABEL_SIGNUP_EDIT: &str = "EDIT SIGNUP";
 pub const COMPONENT_LABEL_SIGNUP_LEAVE: &str = "SIGN OUT";
-pub const COMPONENT_ID_CONFIRM: &str = "confirm";
-pub const COMPONENT_ID_ABORT: &str = "abort";
+pub const COMPONENT_ID_CONFIRM: &str = "selection_confirm";
+pub const COMPONENT_ID_ABORT: &str = "selection_abort";
+pub const COMPONENT_ID_NEXT: &str = "selection_next";
+pub const COMPONENT_ID_PREV: &str = "selection_prev";
 pub const COMPONENT_ID_SIGNUP_JOIN: &str = "join";
 pub const COMPONENT_ID_SIGNUP_EDIT: &str = "edit";
 pub const COMPONENT_ID_SIGNUP_LEAVE: &str = "leave";
@@ -20,6 +24,8 @@ pub const COMPONENT_ID_SIGNUP_LEAVE: &str = "leave";
 pub enum ButtonResponse {
     Confirm,
     Abort,
+    Next,
+    Prev,
     Other(String),
 }
 
@@ -105,6 +111,8 @@ impl fmt::Display for ButtonResponse {
         match self {
             ButtonResponse::Confirm => write!(f, "{}", COMPONENT_LABEL_CONFIRM),
             ButtonResponse::Abort => write!(f, "{}", COMPONENT_LABEL_ABORT),
+            ButtonResponse::Next => write!(f, "{}", COMPONENT_LABEL_NEXT),
+            ButtonResponse::Prev => write!(f, "{}", COMPONENT_LABEL_PREV),
             ButtonResponse::Other(s) => write!(f, "{}", s),
         }
     }
@@ -114,6 +122,8 @@ pub fn resolve_button_response(response: &MessageComponentInteraction) -> Button
     match response.data.custom_id.as_str() {
         COMPONENT_ID_CONFIRM => ButtonResponse::Confirm,
         COMPONENT_ID_ABORT => ButtonResponse::Abort,
+        COMPONENT_ID_NEXT => ButtonResponse::Next,
+        COMPONENT_ID_PREV => ButtonResponse::Prev,
         s => ButtonResponse::Other(String::from(s)),
     }
 }
@@ -133,6 +143,24 @@ pub fn abort_button() -> CreateButton {
     b.label(COMPONENT_LABEL_ABORT);
     b.custom_id(COMPONENT_ID_ABORT);
     b.emoji(ReactionType::from(X_EMOJI));
+    b
+}
+
+pub fn next_button() -> CreateButton {
+    let mut b = CreateButton::default();
+    b.style(ButtonStyle::Primary);
+    b.label(COMPONENT_LABEL_NEXT);
+    b.custom_id(COMPONENT_ID_NEXT);
+    b.emoji(ReactionType::from(RIGHT_ARROW_EMOJI));
+    b
+}
+
+pub fn prev_button() -> CreateButton {
+    let mut b = CreateButton::default();
+    b.style(ButtonStyle::Primary);
+    b.label(COMPONENT_LABEL_PREV);
+    b.custom_id(COMPONENT_ID_PREV);
+    b.emoji(ReactionType::from(LEFT_ARROW_EMOJI));
     b
 }
 
@@ -174,29 +202,30 @@ pub fn join_action_row(training_id: i32) -> CreateActionRow {
 }
 
 // Only 5 buttons per row possible
-// will never return more than 4 rows to leave space for confirm/abort
-pub fn role_action_row(roles: &Vec<db::Role>) -> Vec<CreateActionRow> {
-    // split roles to chunks
-    let role_chunks = roles.chunks(5);
-    let chunk_count = role_chunks.len();
+// This pages. One page can have up to 4 rows with 5 roles each
+// I only choose 2 rows. looks neater with embeds
+pub fn role_action_row(roles: &Vec<db::Role>) -> Vec<Vec<CreateActionRow>> {
+    // split into 5 roles for each action row
+    let role_chunks = roles.chunks(5).collect::<Vec<_>>();
+    // split into 2 action roles per page
+    let row_chunks = role_chunks.chunks(2);
 
-    // If there are too much just return none. So it will be realized XD
-    if chunk_count > 4 {
-        return Vec::with_capacity(0);
-    }
+    // Create required amount of pages
+    let mut pages: Vec<Vec<CreateActionRow>> = Vec::with_capacity(row_chunks.len());
 
-    // Create required amount of action rows
-    let mut ar: Vec<CreateActionRow> = Vec::with_capacity(chunk_count);
-    for _ in 0..chunk_count {
-        ar.push(CreateActionRow::default());
-    }
+    for rows in row_chunks {
+        // add new page
+        pages.push(Vec::with_capacity(4));
+        let new_page = pages.last_mut().unwrap();
 
-    // create buttons
-    for (i, c) in role_chunks.enumerate() {
-        for r in c {
-            // save to unwrap here since we created the correct amount
-            ar.get_mut(i).unwrap().add_button(role_button(r));
+        for r in rows {
+            // Create Action row with role buttons
+            let mut ar = CreateActionRow::default();
+            for role in r.iter() {
+                ar.add_button(role_button(role));
+            }
+            new_page.push(ar);
         }
     }
-    ar
+    pages
 }

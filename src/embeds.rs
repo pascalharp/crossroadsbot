@@ -44,24 +44,27 @@ pub fn select_roles_embed(
     roles: &Vec<db::Role>, // all roles
     sel: &HashSet<String>, // selected roles
 ) -> CreateEmbed {
+    let pages = roles.chunks(10);
     let mut e = CreateEmbed::xdefault();
-    let field_str = roles
-        .iter()
-        .map(|r| {
-            format!(
-                "`{}` | {} | {}",
-                if sel.contains(&r.repr) {
-                    CHECK_EMOJI
-                } else {
-                    RED_SQUARE_EMOJI
-                },
-                Mention::from(EmojiId::from(r.emoji as u64)),
-                r.title
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    e.field("Select roles", field_str, false);
+    for (i, p) in pages.enumerate() {
+        let field_str = p
+            .iter()
+            .map(|r| {
+                format!(
+                    "`{}` | {} | {}",
+                    if sel.contains(&r.repr) {
+                        CHECK_EMOJI
+                    } else {
+                        RED_SQUARE_EMOJI
+                    },
+                    Mention::from(EmojiId::from(r.emoji as u64)),
+                    r.title,
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        e.field(format!("Roles (Page {})", i + 1), field_str, true);
+    }
     e
 }
 
@@ -168,21 +171,24 @@ pub fn embed_add_roles(e: &mut CreateEmbed, r: &Vec<db::Role>, inline: bool) {
         .iter()
         .map(|r| r.title.len())
         .fold(usize::MIN, |max, next| std::cmp::max(max, next));
-    let roles_text = r
-        .iter()
-        .map(|r| {
-            format!(
-                "{} `| {:^rwidth$} |` `| {:^twidth$} |`",
-                Mention::from(EmojiId::from(r.emoji as u64)),
-                &r.repr,
-                &r.title,
-                rwidth = repr_width,
-                twidth = title_width
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    e.field("Roles", roles_text, inline);
+    let paged = r.chunks(10);
+    for r in paged {
+        let roles_text = r
+            .iter()
+            .map(|r| {
+                format!(
+                    "{} `| {:^rwidth$} |` `| {:^twidth$} |`",
+                    Mention::from(EmojiId::from(r.emoji as u64)),
+                    &r.repr,
+                    &r.title,
+                    rwidth = repr_width,
+                    twidth = title_width
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        e.field("Roles", roles_text, inline);
+    }
 }
 
 pub fn training_embed_add_board_footer(e: &mut CreateEmbed, ts: &db::TrainingState) {

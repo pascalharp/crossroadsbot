@@ -7,4 +7,4 @@ CREATE TABLE roles (
 	active BOOL NOT NULL DEFAULT TRUE
 );
 
-CREATE UNIQUE INDEX roles_active_constraint ON roles (repr, emoji) WHERE active
+CREATE UNIQUE INDEX roles_active_constraint ON roles(repr) WHERE active
