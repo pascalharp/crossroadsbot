@@ -1,9 +1,10 @@
 use crossroadsbot::{
     commands,
+    interactions,
     data::*,
     db,
     signup_board::*,
-    utils::{self, DIZZY_EMOJI},
+    utils::DIZZY_EMOJI,
 };
 use dashmap::DashSet;
 use diesel::pg::PgConnection;
@@ -71,7 +72,7 @@ impl EventHandler for Handler {
             None => return,
         };
 
-        utils::button_interaction(&ctx, &interaction).await;
+        interactions::button_interaction(&ctx, &interaction).await;
     }
 }
 
