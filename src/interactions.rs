@@ -1,11 +1,4 @@
-use crate::{
-    utils::*,
-    embeds::*,
-    components::*,
-    conversation::*,
-    log::*,
-    db,
-};
+use crate::{components::*, conversation::*, db, embeds::*, log::*, utils::*};
 
 use serenity::{
     futures::future,
@@ -20,7 +13,7 @@ use serenity::{
     prelude::*,
 };
 
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 async fn join_button_interaction(
     ctx: &Context,
@@ -307,10 +300,9 @@ pub async fn edit_button_interaction(
         .clear_roles(ctx)
         .await
         .log_unexpected_reply(&conv.msg)?;
-    let futs = selected.iter().filter_map(|r| {
-        roles_lookup
-            .get(r).map(|r| signup.add_role(ctx, *r))
-    });
+    let futs = selected
+        .iter()
+        .filter_map(|r| roles_lookup.get(r).map(|r| signup.add_role(ctx, *r)));
     future::try_join_all(futs).await?;
 
     conv.msg
@@ -399,17 +391,13 @@ pub async fn leave_button_interaction(
     Ok(())
 }
 
-pub async fn button_interaction(ctx: &Context, mci: &MessageComponentInteraction) {
-    // Check first if it is an interaction to handle
-
-    let bti = match mci.data.custom_id.parse::<ButtonTrainingInteraction>() {
-        Err(_) => return,
-        Ok(a) => a,
-    };
-
-    let in_pub = in_public_channel(ctx, mci).await;
-
+pub async fn button_training_interaction(
+    ctx: &Context,
+    mci: &MessageComponentInteraction,
+    bti: ButtonTrainingInteraction,
+) {
     log_interaction(ctx, mci, &bti, || async {
+        let in_pub = in_public_channel(ctx, mci).await;
         // Check if user is registerd
         let db_user = match db::User::by_discord_id(ctx, mci.user.id).await {
             Ok(u) => u,
@@ -451,6 +439,16 @@ pub async fn button_interaction(ctx: &Context, mci: &MessageComponentInteraction
     .ok();
 }
 
+pub async fn button_interaction(ctx: &Context, mci: &MessageComponentInteraction) {
+    // Check what interaction to handle
+    match mci.data.custom_id.parse::<ButtonInteraction>() {
+        Err(_) => {}
+        Ok(ButtonInteraction::Training(bti)) => button_training_interaction(ctx, mci, bti).await,
+        Ok(ButtonInteraction::General(_)) => unimplemented!(),
+    };
+}
+
+// helper
 async fn in_public_channel(ctx: &Context, mci: &MessageComponentInteraction) -> bool {
     mci.channel_id
         .to_channel(ctx)

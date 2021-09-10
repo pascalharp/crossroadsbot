@@ -1,5 +1,7 @@
 use crate::db;
-use crate::utils::{CHECK_EMOJI, LEFT_ARROW_EMOJI, MEMO_EMOJI, RIGHT_ARROW_EMOJI, X_EMOJI};
+use crate::utils::{
+    CHECK_EMOJI, DOCUMENT_EMOJI, LEFT_ARROW_EMOJI, MEMO_EMOJI, RIGHT_ARROW_EMOJI, X_EMOJI,
+};
 use serenity::builder::{CreateActionRow, CreateButton};
 use serenity::model::interactions::message_component::ButtonStyle;
 use serenity::model::interactions::message_component::MessageComponentInteraction;
@@ -13,6 +15,8 @@ pub const COMPONENT_LABEL_PREV: &str = "Previous Page";
 pub const COMPONENT_LABEL_SIGNUP_JOIN: &str = "SIGN UP";
 pub const COMPONENT_LABEL_SIGNUP_EDIT: &str = "EDIT SIGNUP";
 pub const COMPONENT_LABEL_SIGNUP_LEAVE: &str = "SIGN OUT";
+pub const COMPONENT_LABEL_LIST: &str = "LIST SIGNUPS";
+pub const COMPONENT_LABEL_REGISTER: &str = "REGISTER INFORMATION";
 pub const COMPONENT_ID_CONFIRM: &str = "selection_confirm";
 pub const COMPONENT_ID_ABORT: &str = "selection_abort";
 pub const COMPONENT_ID_NEXT: &str = "selection_next";
@@ -30,15 +34,35 @@ pub enum ButtonResponse {
 }
 
 #[derive(Debug)]
-pub struct ButtonTrainingInteractionParseError {}
+pub struct ButtonInteractionParseError {}
 
-impl std::fmt::Display for ButtonTrainingInteractionParseError {
+impl std::fmt::Display for ButtonInteractionParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Invalid format")
     }
 }
 
-impl std::error::Error for ButtonTrainingInteractionParseError {}
+impl std::error::Error for ButtonInteractionParseError {}
+
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ButtonInteraction {
+    Training(ButtonTrainingInteraction),
+    General(ButtonGeneralInteraction),
+}
+
+impl std::str::FromStr for ButtonInteraction {
+    type Err = ButtonInteractionParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(bti) = s.parse::<ButtonTrainingInteraction>() {
+            return Ok(Self::Training(bti));
+        } else if let Ok(bgi) = s.parse::<ButtonGeneralInteraction>() {
+            return Ok(Self::General(bgi));
+        }
+        Err(ButtonInteractionParseError {})
+    }
+}
 
 #[derive(Debug)]
 pub enum ButtonTrainingInteraction {
@@ -83,25 +107,25 @@ impl std::fmt::Display for ButtonTrainingInteraction {
 }
 
 impl std::str::FromStr for ButtonTrainingInteraction {
-    type Err = ButtonTrainingInteractionParseError;
+    type Err = ButtonInteractionParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<_> = s.split('_').collect();
         if parts.len() != 3 {
-            return Err(ButtonTrainingInteractionParseError {});
+            return Err(ButtonInteractionParseError {});
         }
         if !(*parts.get(0).unwrap()).eq("training") {
-            return Err(ButtonTrainingInteractionParseError {});
+            return Err(ButtonInteractionParseError {});
         }
         let training_id = match parts.get(2).unwrap().parse::<i32>() {
             Ok(i) => i,
-            Err(_) => return Err(ButtonTrainingInteractionParseError {}),
+            Err(_) => return Err(ButtonInteractionParseError {}),
         };
         match *parts.get(1).unwrap() {
             "join" => Ok(ButtonTrainingInteraction::Join(training_id)),
             "edit" => Ok(ButtonTrainingInteraction::Edit(training_id)),
             "leave" => Ok(ButtonTrainingInteraction::Leave(training_id)),
-            _ => Err(ButtonTrainingInteractionParseError {}),
+            _ => Err(ButtonInteractionParseError {}),
         }
     }
 }
@@ -114,6 +138,60 @@ impl fmt::Display for ButtonResponse {
             ButtonResponse::Next => write!(f, "{}", COMPONENT_LABEL_NEXT),
             ButtonResponse::Prev => write!(f, "{}", COMPONENT_LABEL_PREV),
             ButtonResponse::Other(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ButtonGeneralInteraction {
+    List,
+    Register,
+}
+
+impl ButtonGeneralInteraction {
+    pub fn button(&self) -> CreateButton {
+        let mut b = CreateButton::default();
+        match self {
+            ButtonGeneralInteraction::List => {
+                b.style(ButtonStyle::Primary);
+                b.label(COMPONENT_LABEL_LIST);
+                b.emoji(ReactionType::from(DOCUMENT_EMOJI));
+            }
+            ButtonGeneralInteraction::Register => {
+                b.style(ButtonStyle::Primary);
+                b.label(COMPONENT_LABEL_REGISTER);
+                b.emoji(ReactionType::from(MEMO_EMOJI));
+            }
+        };
+        b.custom_id(self.to_string());
+        b
+    }
+}
+
+impl std::str::FromStr for ButtonGeneralInteraction {
+    type Err = ButtonInteractionParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<_> = s.split('_').collect();
+        if parts.len() != 2 {
+            return Err(ButtonInteractionParseError {});
+        }
+        if !(*parts.get(0).unwrap()).eq("general") {
+            return Err(ButtonInteractionParseError {});
+        }
+        match *parts.get(1).unwrap() {
+            "list" => Ok(ButtonGeneralInteraction::List),
+            "register" => Ok(ButtonGeneralInteraction::Register),
+            _ => Err(ButtonInteractionParseError {}),
+        }
+    }
+}
+
+impl std::fmt::Display for ButtonGeneralInteraction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ButtonGeneralInteraction::List => write!(f, "general_list"),
+            ButtonGeneralInteraction::Register => write!(f, "general_register"),
         }
     }
 }

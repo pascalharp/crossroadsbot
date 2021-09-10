@@ -321,10 +321,9 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             .await
             .log_unexpected_reply(&conv.msg)?;
         // We inserted all roles into the HashMap, so it is save to unwrap
-        let futs = selected.iter().filter_map(|r| {
-            roles_lookup
-                .get(r).map(|r| signup.add_role(ctx, *r))
-        });
+        let futs = selected
+            .iter()
+            .filter_map(|r| roles_lookup.get(r).map(|r| signup.add_role(ctx, *r)));
         future::try_join_all(futs).await?;
 
         conv.msg

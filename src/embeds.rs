@@ -41,7 +41,7 @@ impl CrossroadsEmbeds for CreateEmbed {
 
 // Embed helpers
 pub fn select_roles_embed(
-    roles: &[db::Role], // all roles
+    roles: &[db::Role],    // all roles
     sel: &HashSet<String>, // selected roles
 ) -> CreateEmbed {
     let pages = roles.chunks(10);

@@ -226,7 +226,6 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
                 match resolve_button_response(&i) {
                     ButtonResponse::Confirm => {
                         utils::clear_components(ctx, &i, &mut msg).await.log_unexpected_reply(&msg)?;
-                        
                     },
                     ButtonResponse::Abort => {
                         utils::clear_components(ctx, &i, &mut msg).await.log_unexpected_reply(&msg)?;
