@@ -204,7 +204,7 @@ pub fn join_action_row(training_id: i32) -> CreateActionRow {
 // Only 5 buttons per row possible
 // This pages. One page can have up to 4 rows with 5 roles each
 // I only choose 2 rows. looks neater with embeds
-pub fn role_action_row(roles: &Vec<db::Role>) -> Vec<Vec<CreateActionRow>> {
+pub fn role_action_row(roles: &[db::Role]) -> Vec<Vec<CreateActionRow>> {
     // split into 5 roles for each action row
     let role_chunks = roles.chunks(5).collect::<Vec<_>>();
     // split into 2 action roles per page

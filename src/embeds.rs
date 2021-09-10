@@ -41,7 +41,7 @@ impl CrossroadsEmbeds for CreateEmbed {
 
 // Embed helpers
 pub fn select_roles_embed(
-    roles: &Vec<db::Role>, // all roles
+    roles: &[db::Role], // all roles
     sel: &HashSet<String>, // selected roles
 ) -> CreateEmbed {
     let pages = roles.chunks(10);
@@ -101,7 +101,7 @@ pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
 
 pub fn signupboard_embed(
     training: &db::Training,
-    roles: &Vec<db::Role>,
+    roles: &[db::Role],
     tier: &Option<(db::Tier, Vec<db::TierMapping>)>,
 ) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
@@ -162,7 +162,7 @@ pub fn training_embed_add_tier(
     }
 }
 
-pub fn embed_add_roles(e: &mut CreateEmbed, r: &Vec<db::Role>, inline: bool) {
+pub fn embed_add_roles(e: &mut CreateEmbed, r: &[db::Role], inline: bool) {
     let repr_width = r
         .iter()
         .map(|r| r.repr.len())

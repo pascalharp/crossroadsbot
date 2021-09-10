@@ -142,9 +142,8 @@ async fn join_button_interaction(
                 })
                 .await
                 .ok();
-            } else
-            // Just confirm the button interaction
-            {
+            } else {
+                // Just confirm the button interaction
                 mci.create_interaction_response(ctx, |r| {
                     r.kind(InteractionResponseType::DeferredUpdateMessage)
                 })
@@ -600,7 +599,7 @@ pub async fn select_roles(
     // The user who can select
     user: &User,
     // All roles
-    roles: &Vec<db::Role>,
+    roles: &[db::Role],
     // HashShet with unique reprs of roles
     mut selected: HashSet<String>,
 ) -> Result<HashSet<String>> {

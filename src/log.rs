@@ -212,10 +212,10 @@ where
     }
 }
 
-async fn log_to_channel<'a, T>(
+async fn log_to_channel<T>(
     ctx: &Context,
     result: &LogResult<T>,
-    kind: LogType<'a>,
+    kind: LogType<'_>,
     user: &User,
 ) {
     let log_info = {

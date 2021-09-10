@@ -68,11 +68,9 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             roles.iter().map(|r| (String::from(&r.repr), r)).collect();
         let mut selected: HashSet<String> = HashSet::with_capacity(roles.len());
 
-        for a in args.iter::<String>() {
-            if let Ok(r) = a {
-                if roles_lookup.contains_key(&r) {
-                    selected.insert(r);
-                }
+        for r in args.iter::<String>().flatten() {
+            if roles_lookup.contains_key(&r) {
+                selected.insert(r);
             }
         }
 

@@ -30,8 +30,6 @@ impl SignupBoard {
             .get::<data::ConfigValuesData>()
             .unwrap()
             .main_guild_id;
-        // Load all channels in the signup board category
-        
 
         // now check if one channel already matches the date string
         let time_fmt = training
@@ -45,7 +43,8 @@ impl SignupBoard {
             .await?
             .into_iter()
             .map(|(_, ch)| ch)
-            .filter(|ch| ch.category_id.eq(&Some(channel_category))).find(|ch| ch.name.eq(&time_fmt));
+            .filter(|ch| ch.category_id.eq(&Some(channel_category)))
+            .find(|ch| ch.name.eq(&time_fmt));
 
         // Use channel or create new one if none found
         let channel = match channel {
@@ -144,8 +143,6 @@ impl SignupBoard {
             .get::<data::ConfigValuesData>()
             .unwrap()
             .main_guild_id;
-        // Load all channels in the signup board category
-        
 
         // now check if one channel already matches the date string
         let time_fmt = training
@@ -159,7 +156,8 @@ impl SignupBoard {
             .await?
             .into_iter()
             .map(|(_, ch)| ch)
-            .filter(|ch| ch.category_id.eq(&Some(channel_category))).find(|ch| ch.name.eq(&time_fmt));
+            .filter(|ch| ch.category_id.eq(&Some(channel_category)))
+            .find(|ch| ch.name.eq(&time_fmt));
 
         let channel = match channel {
             None => return Err("The training was not on the signup board".into()),

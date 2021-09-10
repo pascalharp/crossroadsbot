@@ -119,14 +119,11 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             .timeout(DEFAULT_TIMEOUT)
             .author_id(author.id)
             .filter(move |r| {
-                match r.emoji {
-                    ReactionType::Custom {
+                matches!(r.emoji, ReactionType::Custom {
                         animated: _,
                         id: _,
                         name: _,
-                    } => true, // only allow Custom Emojis
-                    _ => false,
-                }
+                    })
             })
             .await;
 

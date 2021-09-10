@@ -39,6 +39,12 @@ impl DBPool {
     }
 }
 
+impl Default for DBPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // Insert und Upsert
 async fn upsert_user(ctx: &Context, user: NewUser) -> QueryResult<User> {
     let pool = DBPool::load(ctx).await;
