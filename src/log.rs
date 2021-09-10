@@ -1,4 +1,4 @@
-use crate::components::ButtonTrainingInteraction;
+use crate::components::ButtonInteraction;
 use crate::data::LogConfigData;
 use crate::utils;
 use serenity::{framework::standard::CommandResult, model::prelude::*, prelude::*};
@@ -8,7 +8,7 @@ use std::ops::FnOnce;
 pub enum LogType<'a> {
     Command(&'a serenity::model::channel::Message),
     Interaction {
-        i: &'a ButtonTrainingInteraction,
+        i: &'a ButtonInteraction,
         m: &'a serenity::model::interactions::message_component::InteractionMessage,
     },
 }
@@ -352,10 +352,9 @@ where
 pub async fn log_interaction<F, Fut>(
     ctx: &Context,
     action: &serenity::model::interactions::message_component::MessageComponentInteraction,
-    i: &ButtonTrainingInteraction,
+    i: &ButtonInteraction,
     f: F,
-) -> CommandResult
-where
+) where
     F: FnOnce() -> Fut + Send,
     Fut: Future<Output = LogResult<()>> + Send,
 {
@@ -376,10 +375,4 @@ where
         &action.user,
     )
     .await;
-
-    // Convert to CommandError
-    match res {
-        Ok(_) => Ok(()),
-        Err(e) => Err(e.into()),
-    }
 }

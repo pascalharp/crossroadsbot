@@ -64,6 +64,15 @@ impl std::str::FromStr for ButtonInteraction {
     }
 }
 
+impl std::fmt::Display for ButtonInteraction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ButtonInteraction::Training(bti) => write!(f, "{}", bti),
+            ButtonInteraction::General(bgi) => write!(f, "{}", bgi),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ButtonTrainingInteraction {
     Join(i32),
@@ -276,6 +285,13 @@ pub fn edit_leave_action_row(training_id: i32) -> CreateActionRow {
 pub fn join_action_row(training_id: i32) -> CreateActionRow {
     let mut ar = CreateActionRow::default();
     ar.add_button(ButtonTrainingInteraction::Join(training_id).button());
+    ar
+}
+
+pub fn register_list_action_row() -> CreateActionRow {
+    let mut ar = CreateActionRow::default();
+    ar.add_button(ButtonGeneralInteraction::Register.button());
+    ar.add_button(ButtonGeneralInteraction::List.button());
     ar
 }
 

@@ -40,7 +40,7 @@ pub const RED_SQUARE_EMOJI: char = '🟥';
 pub const ALARM_CLOCK_EMOJI: char = '⏰';
 pub const RIGHT_ARROW_EMOJI: char = '➡';
 pub const LEFT_ARROW_EMOJI: char = '⬅';
-pub const DOCUMENT_EMOJI: char = '🗎';
+pub const DOCUMENT_EMOJI: char = '🧾';
 
 /// Verifies if the discord user has the required tier for a training
 pub async fn verify_tier(

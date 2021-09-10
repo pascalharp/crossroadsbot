@@ -397,46 +397,7 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
         conv.msg
             .edit(ctx, |m| {
                 m.add_embed(|e| {
-                    e.xstyle();
-                    e.description("All current active signups");
-                    if signups.is_empty() {
-                        e.field(
-                            "Zero sign ups found",
-                            "You should join some trainings ;)",
-                            false,
-                        );
-                    }
-                    for (s, t) in signups {
-                        e.field(
-                            &t.title,
-                            format!(
-                                "`Date (YYYY-MM-DD)`\n{}\n\
-                                `Time (Utc)       `\n{}\n\
-                                `Training Id      `\n{}\n\
-                                `Roles            `\n{}\n",
-                                t.date.date(),
-                                t.date.time(),
-                                t.id,
-                                match roles.get(&s.id) {
-                                    Some(r) => r
-                                        .iter()
-                                        .map(|r| r.repr.clone())
-                                        .collect::<Vec<_>>()
-                                        .join(", "),
-                                    None => String::from("Failed to load roles =("),
-                                }
-                            ),
-                            true,
-                        );
-                    }
-                    e.footer(|f| {
-                        f.text(format!(
-                            "To edit or remove your sign up reply with:\n\
-                            {0}edit <training id>\n\
-                            {0}leave <training id>",
-                            data::GLOB_COMMAND_PREFIX
-                        ))
-                    });
+                    e.0 = signup_list_embed(&signups, &roles).0;
                     e
                 })
             })

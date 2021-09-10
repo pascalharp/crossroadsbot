@@ -179,7 +179,7 @@ async fn join_button_interaction(
     Ok(())
 }
 
-pub async fn edit_button_interaction(
+async fn edit_button_interaction(
     ctx: &Context,
     mci: &MessageComponentInteraction,
     tid: i32,
@@ -319,7 +319,7 @@ pub async fn edit_button_interaction(
     Ok(())
 }
 
-pub async fn leave_button_interaction(
+async fn leave_button_interaction(
     ctx: &Context,
     mci: &MessageComponentInteraction,
     tid: i32,
@@ -391,60 +391,182 @@ pub async fn leave_button_interaction(
     Ok(())
 }
 
-pub async fn button_training_interaction(
+async fn button_training_interaction(
     ctx: &Context,
     mci: &MessageComponentInteraction,
-    bti: ButtonTrainingInteraction,
-) {
-    log_interaction(ctx, mci, &bti, || async {
-        let in_pub = in_public_channel(ctx, mci).await;
-        // Check if user is registerd
-        let db_user = match db::User::by_discord_id(ctx, mci.user.id).await {
-            Ok(u) => u,
-            Err(diesel::NotFound) => {
-                return mci
-                    .create_interaction_response(ctx, |r| {
-                        r.kind(InteractionResponseType::ChannelMessageWithSource);
-                        r.interaction_response_data(|d| {
-                            if in_pub {
-                                d.flags(CallbackDataFlags::EPHEMERAL);
-                            }
-                            d.content(Mention::from(&mci.user));
-                            d.add_embed(not_registered_embed())
-                        })
+    bti: &ButtonTrainingInteraction,
+) -> LogResult<()> {
+    let in_pub = in_public_channel(ctx, mci).await;
+    // Check if user is registerd
+    let db_user = match db::User::by_discord_id(ctx, mci.user.id).await {
+        Ok(u) => u,
+        Err(diesel::NotFound) => {
+            return mci
+                .create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        if in_pub {
+                            d.flags(CallbackDataFlags::EPHEMERAL);
+                        }
+                        d.content(Mention::from(&mci.user));
+                        d.add_embed(not_registered_embed())
                     })
-                    .await
-                    .log_only();
-            }
-            Err(e) => {
-                return Err(LogError::from(e));
-            }
-        };
+                })
+                .await
+                .log_only();
+        }
+        Err(e) => {
+            return Err(LogError::from(e));
+        }
+    };
 
-        match bti {
-            ButtonTrainingInteraction::Join(id) => {
-                join_button_interaction(ctx, mci, id, &db_user).await?
-            }
-            ButtonTrainingInteraction::Edit(id) => {
-                edit_button_interaction(ctx, mci, id, &db_user).await?
-            }
-            ButtonTrainingInteraction::Leave(id) => {
-                leave_button_interaction(ctx, mci, id, &db_user).await?
+    match bti {
+        ButtonTrainingInteraction::Join(id) => {
+            join_button_interaction(ctx, mci, *id, &db_user).await?
+        }
+        ButtonTrainingInteraction::Edit(id) => {
+            edit_button_interaction(ctx, mci, *id, &db_user).await?
+        }
+        ButtonTrainingInteraction::Leave(id) => {
+            leave_button_interaction(ctx, mci, *id, &db_user).await?
+        }
+    }
+    Ok(())
+}
+
+async fn button_list_interaction(
+    ctx: &Context,
+    mci: &MessageComponentInteraction,
+) -> LogResult<()> {
+    let db_user = match db::User::by_discord_id(ctx, mci.user.id).await {
+        Ok(u) => u,
+        Err(diesel::NotFound) => {
+            mci.create_interaction_response(ctx, |r| {
+                r.kind(InteractionResponseType::ChannelMessageWithSource);
+                r.interaction_response_data(|d| {
+                    d.flags(CallbackDataFlags::EPHEMERAL);
+                    d.content("Not registered. Please register first")
+                })
+            })
+            .await?;
+            return Err("Not yet registered".to_string()).log_only();
+        }
+        Err(e) => return Err(e).log_only(),
+    };
+
+    let signups = db_user.active_signups(ctx).await?;
+    let mut roles: HashMap<i32, Vec<db::Role>> = HashMap::with_capacity(signups.len());
+    for (s, _) in &signups {
+        let signup_roles = s.clone().get_roles(ctx).await.log_only()?;
+        roles.insert(s.id, signup_roles);
+    }
+    let emb = signup_list_embed(&signups, &roles);
+
+    let msg = mci.user.direct_message(ctx, |m| m.set_embed(emb)).await;
+
+    match msg {
+        Ok(_) => {
+            if in_public_channel(ctx, mci).await {
+                mci.create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::DeferredUpdateMessage);
+                    r
+                })
+                .await?;
+            } else {
+                mci.create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::DeferredUpdateMessage);
+                    r
+                })
+                .await?;
             }
         }
+        Err(e) => {
+            mci.create_interaction_response(ctx, |r| {
+                r.kind(InteractionResponseType::ChannelMessageWithSource);
+                r.interaction_response_data(|d| {
+                    d.flags(CallbackDataFlags::EPHEMERAL);
+                    d.content("I was unable to DM you =(")
+                });
+                r
+            })
+            .await?;
+            return Err(e).log_only();
+        }
+    };
+    Ok(())
+}
 
-        Ok(())
-    })
-    .await
-    .ok();
+async fn button_register_interaction(
+    ctx: &Context,
+    mci: &MessageComponentInteraction,
+) -> LogResult<()> {
+    let msg = mci
+        .user
+        .direct_message(ctx, |m| m.set_embed(register_instructions_embed()))
+        .await;
+    match msg {
+        Ok(m) => {
+            if in_public_channel(ctx, mci).await {
+                mci.create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        d.flags(CallbackDataFlags::EPHEMERAL);
+                        d.content(format!(
+                            "{} Check [DM's]({})",
+                            Mention::from(mci.user.id),
+                            m.link()
+                        ))
+                    });
+                    r
+                })
+                .await?;
+            } else {
+                mci.create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::DeferredUpdateMessage);
+                    r
+                })
+                .await?;
+            }
+        }
+        Err(e) => {
+            mci.create_interaction_response(ctx, |r| {
+                r.kind(InteractionResponseType::ChannelMessageWithSource);
+                r.interaction_response_data(|d| {
+                    d.flags(CallbackDataFlags::EPHEMERAL);
+                    d.content("I was unable to DM you =(")
+                });
+                r
+            })
+            .await?;
+            return Err(e).log_only();
+        }
+    };
+    Ok(())
+}
+
+async fn button_general_interaction(
+    ctx: &Context,
+    mci: &MessageComponentInteraction,
+    bgi: &ButtonGeneralInteraction,
+) -> LogResult<()> {
+    match bgi {
+        ButtonGeneralInteraction::List => button_list_interaction(ctx, mci).await,
+        ButtonGeneralInteraction::Register => button_register_interaction(ctx, mci).await,
+    }
 }
 
 pub async fn button_interaction(ctx: &Context, mci: &MessageComponentInteraction) {
     // Check what interaction to handle
-    match mci.data.custom_id.parse::<ButtonInteraction>() {
-        Err(_) => {}
-        Ok(ButtonInteraction::Training(bti)) => button_training_interaction(ctx, mci, bti).await,
-        Ok(ButtonInteraction::General(_)) => unimplemented!(),
+    if let Ok(bi) = mci.data.custom_id.parse::<ButtonInteraction>() {
+        log_interaction(ctx, mci, &bi, || async {
+            match &bi {
+                ButtonInteraction::Training(bti) => {
+                    button_training_interaction(ctx, mci, bti).await
+                }
+                ButtonInteraction::General(bgi) => button_general_interaction(ctx, mci, bgi).await,
+            }
+        })
+        .await;
     };
 }
 

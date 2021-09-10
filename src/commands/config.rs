@@ -1,5 +1,5 @@
 use super::ADMIN_ROLE_CHECK;
-use crate::{data::*, db, log::*, signup_board, utils};
+use crate::{components, data::*, db, embeds, log::*, signup_board, utils};
 use serenity::framework::standard::{
     macros::{command, group},
     Args, CommandResult,
@@ -9,7 +9,12 @@ use serenity::prelude::*;
 
 #[group]
 #[only_in(guilds)]
-#[commands(set_log_channel, set_signup_board_category, signup_board_reset)]
+#[commands(
+    set_log_channel,
+    set_signup_board_category,
+    post_welcome_message,
+    signup_board_reset
+)]
 struct Config;
 
 #[command]
@@ -76,14 +81,35 @@ pub async fn set_signup_board_category(
 
 #[command]
 #[checks(admin_role)]
+#[description = "Post the welcome/instruction message to a channel"]
+#[usage = "channel_id"]
+#[only_in("guild")]
+#[num_args(1)]
+pub async fn post_welcome_message(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    log_command(ctx, msg, || async {
+        let channel_id: ChannelId = args.single::<ChannelId>().log_reply(msg)?;
+        channel_id
+            .send_message(ctx, |m| {
+                m.set_embed(embeds::welcome_post_embed());
+                m.components(|c| c.add_action_row(components::register_list_action_row()));
+                m
+            })
+            .await
+            .log_reply(msg)?;
+        Ok(())
+    })
+    .await
+}
+
+#[command]
+#[checks(admin_role)]
 #[description = "fully resets the Signup Board"]
 #[usage = ""]
 #[only_in("guild")]
 #[num_args(0)]
 pub async fn signup_board_reset(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
     log_command(ctx, msg, || async {
-        signup_board::SignupBoard::reset(ctx).await.log_reply(msg)?;
-        Ok(())
+        signup_board::SignupBoard::reset(ctx).await.log_reply(msg)
     })
     .await
 }

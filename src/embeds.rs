@@ -5,7 +5,7 @@ use serenity::{
     builder::{CreateEmbed, CreateEmbedAuthor},
     model::{id::EmojiId, id::RoleId, misc::Mention},
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 const EMBED_AUTHOR_ICON_URL: &str = "https://cdn.discordapp.com/avatars/512706205647372302/eb7a7f2de9a97006e8217b73ab5c7836.webp?size=128";
 const EMBED_AUTHOR_NAME: &str = "Crossroads Bot";
@@ -224,6 +224,26 @@ pub fn not_registered_embed() -> CreateEmbed {
     e
 }
 
+pub fn register_instructions_embed() -> CreateEmbed {
+    let mut e = CreateEmbed::xdefault();
+    e.title("How to register");
+    e.description(
+        "To register with the bot simply use the register command (_possible in DM's_) with your \
+        Guild Wars 2 account name.\n\
+        This is your in game account name which you can also find on your friends list. It \
+        consists of your chosen in game name followed by a dot and 4 digits",
+    );
+    e.field("Usage:", "register AccountName.1234", false);
+    e.field("Example:", "register Narturio.1234", false);
+    e.footer(|f| {
+        f.text(format!(
+            "Note: if you use this command outside of DM's please prefix it with `{}`",
+            GLOB_COMMAND_PREFIX
+        ))
+    });
+    e
+}
+
 pub fn not_signed_up_embed(training: &db::Training) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
     e.color((255, 0, 0));
@@ -268,6 +288,46 @@ pub fn already_signed_up_embed(training: &db::Training) -> CreateEmbed {
         format!("`{}leave {}`", GLOB_COMMAND_PREFIX, training.id),
         false,
     );
+    e
+}
+
+pub fn signup_list_embed(
+    signups: &[(db::Signup, db::Training)],
+    roles: &HashMap<i32, Vec<db::Role>>,
+) -> CreateEmbed {
+    let mut e = CreateEmbed::xdefault();
+    e.xstyle();
+    e.description("All current active signups");
+    if signups.is_empty() {
+        e.field(
+            "Zero sign ups found",
+            "You should join some trainings ;)",
+            false,
+        );
+    }
+    for (s, t) in signups {
+        e.field(
+            &t.title,
+            format!(
+                "`Date (YYYY-MM-DD)`\n{}\n\
+                `Time (Utc)       `\n{}\n\
+                `Training Id      `\n{}\n\
+                `Roles            `\n{}\n",
+                t.date.date(),
+                t.date.time(),
+                t.id,
+                match roles.get(&s.id) {
+                    Some(r) => r
+                        .iter()
+                        .map(|r| r.repr.clone())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    None => String::from("Failed to load roles =("),
+                }
+            ),
+            true,
+        );
+    }
     e
 }
 
@@ -319,6 +379,44 @@ pub fn signed_out_embed(training: &db::Training) -> CreateEmbed {
     e.field(
         "To list all your current sign ups:",
         format!("`{}list`", GLOB_COMMAND_PREFIX),
+        false,
+    );
+    e
+}
+
+pub fn welcome_post_embed() -> CreateEmbed {
+    let mut e = CreateEmbed::xdefault();
+    e.title("Greetings. Beep boop...");
+    e.description(
+        "Hello, You can use me to sign up for various trainings. Please make sure \
+                   that I can send you DM's by allowing Direct Messages from server members",
+    );
+    e.field(
+        "Register",
+        format!(
+            "To use this bot please register first with your Guild Wars 2 account name. \
+        To do so please use the `{0}register` command. For more information on how to use this \
+        command use the help command like so: `{0}help register` or click the button below \
+        and I will send you the instructions to your DM's.\n_If you want to update your gw2 \
+        account name just register again_",
+            GLOB_COMMAND_PREFIX
+        ),
+        false,
+    );
+    e.field(
+        "Sign up for a training",
+        "To sign up for a training you can browse the *SIGNUPBOARD* category and use the buttons \
+        on the corresponding messages. You can only sign up for a training that is marked as open \
+        and you have the required tier for",
+        false,
+    );
+    e.field(
+        "List my signups",
+        format!(
+            "To list your current signups you can use the `{}list` command \
+        or press the button below",
+            GLOB_COMMAND_PREFIX
+        ),
         false,
     );
     e
