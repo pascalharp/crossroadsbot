@@ -118,7 +118,7 @@ pub async fn role_select(ctx: &Context, msg: &Message, _args: Args) -> CommandRe
 
         utils::select_roles(ctx, &mut m, &msg.author, &roles, selected)
             .await
-            .log_reply(&msg)?;
+            .log_reply(msg)?;
         Ok(())
     })
     .await

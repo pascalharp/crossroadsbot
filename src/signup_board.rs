@@ -31,13 +31,7 @@ impl SignupBoard {
             .unwrap()
             .main_guild_id;
         // Load all channels in the signup board category
-        let channels = guild_id
-            .channels(ctx)
-            .await?
-            .into_iter()
-            .map(|(_, ch)| ch)
-            .filter(|ch| ch.category_id.eq(&Some(channel_category)))
-            .collect::<Vec<_>>();
+        
 
         // now check if one channel already matches the date string
         let time_fmt = training
@@ -46,7 +40,12 @@ impl SignupBoard {
             .to_string()
             .to_lowercase()
             .replace(" ", "");
-        let channel = channels.into_iter().find(|ch| ch.name.eq(&time_fmt));
+        let channel = guild_id
+            .channels(ctx)
+            .await?
+            .into_iter()
+            .map(|(_, ch)| ch)
+            .filter(|ch| ch.category_id.eq(&Some(channel_category))).find(|ch| ch.name.eq(&time_fmt));
 
         // Use channel or create new one if none found
         let channel = match channel {
@@ -97,7 +96,7 @@ impl SignupBoard {
             Some(mut msg) => {
                 msg.edit(ctx, |m| {
                     m.embed(|e| {
-                        e.0 = embeds::signupboard_embed(&training, &roles, &tiers).0;
+                        e.0 = embeds::signupboard_embed(training, &roles, &tiers).0;
                         e
                     });
                     m.components(|c| {
@@ -114,7 +113,7 @@ impl SignupBoard {
                 channel
                     .send_message(ctx, |m| {
                         m.embed(|e| {
-                            e.0 = embeds::signupboard_embed(&training, &roles, &tiers).0;
+                            e.0 = embeds::signupboard_embed(training, &roles, &tiers).0;
                             e
                         });
                         m.components(|c| {
@@ -146,13 +145,7 @@ impl SignupBoard {
             .unwrap()
             .main_guild_id;
         // Load all channels in the signup board category
-        let channels = guild_id
-            .channels(ctx)
-            .await?
-            .into_iter()
-            .map(|(_, ch)| ch)
-            .filter(|ch| ch.category_id.eq(&Some(channel_category)))
-            .collect::<Vec<_>>();
+        
 
         // now check if one channel already matches the date string
         let time_fmt = training
@@ -161,7 +154,12 @@ impl SignupBoard {
             .to_string()
             .to_lowercase()
             .replace(" ", "");
-        let channel = channels.into_iter().find(|ch| ch.name.eq(&time_fmt));
+        let channel = guild_id
+            .channels(ctx)
+            .await?
+            .into_iter()
+            .map(|(_, ch)| ch)
+            .filter(|ch| ch.category_id.eq(&Some(channel_category))).find(|ch| ch.name.eq(&time_fmt));
 
         let channel = match channel {
             None => return Err("The training was not on the signup board".into()),

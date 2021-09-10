@@ -64,7 +64,7 @@ impl<E: 'static + std::error::Error + Send + Sync> From<E> for LogError {
 
 impl From<LogError> for Box<dyn std::error::Error + Send + Sync> {
     fn from(err: LogError) -> Self {
-        return match err {
+        match err {
             LogError::LogOnly(err) => err,
             LogError::LogReply { err, reply: _ } => err,
             LogError::LogReplyCustom {
@@ -72,7 +72,7 @@ impl From<LogError> for Box<dyn std::error::Error + Send + Sync> {
                 reply: _,
                 reply_msg: _,
             } => err,
-        };
+        }
     }
 }
 
@@ -192,7 +192,7 @@ where
     }
 
     fn log_reply(self, msg: &serenity::model::channel::Message) -> LogResult<T> {
-        self.log_only().map_err(|e| e.with_reply(&msg))
+        self.log_only().map_err(|e| e.with_reply(msg))
     }
 
     fn log_custom_reply<S>(
@@ -204,7 +204,7 @@ where
         S: ToString,
     {
         self.log_only()
-            .map_err(|e| e.with_custom_reply(&msg, reply_msg.to_string()))
+            .map_err(|e| e.with_custom_reply(msg, reply_msg.to_string()))
     }
 
     fn log_unexpected_reply(self, msg: &serenity::model::channel::Message) -> LogResult<T> {
@@ -217,7 +217,7 @@ async fn log_to_channel<'a, T>(
     result: &LogResult<T>,
     kind: LogType<'a>,
     user: &User,
-) -> () {
+) {
     let log_info = {
         ctx.data
             .read()
@@ -280,7 +280,7 @@ async fn log_to_channel<'a, T>(
                     Err(err) => {
                         e.field(format!("{} Error", utils::CROSS_EMOJI), err, false);
                         e.field(
-                            format!("Reply"),
+                            "Reply".to_string(),
                             match err {
                                 LogError::LogOnly(_) => "_None_",
                                 LogError::LogReply { err: _, reply: _ } => "_Same as Error_",
@@ -288,7 +288,7 @@ async fn log_to_channel<'a, T>(
                                     err: _,
                                     reply: _,
                                     reply_msg,
-                                } => &reply_msg,
+                                } => reply_msg,
                             },
                             false,
                         );

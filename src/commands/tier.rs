@@ -81,7 +81,7 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
 pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     log_command(ctx, msg, || async {
         let tier_name = args.single_quoted::<String>().log_reply(msg)?;
-        if tier_name.contains(" ") {
+        if tier_name.contains(' ') {
             return LogError::new("Tier name may not contain spaces", msg).into();
         } else if tier_name.to_lowercase().eq("none") {
             return LogError::new("_none_ is a reserved keyword and can not be used", msg).into();
@@ -226,7 +226,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
                 match resolve_button_response(&i) {
                     ButtonResponse::Confirm => {
                         utils::clear_components(ctx, &i, &mut msg).await.log_unexpected_reply(&msg)?;
-                        ()
+                        
                     },
                     ButtonResponse::Abort => {
                         utils::clear_components(ctx, &i, &mut msg).await.log_unexpected_reply(&msg)?;
@@ -286,7 +286,7 @@ pub async fn edit_add(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
         let discord_roles = tier.get_discord_roles(ctx).await.log_reply(msg)?;
         if discord_roles
             .iter()
-            .any(|d| RoleId::from(d.discord_role_id as u64) == role)
+            .any(|d| role == d.discord_role_id as u64)
         {
             return LogError::new("Discord role is already part of this tier", msg).into();
         }
@@ -318,7 +318,7 @@ pub async fn edit_remove(ctx: &Context, msg: &Message, mut args: Args) -> Comman
         let discord_roles = tier.get_discord_roles(ctx).await?;
         let to_remove = discord_roles
             .into_iter()
-            .find(|d| RoleId::from(d.discord_role_id as u64) == role);
+            .find(|d| role == d.discord_role_id as u64);
 
         let to_remove = match to_remove {
             None => {
@@ -328,7 +328,7 @@ pub async fn edit_remove(ctx: &Context, msg: &Message, mut args: Args) -> Comman
             Some(i) => i,
         };
 
-        to_remove.delete(ctx).await.log_unexpected_reply(&msg)?;
+        to_remove.delete(ctx).await.log_unexpected_reply(msg)?;
 
         msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
             .await?;

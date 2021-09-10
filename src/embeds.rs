@@ -166,11 +166,11 @@ pub fn embed_add_roles(e: &mut CreateEmbed, r: &Vec<db::Role>, inline: bool) {
     let repr_width = r
         .iter()
         .map(|r| r.repr.len())
-        .fold(usize::MIN, |max, next| std::cmp::max(max, next));
+        .fold(usize::MIN, std::cmp::max);
     let title_width = r
         .iter()
         .map(|r| r.title.len())
-        .fold(usize::MIN, |max, next| std::cmp::max(max, next));
+        .fold(usize::MIN, std::cmp::max);
     let paged = r.chunks(10);
     for r in paged {
         let roles_text = r

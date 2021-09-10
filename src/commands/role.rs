@@ -30,7 +30,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         let role_name = args.single_quoted::<String>().log_reply(msg)?;
         let role_repr = args.single_quoted::<String>().log_reply(msg)?;
 
-        if role_repr.contains(" ") {
+        if role_repr.contains(' ') {
             return LogError::new("Identifier must not contain spaces", msg).into();
         }
 
@@ -257,7 +257,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     log_command(ctx, msg, || async {
         let role_repr = args.single::<String>()?;
-        let role = db::Role::by_repr(ctx, role_repr).await.log_reply(&msg)?;
+        let role = db::Role::by_repr(ctx, role_repr).await.log_reply(msg)?;
         role.deactivate(ctx).await.log_unexpected_reply(msg)?;
         msg.react(ctx, ReactionType::from(CHECK_EMOJI)).await?;
         Ok(())

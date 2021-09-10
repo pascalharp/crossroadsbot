@@ -21,7 +21,7 @@ struct Signup;
 #[num_args(1)]
 pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     log_command(ctx, msg, || async {
-        let acc_name = args.single::<String>().log_reply(&msg)?;
+        let acc_name = args.single::<String>().log_reply(msg)?;
         let re = Regex::new("^[a-zA-Z]{3,27}\\.[0-9]{4}$").unwrap();
         if !re.is_match(&acc_name) {
             return LogError::new("Invalid gw2 account name format", msg).into();
@@ -222,19 +222,19 @@ pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResul
                     .await?;
                 return Err(LogError::new_silent(NOT_SIGNED_UP));
             }
-            Err(e) => return Err(e).log_unexpected_reply(&msg),
+            Err(e) => return Err(e).log_unexpected_reply(msg),
         };
 
         match signup.remove(ctx).await {
             Ok(1) => (),
             Ok(a) => {
                 return Err(LogError::new_custom(
-                    format!("Unexpected Error"),
+                    "Unexpected Error".to_string(),
                     format!("Unexpected amount of signups removed: {}", a),
                     msg,
                 ))
             }
-            Err(e) => return Err(e).log_unexpected_reply(&msg),
+            Err(e) => return Err(e).log_unexpected_reply(msg),
         }
 
         msg.channel_id
@@ -323,8 +323,7 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
         // We inserted all roles into the HashMap, so it is save to unwrap
         let futs = selected.iter().filter_map(|r| {
             roles_lookup
-                .get(r)
-                .and_then(|r| Some(signup.add_role(ctx, *r)))
+                .get(r).map(|r| signup.add_role(ctx, *r))
         });
         future::try_join_all(futs).await?;
 
@@ -371,7 +370,7 @@ pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
 
         let mut emb = CreateEmbed::default();
         emb.xstyle();
-        emb.description(format!("User information"));
+        emb.description("User information".to_string());
         emb.field("Guild Wars 2 account name", &db_user.gw2_id, false);
 
         let mut conv = Conversation::init(ctx, &msg.author, emb)

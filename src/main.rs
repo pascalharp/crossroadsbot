@@ -87,7 +87,7 @@ async fn dispatch_error_hook(ctx: &Context, msg: &Message, error: DispatchError)
             msg.reply(ctx, &s).await.ok();
         }
         DispatchError::CheckFailed(..) => {
-            let s = format!("No permissions to use this command");
+            let s = "No permissions to use this command".to_string();
             msg.reply(ctx, &s).await.ok();
         }
         _ => {
@@ -112,7 +112,7 @@ async fn main() {
     {
         let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not set");
         let conn = PgConnection::establish(&database_url)
-            .expect(&format!("Error connecting to {}", database_url));
+            .unwrap_or_else(|_| panic!("Error connecting to {}", database_url));
         embedded_migrations::run(&conn).expect("Failed to run migrations");
     }
 

@@ -232,7 +232,7 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                     None => {
                         embed.field(
                             format!("Training id: {}", id),
-                            format!("_Message removed_"),
+                            "_Message removed_".to_string(),
                             false,
                         );
                     }
@@ -378,8 +378,8 @@ async fn list(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
         };
 
         match state {
-            Some(s) => return list_by_state(ctx, msg, s).await.into(),
-            None => return list_amounts(ctx, msg).await.into(),
+            Some(s) => return list_by_state(ctx, msg, s).await,
+            None => return list_amounts(ctx, msg).await,
         }
     })
     .await
@@ -402,7 +402,7 @@ pub async fn info(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
             .await
             .log_unexpected_reply(msg)?
             .into_iter()
-            .map(|s| Arc::new(s))
+            .map(Arc::new)
             .collect::<Vec<_>>();
 
         let mut roles = training
@@ -520,10 +520,10 @@ pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
                 let user = match s.get_user(ctx).await {
                     Ok(u) => u,
                     Err(_) => {
-                        log.push(String::from(format!(
+                        log.push(format!(
                             "Error loading user entry for signup with id {}. Skipped",
                             s.id
-                        )));
+                        ));
                         continue;
                     }
                 };
@@ -531,29 +531,29 @@ pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
                 let roles = match s.get_roles(ctx).await {
                     Ok(r) => r,
                     Err(_) => {
-                        log.push(String::from(format!(
+                        log.push(format!(
                             "Error loading roles for signup with id {}. Skipped",
                             s.id
-                        )));
+                        ));
                         continue;
                     }
                 };
 
                 if roles.is_empty() {
-                    log.push(String::from(format!(
+                    log.push(format!(
                         "No roles selected for signup with id {}. Skipped",
                         s.id
-                    )));
+                    ));
                     continue;
                 }
 
                 let member = match guild.member(ctx, user.discord_id()).await {
                     Ok(du) => du,
                     Err(_) => {
-                        log.push(String::from(format!(
+                        log.push(format!(
                             "Did not find user with id {} in discord guild. Skipped",
                             user.discord_id()
-                        )));
+                        ));
                         continue;
                     }
                 };

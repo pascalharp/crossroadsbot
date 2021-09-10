@@ -183,7 +183,7 @@ async fn join_button_interaction(
         .await
         .log_reply(&conv.msg)?;
 
-    let signup = db::Signup::insert(ctx, &db_user, &training)
+    let signup = db::Signup::insert(ctx, db_user, &training)
         .await
         .log_unexpected_reply(&conv.msg)?;
 
@@ -331,8 +331,7 @@ pub async fn edit_button_interaction(
         .log_unexpected_reply(&conv.msg)?;
     let futs = selected.iter().filter_map(|r| {
         roles_lookup
-            .get(r)
-            .and_then(|r| Some(signup.add_role(ctx, *r)))
+            .get(r).map(|r| signup.add_role(ctx, *r))
     });
     future::try_join_all(futs).await?;
 
@@ -432,7 +431,7 @@ pub async fn button_interaction(ctx: &Context, mci: &MessageComponentInteraction
 
     let in_pub = in_public_channel(ctx, mci).await;
 
-    log_interaction(ctx, &mci, &bti, || async {
+    log_interaction(ctx, mci, &bti, || async {
         // Check if user is registerd
         let db_user = match db::User::by_discord_id(ctx, mci.user.id).await {
             Ok(u) => u,
@@ -458,13 +457,13 @@ pub async fn button_interaction(ctx: &Context, mci: &MessageComponentInteraction
 
         match bti {
             ButtonTrainingInteraction::Join(id) => {
-                join_button_interaction(ctx, &mci, id, &db_user).await?
+                join_button_interaction(ctx, mci, id, &db_user).await?
             }
             ButtonTrainingInteraction::Edit(id) => {
-                edit_button_interaction(ctx, &mci, id, &db_user).await?
+                edit_button_interaction(ctx, mci, id, &db_user).await?
             }
             ButtonTrainingInteraction::Leave(id) => {
-                leave_button_interaction(ctx, &mci, id, &db_user).await?
+                leave_button_interaction(ctx, mci, id, &db_user).await?
             }
         }
 
@@ -577,18 +576,18 @@ pub async fn await_confirm_abort_interaction(ctx: &Context, msg: &mut Message) -
         .timeout(DEFAULT_TIMEOUT)
         .await;
     match interaction {
-        None => return Err(ConversationError::TimedOut).log_reply(&msg),
+        None => return Err(ConversationError::TimedOut).log_reply(msg),
         Some(i) => match resolve_button_response(&i) {
             ButtonResponse::Confirm => {
                 clear_components(ctx, &i, msg).await.log_only()?;
             }
             ButtonResponse::Abort => {
                 clear_components(ctx, &i, msg).await.log_only()?;
-                return Err(ConversationError::Canceled).log_reply(&msg);
+                return Err(ConversationError::Canceled).log_reply(msg);
             }
             _ => {
                 clear_components(ctx, &i, msg).await.log_only()?;
-                return Err(ConversationError::InvalidInput).log_reply(&msg);
+                return Err(ConversationError::InvalidInput).log_reply(msg);
             }
         },
     }
@@ -615,7 +614,7 @@ pub async fn select_roles(
         .embeds
         .clone()
         .into_iter()
-        .map(|e| CreateEmbed::from(e))
+        .map(CreateEmbed::from)
         .collect::<Vec<_>>();
     msg.edit(ctx, |m| {
         m.add_embed(|e| {
@@ -688,7 +687,7 @@ pub async fn select_roles(
                         msg.edit(ctx, |m| {
                             m.set_embeds(orig_embeds);
                             m.add_embed(|e| {
-                                e.0 = select_roles_embed(&roles, &selected).0;
+                                e.0 = select_roles_embed(roles, &selected).0;
                                 e
                             });
                             m.components(|c| c)
@@ -706,7 +705,7 @@ pub async fn select_roles(
                     msg.edit(ctx, |m| {
                         m.set_embeds(orig_embeds);
                         m.add_embed(|e| {
-                            e.0 = select_roles_embed(&roles, &selected).0;
+                            e.0 = select_roles_embed(roles, &selected).0;
                             e
                         });
                         m.components(|c| c)
@@ -716,7 +715,7 @@ pub async fn select_roles(
                 }
                 ButtonResponse::Next => {
                     if role_page_curr < (role_pages.len() - 1) {
-                        role_page_curr = role_page_curr + 1;
+                        role_page_curr += 1;
                     }
                     i.create_interaction_response(ctx, |r| {
                         r.kind(InteractionResponseType::UpdateMessage);
@@ -762,7 +761,7 @@ pub async fn select_roles(
                 }
                 ButtonResponse::Prev => {
                     if role_page_curr > 0 {
-                        role_page_curr = role_page_curr - 1;
+                        role_page_curr -= 1;
                     }
                     i.create_interaction_response(ctx, |r| {
                         r.kind(InteractionResponseType::UpdateMessage);
