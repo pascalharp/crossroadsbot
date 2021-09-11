@@ -225,6 +225,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             role_name.clone(),
             role_repr.clone(),
             *emoji_id.as_u64(),
+            None,
         )
         .await?;
 

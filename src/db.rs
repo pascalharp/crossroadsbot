@@ -435,7 +435,8 @@ async fn select_roles_by_active(ctx: &Context, active: bool) -> QueryResult<Vec<
     task::spawn_blocking(move || {
         roles::table
             .filter(roles::active.eq(active))
-            .order_by(roles::title)
+            .order_by(roles::priority.desc())
+            .then_order_by(roles::title)
             .get_results(&pool.conn())
     })
     .await
@@ -474,7 +475,8 @@ async fn select_roles_by_training(ctx: &Context, id: i32) -> QueryResult<Vec<Rol
             .inner_join(roles::table);
         join.filter(trainings::id.eq(id))
             .select(roles::all_columns)
-            .order_by(roles::title)
+            .order_by(roles::priority.desc())
+            .then_order_by(roles::title)
             .load(&pool.conn())
     })
     .await
@@ -490,7 +492,8 @@ async fn select_active_roles_by_training(ctx: &Context, id: i32) -> QueryResult<
         join.filter(trainings::id.eq(id))
             .filter(roles::active.eq(true))
             .select(roles::all_columns)
-            .order_by(roles::title)
+            .order_by(roles::priority.desc())
+            .then_order_by(roles::title)
             .load(&pool.conn())
     })
     .await
@@ -505,7 +508,8 @@ async fn select_roles_by_signup(ctx: &Context, id: i32) -> QueryResult<Vec<Role>
             .inner_join(roles::table);
         join.filter(signups::id.eq(id))
             .select(roles::all_columns)
-            .order_by(roles::title)
+            .order_by(roles::priority.desc())
+            .then_order_by(roles::title)
             .load(&pool.conn())
     })
     .await
@@ -744,11 +748,13 @@ impl Role {
         title: String,
         repr: String,
         emoji: u64,
+        priority: Option<i16>,
     ) -> QueryResult<Role> {
         let r = NewRole {
             title,
             repr,
             emoji: emoji as i64,
+            priority,
         };
         insert_role(ctx, r).await
     }

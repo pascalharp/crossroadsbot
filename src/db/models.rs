@@ -108,6 +108,7 @@ pub struct Role {
     pub repr: String,
     pub emoji: i64,
     pub active: bool,
+    pub priority: i16,
 }
 
 #[derive(Insertable, Debug)]
@@ -116,6 +117,7 @@ pub(super) struct NewRole {
     pub title: String,
     pub repr: String,
     pub emoji: i64,
+    pub priority: Option<i16>,
 }
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
