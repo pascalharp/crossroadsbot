@@ -2,7 +2,7 @@ use crate::db;
 use crate::utils::{
     CHECK_EMOJI, DOCUMENT_EMOJI, LEFT_ARROW_EMOJI, MEMO_EMOJI, RIGHT_ARROW_EMOJI, X_EMOJI,
 };
-use serenity::builder::{CreateActionRow, CreateButton};
+use serenity::builder::{CreateActionRow, CreateButton, CreateSelectMenu, CreateSelectMenuOption};
 use serenity::model::interactions::message_component::ButtonStyle;
 use serenity::model::interactions::message_component::MessageComponentInteraction;
 use serenity::model::prelude::*;
@@ -205,6 +205,91 @@ impl std::fmt::Display for ButtonGeneralInteraction {
     }
 }
 
+pub enum SelectionRolePriority {
+    VeryHigh,
+    High,
+    Default,
+    Low,
+    VeryLow,
+}
+
+impl std::fmt::Display for SelectionRolePriority {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SelectionRolePriority::VeryHigh => write!(f, "selection_role_priority_very_high"),
+            SelectionRolePriority::High => write!(f, "selection_role_priority_high"),
+            SelectionRolePriority::Default => write!(f, "selection_role_priority_default"),
+            SelectionRolePriority::Low => write!(f, "selection_role_priority_low"),
+            SelectionRolePriority::VeryLow => write!(f, "selection_role_priority_very_low"),
+        }
+    }
+}
+
+impl std::str::FromStr for SelectionRolePriority {
+    type Err = ButtonInteractionParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let split = s
+            .split_once("selection_role_priority_")
+            .ok_or(ButtonInteractionParseError {})?;
+        match split.1 {
+            "very_high" => Ok(SelectionRolePriority::VeryHigh),
+            "high" => Ok(SelectionRolePriority::High),
+            "default" => Ok(SelectionRolePriority::Default),
+            "low" => Ok(SelectionRolePriority::Low),
+            "very_low" => Ok(SelectionRolePriority::VeryLow),
+            _ => Err(ButtonInteractionParseError {}),
+        }
+    }
+}
+
+impl SelectionRolePriority {
+    pub fn to_i16(&self) -> i16 {
+        match self {
+            SelectionRolePriority::VeryHigh => 4,
+            SelectionRolePriority::High => 3,
+            SelectionRolePriority::Default => 2,
+            SelectionRolePriority::Low => 1,
+            SelectionRolePriority::VeryLow => 0,
+        }
+    }
+
+    pub fn select_menu_option(&self) -> CreateSelectMenuOption {
+        let mut opt = CreateSelectMenuOption::default();
+        opt.value(self);
+        let d = match self {
+            SelectionRolePriority::VeryHigh => "Very High",
+            SelectionRolePriority::High => "High",
+            SelectionRolePriority::Default => "Default",
+            SelectionRolePriority::Low => "Low",
+            SelectionRolePriority::VeryLow => "Very Low",
+        };
+        opt.label(d);
+        opt
+    }
+
+    pub fn select_menu_id_str() -> &'static str {
+        "selection_role_priority"
+    }
+
+    pub fn select_menu() -> CreateSelectMenu {
+        let mut menu = CreateSelectMenu::default();
+        menu.custom_id(SelectionRolePriority::select_menu_id_str());
+        menu.options(|o| {
+            o.add_option(SelectionRolePriority::VeryHigh.select_menu_option());
+            o.add_option(SelectionRolePriority::High.select_menu_option());
+            o.add_option(SelectionRolePriority::Default.select_menu_option());
+            o.add_option(SelectionRolePriority::Low.select_menu_option());
+            o.add_option(SelectionRolePriority::VeryLow.select_menu_option());
+            o
+        });
+        menu.placeholder("Select priority");
+        menu.min_values(0);
+        menu.max_values(1);
+        menu
+    }
+}
+
 pub fn resolve_button_response(response: &MessageComponentInteraction) -> ButtonResponse {
     match response.data.custom_id.as_str() {
         COMPONENT_ID_CONFIRM => ButtonResponse::Confirm,
@@ -292,6 +377,12 @@ pub fn register_list_action_row() -> CreateActionRow {
     let mut ar = CreateActionRow::default();
     ar.add_button(ButtonGeneralInteraction::Register.button());
     ar.add_button(ButtonGeneralInteraction::List.button());
+    ar
+}
+
+pub fn role_priority_select_action_row() -> CreateActionRow {
+    let mut ar = CreateActionRow::default();
+    ar.add_select_menu(SelectionRolePriority::select_menu());
     ar
 }
 

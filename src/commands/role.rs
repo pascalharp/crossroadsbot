@@ -8,6 +8,7 @@ use serenity::framework::standard::{
     macros::{command, group},
     Args, CommandResult,
 };
+use serenity::futures::StreamExt;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 use std::collections::HashSet;
@@ -151,73 +152,94 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
 
         msg.edit(ctx, |m| {
             m.set_embed(emb.clone());
-            m.components(|c| c.add_action_row(components::confirm_abort_action_row()))
+            m.components(|c| {
+                c.add_action_row(components::role_priority_select_action_row());
+                c.add_action_row(components::confirm_abort_action_row());
+                c
+            })
         })
         .await?;
 
-        let interaction = msg
-            .await_component_interaction(ctx)
+        let mut interaction = msg
+            .await_component_interactions(ctx)
             .author_id(author.id)
             .filter(|f| f.kind == InteractionType::MessageComponent)
             .timeout(DEFAULT_TIMEOUT)
             .await;
 
-        match interaction {
-            None => {
-                msg.edit(ctx, |m| {
-                    emb.footer(|f| f.text("Timed out"));
-                    m.set_embed(emb);
-                    m.components(|c| c)
-                })
-                .await?;
-                return Err(ConversationError::TimedOut).log_reply(&msg);
+        let mut role_priority: Option<components::SelectionRolePriority> = None;
+
+        loop {
+            match interaction.next().await {
+                None => {
+                    msg.edit(ctx, |m| {
+                        emb.footer(|f| f.text("Timed out"));
+                        m.set_embed(emb);
+                        m.components(|c| c)
+                    })
+                    .await?;
+                    return Err(ConversationError::TimedOut).log_reply(&msg);
+                }
+                Some(i) => {
+                    if i.data.custom_id.eq(components::SelectionRolePriority::select_menu_id_str()) {
+                        // we only expect one value from select menu
+                        let val = i.data.values.get(0).ok_or_else(|| LogError::new_silent("No value selected on priority selection"))?;
+                        role_priority = Some(val.parse::<components::SelectionRolePriority>()?);
+                            i.create_interaction_response(ctx, |r| {
+                                r.kind(InteractionResponseType::DeferredUpdateMessage)
+                            }).await?;
+                        continue
+                    }
+                    // now check buttons
+                    match components::resolve_button_response(&i) {
+                        components::ButtonResponse::Confirm => {
+                            i.create_interaction_response(ctx, |r| {
+                                r.kind(InteractionResponseType::UpdateMessage);
+                                r.interaction_response_data(|d| {
+                                    emb.footer(|f| f.text("Confirmed"));
+                                    d.create_embed(|e| {
+                                        e.0 = emb.0;
+                                        e
+                                    });
+                                    d.components(|c| c)
+                                })
+                            })
+                            .await?;
+                            break;
+                        }
+                        components::ButtonResponse::Abort => {
+                            i.create_interaction_response(ctx, |r| {
+                                r.kind(InteractionResponseType::UpdateMessage);
+                                r.interaction_response_data(|d| {
+                                    emb.footer(|f| f.text("Aborted"));
+                                    d.create_embed(|e| {
+                                        e.0 = emb.0;
+                                        e
+                                    });
+                                    d.components(|c| c)
+                                })
+                            })
+                            .await?;
+                            return Err(ConversationError::Canceled).log_reply(&msg);
+                        }
+                        _ => {
+                            i.create_interaction_response(ctx, |r| {
+                                r.kind(InteractionResponseType::UpdateMessage);
+                                r.interaction_response_data(|d| {
+                                    emb.footer(|f| f.text("Error"));
+                                    d.create_embed(|e| {
+                                        e.0 = emb.0;
+                                        e
+                                    });
+                                    d.components(|c| c)
+                                })
+                            })
+                            .await?;
+                            return Err(ConversationError::InvalidInput).log_reply(&msg);
+                        }
+                    }
+                },
             }
-            Some(i) => match components::resolve_button_response(&i) {
-                components::ButtonResponse::Confirm => {
-                    i.create_interaction_response(ctx, |r| {
-                        r.kind(InteractionResponseType::UpdateMessage);
-                        r.interaction_response_data(|d| {
-                            emb.footer(|f| f.text("Confirmed"));
-                            d.create_embed(|e| {
-                                e.0 = emb.0;
-                                e
-                            });
-                            d.components(|c| c)
-                        })
-                    })
-                    .await?;
-                }
-                components::ButtonResponse::Abort => {
-                    i.create_interaction_response(ctx, |r| {
-                        r.kind(InteractionResponseType::UpdateMessage);
-                        r.interaction_response_data(|d| {
-                            emb.footer(|f| f.text("Aborted"));
-                            d.create_embed(|e| {
-                                e.0 = emb.0;
-                                e
-                            });
-                            d.components(|c| c)
-                        })
-                    })
-                    .await?;
-                    return Err(ConversationError::Canceled).log_reply(&msg);
-                }
-                _ => {
-                    i.create_interaction_response(ctx, |r| {
-                        r.kind(InteractionResponseType::UpdateMessage);
-                        r.interaction_response_data(|d| {
-                            emb.footer(|f| f.text("Error"));
-                            d.create_embed(|e| {
-                                e.0 = emb.0;
-                                e
-                            });
-                            d.components(|c| c)
-                        })
-                    })
-                    .await?;
-                    return Err(ConversationError::InvalidInput).log_reply(&msg);
-                }
-            },
         }
 
         db::Role::insert(
@@ -225,7 +247,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             role_name.clone(),
             role_repr.clone(),
             *emoji_id.as_u64(),
-            None,
+            role_priority.map(|p| p.to_i16()),
         )
         .await?;
 
