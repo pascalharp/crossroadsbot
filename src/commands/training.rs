@@ -4,6 +4,7 @@ use crate::{
     embeds::*,
     log::*,
     signup_board::SignupBoard,
+    status,
     utils::{self, *},
 };
 use serde::ser::{Serialize, SerializeStruct, Serializer};
@@ -254,6 +255,8 @@ pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                 })
             })
             .await?;
+
+        status::update_status(ctx).await;
 
         Ok(())
     })

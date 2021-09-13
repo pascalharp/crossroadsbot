@@ -1,4 +1,6 @@
-use crossroadsbot::{commands, data::*, db, interactions, signup_board::*, utils::DIZZY_EMOJI};
+use crossroadsbot::{
+    commands, data::*, db, interactions, signup_board::*, status, utils::DIZZY_EMOJI,
+};
 use dashmap::DashSet;
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
@@ -42,16 +44,11 @@ impl EventHandler for Handler {
             },
         }
 
-        let signup_board_category = db::Config::load(&ctx, String::from(SIGNUP_BOARD_NAME))
-            .await
-            .ok();
+        info!("Resetting signup board");
+        SignupBoard::reset(&ctx).await.ok();
 
-        if signup_board_category.is_none() {
-            info!("Signup board category not found in db");
-        } else {
-            info!("Resetting signup board");
-            SignupBoard::reset(&ctx).await.ok();
-        }
+        info!("Setting presence");
+        status::update_status(&ctx).await;
     }
 
     async fn resume(&self, _: Context, _: ResumedEvent) {

@@ -12,4 +12,5 @@ pub mod embeds;
 pub mod interactions;
 pub mod log;
 pub mod signup_board;
+pub mod status;
 pub mod utils;
