@@ -302,7 +302,7 @@ pub async fn list(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResul
 
         let mut embed = CreateEmbed::default();
         embed.xstyle();
-        embeds::embed_add_roles(&mut embed, &roles, false);
+        embeds::embed_add_roles(&mut embed, &roles, false, true);
 
         msg.channel_id
             .send_message(ctx, |m| m.set_embed(embed))

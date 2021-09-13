@@ -123,7 +123,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         let roles = training.active_roles(ctx).await.log_reply(msg)?;
 
         let mut emb = training_base_embed(&training);
-        embed_add_roles(&mut emb, &roles, false);
+        embed_add_roles(&mut emb, &roles, false, true);
 
         m.edit(ctx, |m| {
             m.embed(|e| {
@@ -175,7 +175,7 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 
         let mut embed = training_base_embed(&training);
         training_embed_add_tier(&mut embed, &tiers, true);
-        embed_add_roles(&mut embed, &roles, false);
+        embed_add_roles(&mut embed, &roles, false, true);
 
         msg.channel_id
             .send_message(ctx, |m| {

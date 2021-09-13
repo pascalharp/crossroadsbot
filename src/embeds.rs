@@ -130,10 +130,10 @@ pub fn signupboard_embed(
         ),
         false,
     );
+    training_embed_add_tier(&mut e, tier, true);
     e.field("**State**", &training.state, true);
     e.field("**Training Id**", &training.id, true);
-    training_embed_add_tier(&mut e, tier, true);
-    embed_add_roles(&mut e, roles, false);
+    embed_add_roles(&mut e, roles, false, false);
     e
 }
 
@@ -162,28 +162,37 @@ pub fn training_embed_add_tier(
     }
 }
 
-pub fn embed_add_roles(e: &mut CreateEmbed, r: &[db::Role], inline: bool) {
-    let repr_width = r
-        .iter()
-        .map(|r| r.repr.len())
-        .fold(usize::MIN, std::cmp::max);
-    let title_width = r
+pub fn embed_add_roles(e: &mut CreateEmbed, roles: &[db::Role], inline: bool, reprs: bool) {
+    let title_width = roles
         .iter()
         .map(|r| r.title.len())
         .fold(usize::MIN, std::cmp::max);
-    let paged = r.chunks(10);
+    let paged = roles.chunks(10);
     for r in paged {
         let roles_text = r
             .iter()
             .map(|r| {
-                format!(
-                    "{} `| {:^rwidth$} |` `| {:^twidth$} |`",
-                    Mention::from(EmojiId::from(r.emoji as u64)),
-                    &r.repr,
-                    &r.title,
-                    rwidth = repr_width,
-                    twidth = title_width
-                )
+                if reprs {
+                    let repr_width = roles
+                        .iter()
+                        .map(|r| r.repr.len())
+                        .fold(usize::MIN, std::cmp::max);
+                    format!(
+                        "{} `| {:^rwidth$} |` `| {:^twidth$} |`",
+                        Mention::from(EmojiId::from(r.emoji as u64)),
+                        &r.repr,
+                        &r.title,
+                        rwidth = repr_width,
+                        twidth = title_width
+                    )
+                } else {
+                    format!(
+                        "{}`| {:^twidth$} |`",
+                        Mention::from(EmojiId::from(r.emoji as u64)),
+                        &r.title,
+                        twidth = title_width
+                    )
+                }
             })
             .collect::<Vec<_>>()
             .join("\n");

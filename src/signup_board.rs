@@ -3,7 +3,6 @@ use chrono::Datelike;
 use chrono::NaiveDate;
 use serenity::{model::prelude::*, prelude::*};
 use std::convert::TryFrom;
-use std::sync::Arc;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -285,12 +284,4 @@ impl SignupBoard {
 
         Ok(())
     }
-}
-
-pub enum SignupBoardAction {
-    Ignore,                          // if not on a SignupBoard msg
-    None,                            // if invalid emoji
-    JoinSignup(Arc<db::Training>),   // join
-    EditSignup(Arc<db::Training>),   // edit
-    RemoveSignup(Arc<db::Training>), // remove
 }
