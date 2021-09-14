@@ -11,7 +11,7 @@ use serenity::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 #[group]
-#[commands(register, join, leave, edit, list)]
+#[commands(register, unregister, join, leave, edit, list)]
 struct Signup;
 
 #[command]
@@ -33,6 +33,31 @@ pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandRe
             .log_unexpected_reply(msg)?;
         msg.reply(ctx, format!("Gw2 account name set to: {}", new_user.gw2_id))
             .await?;
+        Ok(())
+    })
+    .await
+}
+
+#[command]
+#[description = "Unregister yourself with the bot and remove all your signups"]
+#[example = ""]
+#[usage = ""]
+#[num_args(0)]
+pub async fn unregister(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
+    log_command(ctx, msg, || async {
+        let db_user = match db::User::by_discord_id(ctx, msg.author.id).await {
+            Ok(u) => u,
+            Err(e) => {
+                msg.reply(ctx, "Not registered").await.log_unexpected_reply(msg)?;
+                return Err(e).log_only()
+            }
+        };
+
+        let _ = match db_user.delete(ctx).await {
+            Ok(1) => msg.react(ctx, utils::CHECK_EMOJI).await.log_unexpected_reply(msg)?,
+            _ => return Err(LogError::new("Unexpected Error", msg))
+        };
+
         Ok(())
     })
     .await
