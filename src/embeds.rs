@@ -219,7 +219,7 @@ pub fn training_embed_add_board_footer(e: &mut CreateEmbed, ts: &db::TrainingSta
     }
 }
 
-fn internal_register_embed(e: &mut  CreateEmbed) {
+fn internal_register_embed(e: &mut CreateEmbed) {
     e.description(
         "To register with the bot simply use the register command (_possible in DM's_) with your \
         Guild Wars 2 account name.\n\
