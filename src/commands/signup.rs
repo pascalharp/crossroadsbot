@@ -21,8 +21,8 @@ struct Signup;
 #[num_args(1)]
 pub async fn register(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     log_command(ctx, msg, || async {
-        let acc_name = args.single::<String>().log_reply(msg)?;
-        let re = Regex::new("^[a-zA-Z]{3,27}\\.[0-9]{4}$").unwrap();
+        let acc_name = args.single_quoted::<String>().log_reply(msg)?;
+        let re = Regex::new("^[a-zA-Z\\s]{3,27}\\.[0-9]{4}$").unwrap();
         if !re.is_match(&acc_name) {
             return LogError::new("Invalid gw2 account name format", msg).into();
         }
