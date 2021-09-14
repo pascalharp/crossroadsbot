@@ -154,11 +154,9 @@ async fn upsert_config(ctx: &Context, conf: Config) -> QueryResult<Config> {
 // Delete
 async fn delete_user_by_id(ctx: &Context, id: i32) -> QueryResult<usize> {
     let pool = DBPool::load(ctx).await;
-    task::spawn_blocking(move || {
-        diesel::delete(users::table.find(id)).execute(&pool.conn())
-    })
-    .await
-    .unwrap()
+    task::spawn_blocking(move || diesel::delete(users::table.find(id)).execute(&pool.conn()))
+        .await
+        .unwrap()
 }
 
 async fn delete_signup_roles_by_signup(ctx: &Context, id: i32) -> QueryResult<usize> {

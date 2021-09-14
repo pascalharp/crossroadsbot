@@ -48,14 +48,19 @@ pub async fn unregister(ctx: &Context, msg: &Message, _: Args) -> CommandResult 
         let db_user = match db::User::by_discord_id(ctx, msg.author.id).await {
             Ok(u) => u,
             Err(e) => {
-                msg.reply(ctx, "Not registered").await.log_unexpected_reply(msg)?;
-                return Err(e).log_only()
+                msg.reply(ctx, "Not registered")
+                    .await
+                    .log_unexpected_reply(msg)?;
+                return Err(e).log_only();
             }
         };
 
         let _ = match db_user.delete(ctx).await {
-            Ok(1) => msg.react(ctx, utils::CHECK_EMOJI).await.log_unexpected_reply(msg)?,
-            _ => return Err(LogError::new("Unexpected Error", msg))
+            Ok(1) => msg
+                .react(ctx, utils::CHECK_EMOJI)
+                .await
+                .log_unexpected_reply(msg)?,
+            _ => return Err(LogError::new("Unexpected Error", msg)),
         };
 
         Ok(())
