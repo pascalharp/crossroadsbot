@@ -64,6 +64,37 @@ impl EventHandler for Handler {
 
         interactions::button_interaction(&ctx, &interaction).await;
     }
+
+    async fn guild_member_removal(
+        &self,
+        ctx: Context,
+        guild_id: GuildId,
+        user: User,
+        _member_data_if_available: Option<Member>,
+    ) {
+        // Check if in correct guild
+        let main_guild_id = {
+            ctx.data
+                .read()
+                .await
+                .get::<ConfigValuesData>()
+                .unwrap()
+                .clone()
+                .main_guild_id
+        };
+
+        if guild_id != main_guild_id {
+            return;
+        }
+
+        // Load user if registered
+        let db_user = match db::User::by_discord_id(&ctx, user.id).await {
+            Ok(u) => u,
+            _ => return,
+        };
+
+        db_user.delete(&ctx).await.ok();
+    }
 }
 
 #[hook]
