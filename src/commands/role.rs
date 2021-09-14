@@ -107,8 +107,10 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         let cancel = std::sync::Arc::new(tokio::sync::Mutex::new(false));
         let cancel_task = cancel.clone();
         tokio::spawn(async move {
-            for e in available {
+            for (i, e) in available.into_iter().enumerate() {
                 if *cancel_task.lock().await { return }
+                // limit is 20 reactions, leave one for user
+                if i >= 19 { return }
                 msg_task.react(&ctx_task, e).await.ok();
             }
         });
