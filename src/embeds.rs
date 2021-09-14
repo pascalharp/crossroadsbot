@@ -168,6 +168,7 @@ pub fn embed_add_roles(e: &mut CreateEmbed, roles: &[db::Role], inline: bool, re
         .map(|r| r.title.len())
         .fold(usize::MIN, std::cmp::max);
     let paged = roles.chunks(10);
+    let mut initial = true;
     for r in paged {
         let roles_text = r
             .iter()
@@ -196,7 +197,8 @@ pub fn embed_add_roles(e: &mut CreateEmbed, roles: &[db::Role], inline: bool, re
             })
             .collect::<Vec<_>>()
             .join("\n");
-        e.field("Roles", roles_text, inline);
+        e.field("Roles", roles_text, if initial { false } else { inline });
+        initial = false;
     }
 }
 

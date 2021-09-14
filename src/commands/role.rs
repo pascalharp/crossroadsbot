@@ -83,26 +83,6 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                 db_emojis.into_iter().map( |e| Mention::from(e).to_string() ).collect::<Vec<_>>().join("|")
             },
             false);
-        emb.footer(|f| f.text(
-            format!(
-            "{}\n{}\n{}",
-            "Emojis can be used multiple times, but should be avoided for roles that can appear in the same training",
-            "Only custom emojis are allowed. Make sure that the bot has access to the emoji!",
-            "Loading emojis, please wait...."))
-        );
-
-        let mut msg = msg
-            .channel_id
-            .send_message(ctx, |m| m.set_embed(emb.clone()))
-            .await?;
-
-        // Present all available emojis
-        // Not using buttons here, since there is a limited amount for them
-        // and there might be a lot of emojis
-        for e in available {
-            msg.react(ctx, e).await?;
-        }
-
         emb.footer(|f| {
             f.text(
                 format!(
@@ -112,7 +92,26 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                 "Choose an emoji (no necessarily a listed one)"))
         });
 
-        msg.edit(ctx, |m| m.set_embed(emb.clone())).await?;
+        let mut msg = msg
+            .channel_id
+            .send_message(ctx, |m| m.set_embed(emb.clone()))
+            .await?;
+
+        // Present all available emojis
+        // Not using buttons here, since there is a limited amount for them
+        // and there might be a lot of emojis
+        // Also doing this in parallel so emojis can already be selected while bot still suggests
+        // them
+        let ctx_task = ctx.clone();
+        let msg_task = msg.clone();
+        let cancel = std::sync::Arc::new(tokio::sync::Mutex::new(false));
+        let cancel_task = cancel.clone();
+        tokio::spawn(async move {
+            for e in available {
+                if *cancel_task.lock().await { return }
+                msg_task.react(&ctx_task, e).await.ok();
+            }
+        });
 
         // Wait for emoji
         let emoji = msg
@@ -144,6 +143,8 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                 }
             }
         };
+
+        *cancel.lock().await = true;
 
         msg.delete_reactions(ctx).await?;
 
