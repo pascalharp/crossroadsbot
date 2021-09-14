@@ -93,6 +93,7 @@ impl EventHandler for Handler {
             _ => return,
         };
 
+        // TODO log this to discord channel
         db_user.delete(&ctx).await.ok();
     }
 }

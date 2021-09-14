@@ -188,10 +188,9 @@ pub fn embed_add_roles(e: &mut CreateEmbed, roles: &[db::Role], inline: bool, re
                     )
                 } else {
                     format!(
-                        "{}`| {:^twidth$} |`",
+                        "{} | {} ",
                         Mention::from(EmojiId::from(r.emoji as u64)),
                         &r.title,
-                        twidth = title_width
                     )
                 }
             })
@@ -220,24 +219,7 @@ pub fn training_embed_add_board_footer(e: &mut CreateEmbed, ts: &db::TrainingSta
     }
 }
 
-pub fn not_registered_embed() -> CreateEmbed {
-    let mut e = CreateEmbed::xdefault();
-    e.description("Not yet registerd");
-    e.color((255, 0, 0));
-    e.field(
-        "User not found. Use the register command first",
-        format!(
-            "For more information type: __{}help register__",
-            GLOB_COMMAND_PREFIX
-        ),
-        false,
-    );
-    e
-}
-
-pub fn register_instructions_embed() -> CreateEmbed {
-    let mut e = CreateEmbed::xdefault();
-    e.title("How to register");
+fn internal_register_embed(e: &mut  CreateEmbed) {
     e.description(
         "To register with the bot simply use the register command (_possible in DM's_) with your \
         Guild Wars 2 account name.\n\
@@ -252,6 +234,19 @@ pub fn register_instructions_embed() -> CreateEmbed {
             GLOB_COMMAND_PREFIX
         ))
     });
+}
+
+pub fn not_registered_embed() -> CreateEmbed {
+    let mut e = CreateEmbed::xdefault();
+    e.title("Not yet registered");
+    internal_register_embed(&mut e);
+    e
+}
+
+pub fn register_instructions_embed() -> CreateEmbed {
+    let mut e = CreateEmbed::xdefault();
+    e.title("How to register");
+    internal_register_embed(&mut e);
     e
 }
 
