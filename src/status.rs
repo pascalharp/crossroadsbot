@@ -7,9 +7,13 @@ use crate::utils;
 pub async fn update_status(ctx: &Context) {
     let trainings_count = db::Training::amount_by_state(ctx, db::TrainingState::Open).await;
     let activity = match trainings_count {
-        Ok(0) => Activity::playing(format!("{} zero open trainings", utils::RED_CIRCLE_EMOJI)),
+        Ok(0) => Activity::playing(format!("{} No training available", utils::RED_CIRCLE_EMOJI)),
+        Ok(1) => Activity::playing(format!(
+            "{} 1 training available",
+            utils::GREEN_CIRCLE_EMOJI,
+        )),
         Ok(n) => Activity::playing(format!(
-            "{} {} open trainings",
+            "{} {} trainings available",
             utils::GREEN_CIRCLE_EMOJI,
             n
         )),
