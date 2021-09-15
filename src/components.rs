@@ -345,9 +345,13 @@ pub fn role_button(role: &db::Role) -> CreateButton {
     b
 }
 
-pub fn confirm_abort_action_row() -> CreateActionRow {
+pub fn confirm_abort_action_row(confirm_disabled: bool) -> CreateActionRow {
     let mut ar = CreateActionRow::default();
-    ar.add_button(confirm_button());
+    ar.add_button({
+        let mut b = confirm_button();
+        b.disabled(confirm_disabled);
+        b
+    });
     ar.add_button(abort_button());
     ar
 }

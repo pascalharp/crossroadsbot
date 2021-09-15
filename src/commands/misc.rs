@@ -64,7 +64,7 @@ pub async fn button(ctx: &Context, msg: &Message, _args: Args) -> CommandResult 
                         });
                         ar
                     });
-                    c.add_action_row(confirm_abort_action_row());
+                    c.add_action_row(confirm_abort_action_row(false));
                     c
                 })
             })

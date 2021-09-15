@@ -197,7 +197,7 @@ pub async fn select_roles(
         });
         m.components(|c| {
             c.set_action_rows(role_pages.get(role_page_curr).unwrap().to_vec());
-            let mut ca_ar = confirm_abort_action_row();
+            let mut ca_ar = confirm_abort_action_row(selected.is_empty());
             if role_pages.len() > 1 {
                 if role_page_curr > 0 {
                     ca_ar.add_button(prev_button());
@@ -305,7 +305,7 @@ pub async fn select_roles(
                             });
                             d.components(|c| {
                                 c.set_action_rows(role_pages.get(role_page_curr).unwrap().to_vec());
-                                let mut ca_ar = confirm_abort_action_row();
+                                let mut ca_ar = confirm_abort_action_row(selected.is_empty());
                                 if role_pages.len() > 1 {
                                     if role_page_curr > 0 {
                                         ca_ar.add_button(prev_button());
@@ -351,7 +351,7 @@ pub async fn select_roles(
                             });
                             d.components(|c| {
                                 c.set_action_rows(role_pages.get(role_page_curr).unwrap().to_vec());
-                                let mut ca_ar = confirm_abort_action_row();
+                                let mut ca_ar = confirm_abort_action_row(selected.is_empty());
                                 if role_pages.len() > 1 {
                                     if role_page_curr > 0 {
                                         ca_ar.add_button(prev_button());

@@ -157,7 +157,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
             m.set_embed(emb.clone());
             m.components(|c| {
                 c.add_action_row(components::role_priority_select_action_row());
-                c.add_action_row(components::confirm_abort_action_row());
+                c.add_action_row(components::confirm_abort_action_row(false));
                 c
             })
         })

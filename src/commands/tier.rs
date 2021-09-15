@@ -109,7 +109,7 @@ pub async fn add(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                     );
                     e
                 });
-                m.components(|c| c.add_action_row(confirm_abort_action_row()))
+                m.components(|c| c.add_action_row(confirm_abort_action_row(false)))
             })
             .await?;
 
@@ -212,7 +212,7 @@ pub async fn remove(ctx: &Context, msg: &Message, mut args: Args) -> CommandResu
                 false)
             });
             m.components( |c| {
-                c.add_action_row(confirm_abort_action_row())
+                c.add_action_row(confirm_abort_action_row(false))
             })
         }).await?;
 

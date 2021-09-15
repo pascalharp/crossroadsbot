@@ -292,7 +292,7 @@ async fn list_by_state(ctx: &Context, msg: &Message, state: db::TrainingState) -
                             CROSS_EMOJI))
                 })
             });
-            m.components( |c| c.add_action_row(components::confirm_abort_action_row()))
+            m.components( |c| c.add_action_row(components::confirm_abort_action_row(false)))
         }).await?;
         utils::await_confirm_abort_interaction(ctx, &mut msg).await?;
     }
