@@ -1,5 +1,5 @@
 use crossroadsbot::{
-    commands, data::*, db, interactions, signup_board::*, status, utils::DIZZY_EMOJI,
+    commands, data::*, db, interactions, log::*, signup_board::*, status, utils::DIZZY_EMOJI,
 };
 use dashmap::DashSet;
 use diesel::pg::PgConnection;
@@ -87,14 +87,13 @@ impl EventHandler for Handler {
             return;
         }
 
-        // Load user if registered
-        let db_user = match db::User::by_discord_id(&ctx, user.id).await {
-            Ok(u) => u,
-            _ => return,
-        };
-
-        // TODO log this to discord channel
-        db_user.delete(&ctx).await.ok();
+        log_automatic(&ctx, "left server", &user, || async {
+            // Load user if registered
+            let db_user = db::User::by_discord_id(&ctx, user.id).await?;
+            db_user.delete(&ctx).await?;
+            Ok(())
+        })
+        .await;
     }
 }
 

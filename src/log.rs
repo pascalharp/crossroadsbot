@@ -11,6 +11,7 @@ pub enum LogType<'a> {
         i: &'a ButtonInteraction,
         m: &'a serenity::model::interactions::message_component::InteractionMessage,
     },
+    Automatic(&'a str),
 }
 
 #[derive(Debug)]
@@ -267,6 +268,9 @@ async fn log_to_channel<T>(ctx: &Context, result: &LogResult<T>, kind: LogType<'
                             true,
                         );
                     }
+                    LogType::Automatic(a) => {
+                        e.field("Automatic", a, true);
+                    }
                 }
                 match result {
                     Ok(_) => {
@@ -375,4 +379,13 @@ pub async fn log_interaction<F, Fut>(
         &action.user,
     )
     .await;
+}
+
+pub async fn log_automatic<F, Fut>(ctx: &Context, what: &str, user: &User, f: F)
+where
+    F: FnOnce() -> Fut + Send,
+    Fut: Future<Output = LogResult<()>> + Send,
+{
+    let res = f().await;
+    log_to_channel(ctx, &res, LogType::Automatic(what), user).await;
 }
