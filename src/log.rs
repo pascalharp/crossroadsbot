@@ -278,19 +278,6 @@ async fn log_to_channel<T>(ctx: &Context, result: &LogResult<T>, kind: LogType<'
                     }
                     Err(err) => {
                         e.field(format!("{} Error", utils::CROSS_EMOJI), err, false);
-                        e.field(
-                            "Reply".to_string(),
-                            match err {
-                                LogError::LogOnly(_) => "_None_",
-                                LogError::LogReply { err: _, reply: _ } => "_Same as Error_",
-                                LogError::LogReplyCustom {
-                                    err: _,
-                                    reply: _,
-                                    reply_msg,
-                                } => reply_msg,
-                            },
-                            false,
-                        );
                     }
                 }
                 e
