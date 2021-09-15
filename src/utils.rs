@@ -396,6 +396,20 @@ pub async fn select_roles(
                                     }
                                 });
                                 e
+                            });
+                            d.components(|c| {
+                                c.set_action_rows(role_pages.get(role_page_curr).unwrap().to_vec());
+                                let mut ca_ar = confirm_abort_action_row(selected.is_empty());
+                                if role_pages.len() > 1 {
+                                    if role_page_curr > 0 {
+                                        ca_ar.add_button(prev_button());
+                                    }
+                                    if role_page_curr < role_pages.len() - 1 {
+                                        ca_ar.add_button(next_button());
+                                    }
+                                }
+                                c.add_action_row(ca_ar);
+                                c
                             })
                         })
                     })
