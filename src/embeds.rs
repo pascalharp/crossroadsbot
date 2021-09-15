@@ -224,7 +224,8 @@ fn internal_register_embed(e: &mut CreateEmbed) {
         "To register with the bot simply use the register command (_possible in DM's_) with your \
         Guild Wars 2 account name.\n\
         This is your in game account name which you can also find on your friends list. It \
-        consists of your chosen in game name followed by a dot and 4 digits",
+        consists of your chosen in game name followed by a dot and 4 digits\n\
+        _If your account name contains spaces wrap it in:_ `\"...\"`",
     );
     e.field("Usage:", "register AccountName.1234", false);
     e.field("Example:", "register Narturio.1234", false);
