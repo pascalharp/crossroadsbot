@@ -4,6 +4,7 @@ use crate::utils;
 use serenity::{framework::standard::CommandResult, model::prelude::*, prelude::*};
 use std::future::Future;
 use std::ops::FnOnce;
+use tracing::info;
 
 pub enum LogType<'a> {
     Command(&'a serenity::model::channel::Message),
@@ -12,6 +13,16 @@ pub enum LogType<'a> {
         m: &'a serenity::model::interactions::message_component::InteractionMessage,
     },
     Automatic(&'a str),
+}
+
+impl std::fmt::Display for LogType<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Command(m) => write!(f, "Command ({})", m.content),
+            Self::Interaction { i, m: _} => write!(f, "Interaction ({})", i),
+            Self::Automatic(s) => write!(f, "Automatic ({})", s),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -213,7 +224,8 @@ where
     }
 }
 
-async fn log_to_channel<T>(ctx: &Context, result: &LogResult<T>, kind: LogType<'_>, user: &User) {
+async fn log_to_channel<T: std::fmt::Debug>(ctx: &Context, result: &LogResult<T>, kind: LogType<'_>, user: &User) {
+    info!("{} | {}, {:?}", user, kind, result);
     let log_info = {
         ctx.data
             .read()
@@ -269,7 +281,7 @@ async fn log_to_channel<T>(ctx: &Context, result: &LogResult<T>, kind: LogType<'
                         );
                     }
                     LogType::Automatic(a) => {
-                        e.field("Automatic", a, true);
+                        e.field("Automatic", format!("`{}`", a), true);
                     }
                 }
                 match result {
