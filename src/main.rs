@@ -7,7 +7,7 @@ use diesel::prelude::*;
 use dotenv::dotenv;
 use serenity::{
     async_trait,
-    client::{Client, EventHandler},
+    client::{Client, EventHandler, bridge::gateway::GatewayIntents},
     framework::standard::{macros::hook, DispatchError, StandardFramework},
     model::prelude::*,
     prelude::*,
@@ -190,6 +190,7 @@ async fn main() {
         .application_id(app_id)
         .framework(framework)
         .event_handler(Handler)
+        .intents(GatewayIntents::non_privileged() | GatewayIntents::GUILD_MEMBERS)
         .await
         .expect("Error creating client");
 
