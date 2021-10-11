@@ -133,7 +133,7 @@ pub fn signupboard_embed(
     training_embed_add_tier(&mut e, tier, true);
     e.field("**State**", &training.state, true);
     e.field("**Training Id**", &training.id, true);
-    embed_add_roles(&mut e, roles, false, false);
+    embed_add_roles(&mut e, roles, true, false);
     e
 }
 
