@@ -430,6 +430,9 @@ async fn button_training_interaction(
         ButtonTrainingInteraction::Leave(id) => {
             leave_button_interaction(ctx, mci, *id, &db_user).await?
         }
+        ButtonTrainingInteraction::Comment(_id) => {
+            unimplemented!(); // TODO
+        }
     }
     Ok(())
 }

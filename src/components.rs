@@ -15,6 +15,7 @@ pub const COMPONENT_LABEL_PREV: &str = "Previous Page";
 pub const COMPONENT_LABEL_SIGNUP_JOIN: &str = "SIGN UP";
 pub const COMPONENT_LABEL_SIGNUP_EDIT: &str = "EDIT SIGNUP";
 pub const COMPONENT_LABEL_SIGNUP_LEAVE: &str = "SIGN OUT";
+pub const COMPONENT_LABEL_SIGNUP_COMMENT: &str = "ADD COMMENT";
 pub const COMPONENT_LABEL_LIST: &str = "LIST SIGNUPS";
 pub const COMPONENT_LABEL_REGISTER: &str = "REGISTER INFORMATION";
 pub const COMPONENT_ID_CONFIRM: &str = "selection_confirm";
@@ -24,6 +25,7 @@ pub const COMPONENT_ID_PREV: &str = "selection_prev";
 pub const COMPONENT_ID_SIGNUP_JOIN: &str = "join";
 pub const COMPONENT_ID_SIGNUP_EDIT: &str = "edit";
 pub const COMPONENT_ID_SIGNUP_LEAVE: &str = "leave";
+pub const COMPONENT_ID_SIGNUP_COMMENT: &str = "comment";
 
 pub enum ButtonResponse {
     Confirm,
@@ -78,6 +80,7 @@ pub enum ButtonTrainingInteraction {
     Join(i32),
     Edit(i32),
     Leave(i32),
+    Comment(i32),
 }
 
 impl ButtonTrainingInteraction {
@@ -99,6 +102,11 @@ impl ButtonTrainingInteraction {
                 b.label(COMPONENT_LABEL_SIGNUP_LEAVE);
                 b.emoji(ReactionType::from(X_EMOJI));
             }
+            ButtonTrainingInteraction::Comment(_) => {
+                b.style(ButtonStyle::Primary);
+                b.label(COMPONENT_LABEL_SIGNUP_COMMENT);
+                b.emoji(ReactionType::from(MEMO_EMOJI));
+            }
         };
         b.custom_id(self.to_string());
         b
@@ -111,6 +119,7 @@ impl std::fmt::Display for ButtonTrainingInteraction {
             ButtonTrainingInteraction::Join(id) => write!(f, "training_join_{}", id),
             ButtonTrainingInteraction::Edit(id) => write!(f, "training_edit_{}", id),
             ButtonTrainingInteraction::Leave(id) => write!(f, "training_leave_{}", id),
+            ButtonTrainingInteraction::Comment(id) => write!(f, "training_comment_{}", id),
         }
     }
 }
@@ -134,6 +143,7 @@ impl std::str::FromStr for ButtonTrainingInteraction {
             "join" => Ok(ButtonTrainingInteraction::Join(training_id)),
             "edit" => Ok(ButtonTrainingInteraction::Edit(training_id)),
             "leave" => Ok(ButtonTrainingInteraction::Leave(training_id)),
+            "comment" => Ok(ButtonTrainingInteraction::Comment(training_id)),
             _ => Err(ButtonInteractionParseError {}),
         }
     }
