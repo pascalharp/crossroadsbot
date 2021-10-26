@@ -377,6 +377,7 @@ pub fn signup_action_row(training_id: i32) -> CreateActionRow {
 pub fn edit_leave_action_row(training_id: i32) -> CreateActionRow {
     let mut ar = CreateActionRow::default();
     ar.add_button(ButtonTrainingInteraction::Edit(training_id).button());
+    ar.add_button(ButtonTrainingInteraction::Comment(training_id).button());
     ar.add_button(ButtonTrainingInteraction::Leave(training_id).button());
     ar
 }
