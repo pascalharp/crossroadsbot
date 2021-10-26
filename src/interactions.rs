@@ -391,6 +391,28 @@ async fn leave_button_interaction(
     Ok(())
 }
 
+async fn comment_button_interaction(
+    ctx: &Context,
+    mci: &MessageComponentInteraction,
+    tid: i32,
+    db_user: &db::User,
+) -> LogResult<()> {
+    if in_public_channel(ctx, mci).await {
+        return mci
+            .create_interaction_response(ctx, |r| {
+                r.kind(InteractionResponseType::ChannelMessageWithSource);
+                r.interaction_response_data(|d| {
+                    d.flags(CallbackDataFlags::EPHEMERAL);
+                    d.content("Can not be used in public channels");
+                    d
+                })
+            })
+            .await
+            .log_only();
+    }
+    Ok(())
+}
+
 async fn button_training_interaction(
     ctx: &Context,
     mci: &MessageComponentInteraction,
@@ -430,8 +452,8 @@ async fn button_training_interaction(
         ButtonTrainingInteraction::Leave(id) => {
             leave_button_interaction(ctx, mci, *id, &db_user).await?
         }
-        ButtonTrainingInteraction::Comment(_id) => {
-            unimplemented!(); // TODO
+        ButtonTrainingInteraction::Comment(id) => {
+            comment_button_interaction(ctx, mci, *id, &db_user).await?
         }
     }
     Ok(())
