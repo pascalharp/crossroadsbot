@@ -7,7 +7,7 @@ use diesel::prelude::*;
 use dotenv::dotenv;
 use serenity::{
     async_trait,
-    client::{Client, EventHandler, bridge::gateway::GatewayIntents},
+    client::{bridge::gateway::GatewayIntents, Client, EventHandler},
     framework::standard::{macros::hook, DispatchError, StandardFramework},
     model::prelude::*,
     prelude::*,

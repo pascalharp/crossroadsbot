@@ -403,13 +403,80 @@ async fn comment_button_interaction(
                 r.kind(InteractionResponseType::ChannelMessageWithSource);
                 r.interaction_response_data(|d| {
                     d.flags(CallbackDataFlags::EPHEMERAL);
-                    d.content("Can not be used in public channels");
+                    d.content("This can not be used in public channels");
                     d
                 })
             })
             .await
             .log_only();
     }
+
+    let training = match db::Training::by_id_and_state(ctx, tid, db::TrainingState::Open).await {
+        Ok(t) => t,
+        Err(diesel::NotFound) => {
+            return mci
+                .create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        d.content(Mention::from(&mci.user));
+                        d.content(format!(
+                            "{} This training is not open right now",
+                            Mention::from(&mci.user)
+                        ));
+                        d
+                    })
+                })
+                .await
+                .log_only();
+        }
+        Err(e) => return Err(e).log_only(),
+    };
+
+    // check that there is a signup already
+    let signup = match db::Signup::by_user_and_training(ctx, db_user, &training).await {
+        Err(diesel::NotFound) => {
+            return mci
+                .create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        d.content(Mention::from(&mci.user));
+                        d.add_embed(not_signed_up_embed(&training));
+                        d.components(|c| c.add_action_row(join_action_row(training.id)));
+                        d
+                    })
+                })
+                .await
+                .log_only();
+        }
+        Ok(o) => o,
+        Err(e) => return Err(e).log_only(),
+    };
+
+    // Open conversation since we have to wait for input
+    let mut conv = match Conversation::init(ctx, &mci.user, training_base_embed(&training)).await {
+        Ok(conv) => {
+            mci.create_interaction_response(ctx, |r| {
+                r.kind(InteractionResponseType::DeferredUpdateMessage)
+            })
+            .await
+            .ok();
+        }
+        Err(e) => {
+            mci.create_interaction_response(ctx, |r| {
+                r.kind(InteractionResponseType::ChannelMessageWithSource);
+                r.interaction_response_data(|d| {
+                    d.content(format!("{} {}", Mention::from(&mci.user), e.to_string()));
+                    d
+                })
+            })
+            .await
+            .ok();
+            return Err(e).log_only();
+        }
+    };
+
+    // TODO Ask for comment
+    unimplemented!();
     Ok(())
 }
 

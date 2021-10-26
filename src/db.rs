@@ -585,7 +585,11 @@ async fn update_role_active(ctx: &Context, id: i32, active: bool) -> QueryResult
     .unwrap()
 }
 
-async fn update_signup_comment(ctx: &Context, id: i32, comment: Option<String>) -> QueryResult<Signup> {
+async fn update_signup_comment(
+    ctx: &Context,
+    id: i32,
+    comment: Option<String>,
+) -> QueryResult<Signup> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
         diesel::update(signups::table.find(id))
@@ -595,7 +599,6 @@ async fn update_signup_comment(ctx: &Context, id: i32, comment: Option<String>) 
     .await
     .unwrap()
 }
-
 
 /* --- User --- */
 impl User {
@@ -726,7 +729,11 @@ impl Signup {
         insert_signup_role(ctx, sr).await
     }
 
-    pub async fn update_comment(&self, ctx: &Context, comment: Option<String>) -> QueryResult<Self> {
+    pub async fn update_comment(
+        &self,
+        ctx: &Context,
+        comment: Option<String>,
+    ) -> QueryResult<Self> {
         update_signup_comment(ctx, self.id, comment).await
     }
 
