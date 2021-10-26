@@ -35,6 +35,7 @@ pub struct Signup {
     pub id: i32,
     pub user_id: i32,
     pub training_id: i32,
+    pub comment: Option<String>,
 }
 
 #[derive(Insertable, Debug)]

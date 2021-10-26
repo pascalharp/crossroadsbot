@@ -585,6 +585,18 @@ async fn update_role_active(ctx: &Context, id: i32, active: bool) -> QueryResult
     .unwrap()
 }
 
+async fn update_signup_comment(ctx: &Context, id: i32, comment: Option<String>) -> QueryResult<Signup> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::update(signups::table.find(id))
+            .set(signups::comment.eq(comment))
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+
 /* --- User --- */
 impl User {
     pub async fn upsert(ctx: &Context, discord_id: u64, gw2_id: String) -> QueryResult<User> {
@@ -712,6 +724,10 @@ impl Signup {
             role_id: role.id,
         };
         insert_signup_role(ctx, sr).await
+    }
+
+    pub async fn update_comment(&self, ctx: &Context, comment: Option<String>) -> QueryResult<Self> {
+        update_signup_comment(ctx, self.id, comment).await
     }
 
     pub async fn get_training(&self, ctx: &Context) -> QueryResult<Training> {
