@@ -1,7 +1,8 @@
 use crate::{components::*, conversation::*, db, embeds::*, log::*, utils::*};
 
 use serenity::{
-    futures::future,
+    collector::MessageCollectorBuilder,
+    futures::{future, StreamExt},
     model::{
         interactions::{
             message_component::MessageComponentInteraction,
@@ -391,6 +392,114 @@ async fn leave_button_interaction(
     Ok(())
 }
 
+async fn comment_button_interaction(
+    ctx: &Context,
+    mci: &MessageComponentInteraction,
+    tid: i32,
+    db_user: &db::User,
+) -> LogResult<()> {
+    if in_public_channel(ctx, mci).await {
+        return mci
+            .create_interaction_response(ctx, |r| {
+                r.kind(InteractionResponseType::ChannelMessageWithSource);
+                r.interaction_response_data(|d| {
+                    d.flags(CallbackDataFlags::EPHEMERAL);
+                    d.content("This can not be used in public channels");
+                    d
+                })
+            })
+            .await
+            .log_only();
+    }
+
+    let training = match db::Training::by_id_and_state(ctx, tid, db::TrainingState::Open).await {
+        Ok(t) => t,
+        Err(diesel::NotFound) => {
+            return mci
+                .create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        d.content(Mention::from(&mci.user));
+                        d.content(format!(
+                            "{} This training is not open right now",
+                            Mention::from(&mci.user)
+                        ));
+                        d
+                    })
+                })
+                .await
+                .log_only();
+        }
+        Err(e) => return Err(e).log_only(),
+    };
+
+    // check that there is a signup already
+    let signup = match db::Signup::by_user_and_training(ctx, db_user, &training).await {
+        Err(diesel::NotFound) => {
+            return mci
+                .create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        d.content(Mention::from(&mci.user));
+                        d.add_embed(not_signed_up_embed(&training));
+                        d.components(|c| c.add_action_row(join_action_row(training.id)));
+                        d
+                    })
+                })
+                .await
+                .log_only();
+        }
+        Ok(o) => o,
+        Err(e) => return Err(e).log_only(),
+    };
+
+    // Open conversation since we have to wait for input
+    let conv =
+        match Conversation::init(ctx, &mci.user, signup_add_comment_embed(&training)).await {
+            Ok(conv) => {
+                mci.create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::DeferredUpdateMessage)
+                })
+                .await
+                .ok();
+                conv
+            }
+            Err(e) => {
+                mci.create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        d.content(format!("{} {}", Mention::from(&mci.user), e.to_string()));
+                        d
+                    })
+                })
+                .await
+                .ok();
+                return Err(e).log_only();
+            }
+        };
+
+    match MessageCollectorBuilder::new(ctx)
+        .channel_id(conv.chan.id)
+        .author_id(conv.user.id)
+        .timeout(DEFAULT_TIMEOUT)
+        .collect_limit(1)
+        .await
+        .next()
+        .await
+    {
+        Some(msg) => {
+            signup.update_comment(ctx, Some(msg.content.clone())).await.log_unexpected_reply(&msg)?;
+            msg.reply(ctx, "Comment saved").await.log_unexpected_reply(&msg)?;
+        }
+        None => {
+            conv.msg.reply(ctx, "Timed out").await?;
+            return Err(ConversationError::TimedOut.into());
+        }
+    }
+
+    Ok(())
+}
+
 async fn button_training_interaction(
     ctx: &Context,
     mci: &MessageComponentInteraction,
@@ -429,6 +538,9 @@ async fn button_training_interaction(
         }
         ButtonTrainingInteraction::Leave(id) => {
             leave_button_interaction(ctx, mci, *id, &db_user).await?
+        }
+        ButtonTrainingInteraction::Comment(id) => {
+            comment_button_interaction(ctx, mci, *id, &db_user).await?
         }
     }
     Ok(())

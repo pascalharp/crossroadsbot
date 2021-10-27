@@ -19,7 +19,7 @@ impl std::fmt::Display for LogType<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Command(m) => write!(f, "Command ({})", m.content),
-            Self::Interaction { i, m: _} => write!(f, "Interaction ({})", i),
+            Self::Interaction { i, m: _ } => write!(f, "Interaction ({})", i),
             Self::Automatic(s) => write!(f, "Automatic ({})", s),
         }
     }
@@ -224,7 +224,12 @@ where
     }
 }
 
-async fn log_to_channel<T: std::fmt::Debug>(ctx: &Context, result: &LogResult<T>, kind: LogType<'_>, user: &User) {
+async fn log_to_channel<T: std::fmt::Debug>(
+    ctx: &Context,
+    result: &LogResult<T>,
+    kind: LogType<'_>,
+    user: &User,
+) {
     info!("{} | {}, {:?}", user, kind, result);
     let log_info = {
         ctx.data
