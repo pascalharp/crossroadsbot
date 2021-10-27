@@ -1,7 +1,8 @@
 use crate::{components::*, conversation::*, db, embeds::*, log::*, utils::*};
 
 use serenity::{
-    futures::future,
+    collector::MessageCollectorBuilder,
+    futures::{future, StreamExt},
     model::{
         interactions::{
             message_component::MessageComponentInteraction,
@@ -453,30 +454,49 @@ async fn comment_button_interaction(
     };
 
     // Open conversation since we have to wait for input
-    let mut conv = match Conversation::init(ctx, &mci.user, training_base_embed(&training)).await {
-        Ok(conv) => {
-            mci.create_interaction_response(ctx, |r| {
-                r.kind(InteractionResponseType::DeferredUpdateMessage)
-            })
-            .await
-            .ok();
-        }
-        Err(e) => {
-            mci.create_interaction_response(ctx, |r| {
-                r.kind(InteractionResponseType::ChannelMessageWithSource);
-                r.interaction_response_data(|d| {
-                    d.content(format!("{} {}", Mention::from(&mci.user), e.to_string()));
-                    d
+    let conv =
+        match Conversation::init(ctx, &mci.user, signup_add_comment_embed(&training)).await {
+            Ok(conv) => {
+                mci.create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::DeferredUpdateMessage)
                 })
-            })
-            .await
-            .ok();
-            return Err(e).log_only();
-        }
-    };
+                .await
+                .ok();
+                conv
+            }
+            Err(e) => {
+                mci.create_interaction_response(ctx, |r| {
+                    r.kind(InteractionResponseType::ChannelMessageWithSource);
+                    r.interaction_response_data(|d| {
+                        d.content(format!("{} {}", Mention::from(&mci.user), e.to_string()));
+                        d
+                    })
+                })
+                .await
+                .ok();
+                return Err(e).log_only();
+            }
+        };
 
-    // TODO Ask for comment
-    unimplemented!();
+    match MessageCollectorBuilder::new(ctx)
+        .channel_id(conv.chan.id)
+        .author_id(conv.user.id)
+        .timeout(DEFAULT_TIMEOUT)
+        .collect_limit(1)
+        .await
+        .next()
+        .await
+    {
+        Some(msg) => {
+            signup.update_comment(ctx, Some(msg.content.clone())).await.log_unexpected_reply(&msg)?;
+            msg.reply(ctx, "Comment saved").await.log_unexpected_reply(&msg)?;
+        }
+        None => {
+            conv.msg.reply(ctx, "Timed out").await?;
+            return Err(ConversationError::TimedOut.into());
+        }
+    }
+
     Ok(())
 }
 

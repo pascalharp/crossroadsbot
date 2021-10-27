@@ -338,6 +338,18 @@ pub fn signup_list_embed(
     e
 }
 
+pub fn signup_add_comment_embed(training: &db::Training) -> CreateEmbed {
+    let mut e = CreateEmbed::xdefault();
+    e.title(format!("Add comment for training: {}", training.title));
+    e.description("Add a comment to your sign up by replying to this message");
+    //e.field(
+    //    "Comment",
+    //    "__to add a comment simply reply to this message__",
+    //    false,
+    //);
+    e
+}
+
 pub fn success_signed_up(training: &db::Training) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
     e.xstyle();
