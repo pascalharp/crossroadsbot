@@ -1,5 +1,5 @@
 use crate::{data::GLOB_COMMAND_PREFIX, db, utils::*};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, NaiveDateTime, Duration};
 use chrono_tz::Europe::{London, Paris};
 use serenity::{
     builder::{CreateEmbed, CreateEmbedAuthor},
@@ -39,7 +39,36 @@ impl CrossroadsEmbeds for CreateEmbed {
     }
 }
 
-// Embed helpers
+// Helpers
+fn discord_timestamp(dt: &NaiveDateTime) -> String {
+    format!("<t:{}:F>", dt.timestamp())
+}
+
+const GOOGLE_CALENDAR_TIME_FMT: &str = "%Y%m%dT%H%M%SZ";
+fn google_calendar_link(training: &db::Training) -> String {
+    let begin = training.date.format(GOOGLE_CALENDAR_TIME_FMT);
+    let end = (training.date + Duration::hours(2)).format(GOOGLE_CALENDAR_TIME_FMT);
+    format!(
+        "https://calendar.google.com/calendar/event?action=TEMPLATE&dates={}/{}&text={}",
+        begin, end, training.title.replace(" ", "%20")
+    )
+}
+
+const TRAINING_TIME_FMT: &str = "%H:%M (UTC)";
+// common embed fields
+fn field_training_date(training: &db::Training) -> (String, String, bool) {
+    (
+        "**Date**".to_string(),
+        format!(
+            "{} | [{}]({})",
+            discord_timestamp(&training.date),
+            training.date.format(TRAINING_TIME_FMT),
+            google_calendar_link(training),
+        ),
+        false,
+    )
+}
+
 pub fn select_roles_embed(
     roles: &[db::Role],    // all roles
     sel: &HashSet<String>, // selected roles
@@ -68,7 +97,6 @@ pub fn select_roles_embed(
     e
 }
 
-const TRAINING_TIME_FMT: &str = "%a, %v at %H:%M %Z";
 // Does not display roles
 pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
@@ -105,7 +133,6 @@ pub fn signupboard_embed(
     tier: &Option<(db::Tier, Vec<db::TierMapping>)>,
 ) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
-    let utc = DateTime::<Utc>::from_utc(training.date, Utc);
     let title = format!(
         "{} {}",
         match training.state {
@@ -120,20 +147,12 @@ pub fn signupboard_embed(
     let title_len = title.chars().count();
     e.title(title);
     e.description(format!("||{:0>width$}||", training.id, width = title_len));
-    e.field(
-        "**Date**",
-        format!(
-            "{}\n{}\n{}",
-            utc.format(TRAINING_TIME_FMT),
-            utc.with_timezone(&London).format(TRAINING_TIME_FMT),
-            utc.with_timezone(&Paris).format(TRAINING_TIME_FMT),
-        ),
-        false,
-    );
+    let (a, b, c) = field_training_date(training);
+    e.field(a, b, c);
     training_embed_add_tier(&mut e, tier, true);
     e.field("**State**", &training.state, true);
     e.field("**Training Id**", &training.id, true);
-    embed_add_roles(&mut e, roles, false, false);
+    embed_add_roles(&mut e, roles, true, false);
     e
 }
 
