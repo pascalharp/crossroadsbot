@@ -472,7 +472,7 @@ impl Serialize for SignupCsv {
             .collect::<Vec<_>>()
             .join(", ");
         state.serialize_field("Roles", &role_str)?;
-        state.serialize_field("Comment", &self.comment.clone().unwrap_or("none".to_string()))?;
+        state.serialize_field("Comment", &self.comment.clone().unwrap_or_else(|| "none".to_string()))?;
         state.end()
     }
 }
