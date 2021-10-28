@@ -12,7 +12,6 @@ diesel-derive-enum = { version = "1.1.1", features = ["postgres"] }
 diesel_migrations = { version = "1.4.0" }
 dotenv = { version = "0.15.0" }
 chrono = { version = "0.4" }
-chrono-tz = { version = "0.4" }
 serenity = { version = "0.10.9", features = ["framework", "cache", "standard_framework", "collector", "rustls_backend", "unstable_discord_api"] }
 tokio = { version = "1.5.0", features = ["full"] }
 tracing = { version = "0.1" }

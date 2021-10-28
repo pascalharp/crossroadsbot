@@ -1,6 +1,5 @@
 use crate::{data::GLOB_COMMAND_PREFIX, db, utils::*};
-use chrono::{DateTime, Utc, NaiveDateTime, Duration};
-use chrono_tz::Europe::{London, Paris};
+use chrono::{NaiveDateTime, Duration};
 use serenity::{
     builder::{CreateEmbed, CreateEmbedAuthor},
     model::{id::EmojiId, id::RoleId, misc::Mention},
@@ -100,7 +99,6 @@ pub fn select_roles_embed(
 // Does not display roles
 pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
-    let utc = DateTime::<Utc>::from_utc(training.date, Utc);
     e.description(format!(
         "{} {}",
         match training.state {
@@ -112,16 +110,8 @@ pub fn training_base_embed(training: &db::Training) -> CreateEmbed {
         },
         training.title
     ));
-    e.field(
-        "**Date**",
-        format!(
-            "{}\n{}\n{}",
-            utc.format(TRAINING_TIME_FMT),
-            utc.with_timezone(&London).format(TRAINING_TIME_FMT),
-            utc.with_timezone(&Paris).format(TRAINING_TIME_FMT),
-        ),
-        false,
-    );
+    let (a, b, c) = field_training_date(training);
+    e.field(a, b, c);
     e.field("**State**", &training.state, true);
     e.field("**Training Id**", &training.id, true);
     e
@@ -335,12 +325,12 @@ pub fn signup_list_embed(
         e.field(
             &t.title,
             format!(
-                "`Date (YYYY-MM-DD)`\n{}\n\
-                `Time (Utc)       `\n{}\n\
-                `Training Id      `\n{}\n\
-                `Roles            `\n{}\n",
-                t.date.date(),
-                t.date.time(),
+                "`Date       `\n<t:{}:D>\n\
+                `Time       `\n<t:{}:t>\n\
+                `Training Id`\n{}\n\
+                `Roles      `\n{}\n",
+                t.date.timestamp(),
+                t.date.timestamp(),
                 t.id,
                 match roles.get(&s.id) {
                     Some(r) => r
