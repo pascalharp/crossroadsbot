@@ -607,6 +607,21 @@ async fn update_training_tier(
     .unwrap()
 }
 
+async fn update_training_board_message(
+    ctx: &Context,
+    id: i32,
+    msg_id: Option<i64>,
+) -> QueryResult<Training> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::update(trainings::table.find(id))
+            .set(trainings::board_message_id.eq(msg_id))
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn update_role_active(ctx: &Context, id: i32, active: bool) -> QueryResult<Role> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -741,6 +756,10 @@ impl Training {
 
     pub async fn active_roles(&self, ctx: &Context) -> QueryResult<Vec<Role>> {
         select_active_roles_by_training(ctx, self.id).await
+    }
+
+    pub async fn set_board_msg(&self, ctx: &Context, msg_id: Option<u64>) -> QueryResult<Training> {
+        update_training_board_message(ctx, self.id, msg_id.map(|id| id as i64)).await
     }
 }
 
