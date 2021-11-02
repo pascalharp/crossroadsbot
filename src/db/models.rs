@@ -1,10 +1,11 @@
 use crate::db::schema::{
-    config, roles, signup_roles, signups, tier_mappings, tiers, training_roles, trainings, users,
+    config, roles, signup_board_channels, signup_roles, signups, tier_mappings, tiers,
+    training_roles, trainings, users,
 };
 use diesel_derive_enum::DbEnum;
 use std::{fmt, str};
 
-use chrono::naive::NaiveDateTime;
+use chrono::naive::{NaiveDate, NaiveDateTime};
 
 #[derive(Identifiable, Queryable, PartialEq, Debug)]
 #[table_name = "users"]
@@ -91,6 +92,7 @@ pub struct Training {
     pub date: NaiveDateTime,
     pub state: TrainingState,
     pub tier_id: Option<i32>,
+    pub board_message_id: Option<i64>,
 }
 
 #[derive(Insertable, Debug)]
@@ -184,9 +186,17 @@ pub(super) struct NewTierMapping {
     pub discord_role_id: i64,
 }
 
-#[derive(Queryable, Insertable)]
+#[derive(Queryable, Insertable, Debug)]
 #[table_name = "config"]
 pub struct Config {
     pub name: String,
     pub value: String,
+}
+
+#[derive(Identifiable, Queryable, Insertable, Debug)]
+#[table_name = "signup_board_channels"]
+#[primary_key(day)]
+pub struct SignupBoardChannel {
+    pub day: NaiveDate,
+    pub channel_id: i64,
 }

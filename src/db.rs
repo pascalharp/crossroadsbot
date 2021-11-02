@@ -4,7 +4,7 @@
 //! with tokio task::spawn_blocking to not block on the executer thread
 
 use crate::data::DBPoolData;
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
@@ -137,6 +137,20 @@ async fn insert_tier_mapping(ctx: &Context, tm: NewTierMapping) -> QueryResult<T
     .unwrap()
 }
 
+async fn insert_signup_board_channel(
+    ctx: &Context,
+    sbc: SignupBoardChannel,
+) -> QueryResult<SignupBoardChannel> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::insert_into(signup_board_channels::table)
+            .values(sbc)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn upsert_config(ctx: &Context, conf: Config) -> QueryResult<Config> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -191,6 +205,15 @@ async fn delete_tier_mapping(
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
         diesel::delete(tier_mappings::table.find((tier_id, discord_role_id))).execute(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn delete_signup_board_channel(ctx: &Context, day: NaiveDate) -> QueryResult<usize> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::delete(signup_board_channels::table.find(day)).execute(&pool.conn())
     })
     .await
     .unwrap()
@@ -526,6 +549,16 @@ async fn select_roles_by_signup(ctx: &Context, id: i32) -> QueryResult<Vec<Role>
 async fn select_config_by_name(ctx: &Context, name: String) -> QueryResult<Config> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || config::table.find(name).first(&pool.conn()))
+        .await
+        .unwrap()
+}
+
+async fn select_signup_board_channel_by_date(
+    ctx: &Context,
+    day: NaiveDate,
+) -> QueryResult<SignupBoardChannel> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || signup_board_channels::table.find(day).first(&pool.conn()))
         .await
         .unwrap()
 }
@@ -869,5 +902,28 @@ impl Config {
 
     pub async fn save(self, ctx: &Context) -> QueryResult<Config> {
         upsert_config(ctx, self).await
+    }
+}
+
+// --- SignupBoardChannel ---
+impl SignupBoardChannel {
+    pub async fn insert(
+        ctx: &Context,
+        day: NaiveDate,
+        channel_id: u64,
+    ) -> QueryResult<SignupBoardChannel> {
+        let sbc = SignupBoardChannel {
+            day,
+            channel_id: channel_id as i64,
+        };
+        insert_signup_board_channel(ctx, sbc).await
+    }
+
+    pub async fn by_day(ctx: &Context, day: NaiveDate) -> QueryResult<SignupBoardChannel> {
+        select_signup_board_channel_by_date(ctx, day).await
+    }
+
+    pub async fn delete(self, ctx: &Context) -> QueryResult<usize> {
+        delete_signup_board_channel(ctx, self.day).await
     }
 }
