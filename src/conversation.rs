@@ -38,7 +38,10 @@ impl fmt::Display for ConversationError {
             }
             ConversationError::NoDmChannel => write!(f, "Unable to load DM channel"),
             ConversationError::DmBlocked => {
-                write!(f, "Unable to send message in DM's. Make sure DM's are allowed")
+                write!(
+                    f,
+                    "Unable to send message in DM's. Make sure DM's are allowed"
+                )
             }
             ConversationError::TimedOut => {
                 write!(f, "Conversation timed out")

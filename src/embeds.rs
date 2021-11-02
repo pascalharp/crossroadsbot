@@ -1,5 +1,5 @@
 use crate::{data::GLOB_COMMAND_PREFIX, db, utils::*};
-use chrono::{NaiveDateTime, Duration};
+use chrono::{Duration, NaiveDateTime};
 use serenity::{
     builder::{CreateEmbed, CreateEmbedAuthor},
     model::{id::EmojiId, id::RoleId, misc::Mention},
@@ -49,7 +49,9 @@ fn google_calendar_link(training: &db::Training) -> String {
     let end = (training.date + Duration::hours(2)).format(GOOGLE_CALENDAR_TIME_FMT);
     format!(
         "https://calendar.google.com/calendar/event?action=TEMPLATE&dates={}/{}&text={}",
-        begin, end, training.title.replace(" ", "%20")
+        begin,
+        end,
+        training.title.replace(" ", "%20")
     )
 }
 

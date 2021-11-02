@@ -452,7 +452,7 @@ struct SignupCsv {
     member: Member,
     training: Arc<db::Training>,
     roles: Vec<db::Role>,
-    comment: Option<String>
+    comment: Option<String>,
 }
 
 impl Serialize for SignupCsv {
@@ -472,7 +472,10 @@ impl Serialize for SignupCsv {
             .collect::<Vec<_>>()
             .join(", ");
         state.serialize_field("Roles", &role_str)?;
-        state.serialize_field("Comment", &self.comment.clone().unwrap_or_else(|| "none".to_string()))?;
+        state.serialize_field(
+            "Comment",
+            &self.comment.clone().unwrap_or_else(|| "none".to_string()),
+        )?;
         state.end()
     }
 }

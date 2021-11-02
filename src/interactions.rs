@@ -454,29 +454,28 @@ async fn comment_button_interaction(
     };
 
     // Open conversation since we have to wait for input
-    let conv =
-        match Conversation::init(ctx, &mci.user, signup_add_comment_embed(&training)).await {
-            Ok(conv) => {
-                mci.create_interaction_response(ctx, |r| {
-                    r.kind(InteractionResponseType::DeferredUpdateMessage)
+    let conv = match Conversation::init(ctx, &mci.user, signup_add_comment_embed(&training)).await {
+        Ok(conv) => {
+            mci.create_interaction_response(ctx, |r| {
+                r.kind(InteractionResponseType::DeferredUpdateMessage)
+            })
+            .await
+            .ok();
+            conv
+        }
+        Err(e) => {
+            mci.create_interaction_response(ctx, |r| {
+                r.kind(InteractionResponseType::ChannelMessageWithSource);
+                r.interaction_response_data(|d| {
+                    d.content(format!("{} {}", Mention::from(&mci.user), e.to_string()));
+                    d
                 })
-                .await
-                .ok();
-                conv
-            }
-            Err(e) => {
-                mci.create_interaction_response(ctx, |r| {
-                    r.kind(InteractionResponseType::ChannelMessageWithSource);
-                    r.interaction_response_data(|d| {
-                        d.content(format!("{} {}", Mention::from(&mci.user), e.to_string()));
-                        d
-                    })
-                })
-                .await
-                .ok();
-                return Err(e).log_only();
-            }
-        };
+            })
+            .await
+            .ok();
+            return Err(e).log_only();
+        }
+    };
 
     match MessageCollectorBuilder::new(ctx)
         .channel_id(conv.chan.id)
@@ -488,8 +487,13 @@ async fn comment_button_interaction(
         .await
     {
         Some(msg) => {
-            signup.update_comment(ctx, Some(msg.content.clone())).await.log_unexpected_reply(&msg)?;
-            msg.reply(ctx, "Comment saved").await.log_unexpected_reply(&msg)?;
+            signup
+                .update_comment(ctx, Some(msg.content.clone()))
+                .await
+                .log_unexpected_reply(&msg)?;
+            msg.reply(ctx, "Comment saved")
+                .await
+                .log_unexpected_reply(&msg)?;
         }
         None => {
             conv.msg.reply(ctx, "Timed out").await?;
