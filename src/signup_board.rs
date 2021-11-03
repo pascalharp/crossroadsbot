@@ -32,8 +32,11 @@ async fn load_meta_infos(ctx: &Context) -> Result<(GuildId, ChannelId)> {
     Ok((guild_id, channel_category))
 }
 
-async fn update_signup_board_training(ctx: &Context, msg: &mut Message, training: &db::Training) -> Result<()> {
-
+async fn update_signup_board_training(
+    ctx: &Context,
+    msg: &mut Message,
+    training: &db::Training,
+) -> Result<()> {
     // load tier and roles information
     let roles = training.active_roles(ctx).await?;
     let tiers = {
@@ -93,19 +96,18 @@ async fn insert_channel_ordered(
 }
 
 impl SignupBoard {
-
     // Posts a channel for a day if it does not exist yet
     pub async fn post_channel(ctx: &Context, training: &db::Training) -> Result<GuildChannel> {
         let date = training.date.date();
         let channel = match db::SignupBoardChannel::by_day(ctx, date).await {
             Ok(ch) => Some(ch),
             Err(diesel::NotFound) => None,
-            Err(e) => return Err(e.into())
+            Err(e) => return Err(e.into()),
         };
         if let Some(ch) = channel {
             if let Ok(ch) = ctx.http.get_channel(*ch.channel().as_u64()).await {
                 if let Some(gch) = ch.guild() {
-                        return Ok(gch);
+                    return Ok(gch);
                 }
             }
             // Something is weird, remove db entry
@@ -121,12 +123,15 @@ impl SignupBoard {
     }
 
     // Returns the channel for the training if it exists
-    pub async fn get_channel(ctx: &Context, training: &db::Training) -> Result<Option<GuildChannel>> {
+    pub async fn get_channel(
+        ctx: &Context,
+        training: &db::Training,
+    ) -> Result<Option<GuildChannel>> {
         let date = training.date.date();
         let sbc = match db::SignupBoardChannel::by_day(ctx, date).await {
             Ok(ch) => ch,
             Err(diesel::NotFound) => return Ok(None),
-            Err(e) => return Err(e.into())
+            Err(e) => return Err(e.into()),
         };
         if let Ok(ch) = ctx.http.get_channel(*sbc.channel().as_u64()).await {
             if let Some(gch) = ch.guild() {
@@ -144,16 +149,17 @@ impl SignupBoard {
     // If there are trainings left on that day but not on the board by accident the channel
     // will stay up (even if empty). A reset should hopefully post the trainings again
     pub async fn check_channel(ctx: &Context, day: NaiveDate) -> Result<()> {
-
         // check if channel even registered in db
         let sbc = match db::SignupBoardChannel::by_day(ctx, day).await {
             Ok(ch) => ch,
             Err(diesel::NotFound) => return Ok(()),
-            Err(e) => return Err(e.into())
+            Err(e) => return Err(e.into()),
         };
 
         let count = db::Training::amount_active_by_day(ctx, day).await?;
-        if count > 0 { return Ok(()) }
+        if count > 0 {
+            return Ok(());
+        }
 
         if let Ok(ch) = ctx.http.get_channel(*sbc.channel().as_u64()).await {
             ch.delete(ctx).await?;
@@ -169,7 +175,6 @@ impl SignupBoard {
     // if no message registered or message not found create a new one
     // we need a mutable reference to training to update msg id if needed
     pub async fn post_training(ctx: &Context, training: &mut db::Training) -> Result<Message> {
-
         let channel = SignupBoard::post_channel(ctx, training).await?;
 
         let mut msg = match training.board_message() {
@@ -179,14 +184,18 @@ impl SignupBoard {
                     msg
                 } else {
                     // Message already registered but not found anymore. Create new
-                    let msg = channel.send_message(ctx, |f| f.content("Loading training")).await?;
+                    let msg = channel
+                        .send_message(ctx, |f| f.content("Loading training"))
+                        .await?;
                     training.set_board_msg(ctx, Some(msg.id.0)).await?;
                     msg
                 }
             }
             None => {
                 // Message not registered in db
-                let msg = channel.send_message(ctx, |f| f.content("Loading training")).await?;
+                let msg = channel
+                    .send_message(ctx, |f| f.content("Loading training"))
+                    .await?;
                 training.set_board_msg(ctx, Some(msg.id.0)).await?;
                 msg
             }
@@ -197,10 +206,9 @@ impl SignupBoard {
     }
 
     pub async fn delete_training(ctx: &Context, training: &db::Training) -> Result<()> {
-
         let msg_id = match training.board_message() {
             Some(id) => id,
-            None => return Ok(())
+            None => return Ok(()),
         };
 
         let channel = match SignupBoard::get_channel(ctx, training).await? {
@@ -233,8 +241,6 @@ impl SignupBoard {
     }
 
     pub async fn reset(ctx: &Context) -> Result<()> {
-
-
         // load all trainings to be posted
         let trainings = db::Training::all_active(ctx).await?;
         for t in trainings {

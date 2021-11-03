@@ -204,7 +204,7 @@ pub fn embed_add_roles(e: &mut CreateEmbed, roles: &[db::Role], inline: bool, re
             })
             .collect::<Vec<_>>()
             .join("\n");
-        e.field("Roles", roles_text, inline );
+        e.field("Roles", roles_text, inline);
     }
 }
 

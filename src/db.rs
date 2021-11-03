@@ -10,7 +10,7 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::result::QueryResult;
 use serenity::client::Context;
-use serenity::model::id::{UserId, MessageId, ChannelId};
+use serenity::model::id::{ChannelId, MessageId, UserId};
 use std::env;
 use std::sync::Arc;
 use tokio::task;
@@ -581,8 +581,8 @@ async fn count_active_trainings_by_date(ctx: &Context, date: NaiveDate) -> Query
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
         trainings::table
-            .filter(trainings::date.ge(date.and_hms(0,0,0)))
-            .filter(trainings::date.le(date.and_hms(23,59,59)))
+            .filter(trainings::date.ge(date.and_hms(0, 0, 0)))
+            .filter(trainings::date.le(date.and_hms(23, 59, 59)))
             .filter(
                 trainings::state
                     .eq(TrainingState::Open)
