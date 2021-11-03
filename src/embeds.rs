@@ -157,11 +157,11 @@ pub fn training_embed_add_tier(
 ) {
     match t {
         None => {
-            e.field("Tier: none", "Open for everyone", inline);
+            e.field("No tier", "Open for everyone", inline);
         }
         Some((tier, roles)) => {
             e.field(
-                format!("Tier: {}", tier.name),
+                format!("Requires: {}", tier.name),
                 roles
                     .iter()
                     .map(|r| Mention::from(RoleId::from(r.discord_role_id as u64)).to_string())
@@ -179,7 +179,6 @@ pub fn embed_add_roles(e: &mut CreateEmbed, roles: &[db::Role], inline: bool, re
         .map(|r| r.title.len())
         .fold(usize::MIN, std::cmp::max);
     let paged = roles.chunks(10);
-    let mut initial = true;
     for r in paged {
         let roles_text = r
             .iter()
@@ -207,8 +206,7 @@ pub fn embed_add_roles(e: &mut CreateEmbed, roles: &[db::Role], inline: bool, re
             })
             .collect::<Vec<_>>()
             .join("\n");
-        e.field("Roles", roles_text, if initial { false } else { inline });
-        initial = false;
+        e.field("Roles", roles_text, inline );
     }
 }
 
