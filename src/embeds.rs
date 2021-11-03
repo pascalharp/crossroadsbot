@@ -136,9 +136,7 @@ pub fn signupboard_embed(
         },
         training.title
     );
-    let title_len = title.chars().count();
     e.title(title);
-    e.description(format!("||{:0>width$}||", training.id, width = title_len));
     let (a, b, c) = field_training_date(training);
     e.field(a, b, c);
     training_embed_add_tier(&mut e, tier, true);
@@ -157,7 +155,7 @@ pub fn training_embed_add_tier(
 ) {
     match t {
         None => {
-            e.field("No tier", "Open for everyone", inline);
+            e.field("No Tier required", "Open for everyone", inline);
         }
         Some((tier, roles)) => {
             e.field(

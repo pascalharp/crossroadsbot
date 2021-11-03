@@ -10,7 +10,7 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::result::QueryResult;
 use serenity::client::Context;
-use serenity::model::id::UserId;
+use serenity::model::id::{UserId, MessageId, ChannelId};
 use std::env;
 use std::sync::Arc;
 use tokio::task;
@@ -576,6 +576,26 @@ async fn count_trainings_by_state(ctx: &Context, state: TrainingState) -> QueryR
     .unwrap()
 }
 
+// TODO
+async fn count_active_trainings_by_date(ctx: &Context, date: NaiveDate) -> QueryResult<i64> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        trainings::table
+            .filter(trainings::date.ge(date.and_hms(0,0,0)))
+            .filter(trainings::date.le(date.and_hms(23,59,59)))
+            .filter(
+                trainings::state
+                    .eq(TrainingState::Open)
+                    .or(trainings::state.eq(TrainingState::Closed))
+                    .or(trainings::state.eq(TrainingState::Started)),
+            )
+            .count()
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 // Update
 async fn update_training_state(
     ctx: &Context,
@@ -707,6 +727,10 @@ impl Training {
         count_trainings_by_state(ctx, state).await
     }
 
+    pub async fn amount_active_by_day(ctx: &Context, date: NaiveDate) -> QueryResult<i64> {
+        count_active_trainings_by_date(ctx, date).await
+    }
+
     pub async fn by_id(ctx: &Context, id: i32) -> QueryResult<Training> {
         select_training_by_id(ctx, id).await
     }
@@ -760,6 +784,10 @@ impl Training {
 
     pub async fn set_board_msg(&self, ctx: &Context, msg_id: Option<u64>) -> QueryResult<Training> {
         update_training_board_message(ctx, self.id, msg_id.map(|id| id as i64)).await
+    }
+
+    pub fn board_message(&self) -> Option<MessageId> {
+        self.board_message_id.map(|id| MessageId::from(id as u64))
     }
 }
 
@@ -913,7 +941,7 @@ impl TierMapping {
     }
 }
 
-// Config
+// --- Config ---
 impl Config {
     pub async fn load(ctx: &Context, name: String) -> QueryResult<Config> {
         select_config_by_name(ctx, name).await
@@ -929,11 +957,11 @@ impl SignupBoardChannel {
     pub async fn insert(
         ctx: &Context,
         day: NaiveDate,
-        channel_id: u64,
+        channel_id: ChannelId,
     ) -> QueryResult<SignupBoardChannel> {
         let sbc = SignupBoardChannel {
             day,
-            channel_id: channel_id as i64,
+            channel_id: channel_id.0 as i64,
         };
         insert_signup_board_channel(ctx, sbc).await
     }
@@ -944,5 +972,9 @@ impl SignupBoardChannel {
 
     pub async fn delete(self, ctx: &Context) -> QueryResult<usize> {
         delete_signup_board_channel(ctx, self.day).await
+    }
+
+    pub fn channel(&self) -> ChannelId {
+        ChannelId::from(self.channel_id as u64)
     }
 }
