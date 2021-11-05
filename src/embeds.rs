@@ -457,7 +457,6 @@ pub fn signup_board_overview(
     e.title("Training overview");
     e.description(" State | Training | Total sign ups");
     for (_, channel_id, t_vec) in groups {
-
         let mut value = String::new();
         if let Some(ch) = channel_id {
             value.push_str(&format!("__{}__\n\n", Mention::from(ch)));

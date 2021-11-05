@@ -1,12 +1,17 @@
 // automatic background tasks
-use std::time::Duration;
-use serenity::client::Context;
-use tracing::{error, info};
 use crate::signup_board::SignupBoard;
+use serenity::client::Context;
+use std::time::Duration;
+use tracing::{error, info};
 
 pub async fn signup_board_task(ctx: Context) {
     loop {
-        let res = SignupBoard::get(&ctx).await.read().await.update_overview(&ctx).await;
+        let res = SignupBoard::get(&ctx)
+            .await
+            .read()
+            .await
+            .update_overview(&ctx)
+            .await;
         if let Err(res) = res {
             error!("Signup board update error: {}", res);
         } else {

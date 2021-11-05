@@ -1,5 +1,5 @@
 use crossroadsbot::{
-    commands, data::*, db, interactions, log::*, signup_board::*, status, utils::DIZZY_EMOJI, tasks,
+    commands, data::*, db, interactions, log::*, signup_board::*, status, tasks, utils::DIZZY_EMOJI,
 };
 use dashmap::DashSet;
 use diesel::pg::PgConnection;
@@ -12,7 +12,14 @@ use serenity::{
     model::prelude::*,
     prelude::*,
 };
-use std::{env, str::FromStr, sync::{Arc, atomic::{AtomicBool, Ordering}}};
+use std::{
+    env,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 use tracing::{error, info};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
@@ -21,7 +28,7 @@ extern crate diesel_migrations;
 use diesel_migrations::embed_migrations;
 embed_migrations!("migrations/");
 
-struct Handler{
+struct Handler {
     signup_board_loop_running: AtomicBool,
 }
 
@@ -206,7 +213,7 @@ async fn main() {
     let mut client = Client::builder(token)
         .application_id(app_id)
         .framework(framework)
-        .event_handler(Handler{
+        .event_handler(Handler {
             signup_board_loop_running: AtomicBool::new(false),
         })
         .intents(GatewayIntents::non_privileged() | GatewayIntents::GUILD_MEMBERS)

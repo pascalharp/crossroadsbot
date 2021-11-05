@@ -13,5 +13,5 @@ pub mod interactions;
 pub mod log;
 pub mod signup_board;
 pub mod status;
-pub mod utils;
 pub mod tasks;
+pub mod utils;

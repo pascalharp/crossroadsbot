@@ -455,7 +455,12 @@ impl SignupBoard {
                 Ok(None)
             }
         };
-        SignupBoard::get(ctx).await.read().await.update_overview(ctx).await?;
+        SignupBoard::get(ctx)
+            .await
+            .read()
+            .await
+            .update_overview(ctx)
+            .await?;
         ret
     }
 
