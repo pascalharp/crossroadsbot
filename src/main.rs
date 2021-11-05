@@ -44,8 +44,14 @@ impl EventHandler for Handler {
             },
         }
 
+        // attempt to load SignupBoardData from db
+        data_read.get::<SignupBoardData>().unwrap().write().await.load_from_db(&ctx).await.unwrap();
+        // and refresh it
         info!("Resetting signup board");
-        SignupBoard::reset(&ctx).await.ok();
+        match SignupBoard::reset(&ctx).await {
+            Ok(_) => (),
+            Err(e) => error!("Resetting failed: {}", e),
+        }
 
         info!("Setting presence");
         status::update_status(&ctx).await;
@@ -205,7 +211,13 @@ async fn main() {
         }));
         data.insert::<LogConfigData>(Arc::new(RwLock::new(LogConfig { log: None })));
         data.insert::<DBPoolData>(Arc::new(db::DBPool::new()));
+        data.insert::<SignupBoardData>(Arc::new(RwLock::new(SignupBoard {
+            discord_category_id: None,
+            overview_channel_id: None,
+            overview_message_id: None,
+        })));
     }
+
 
     let shard_manager = client.shard_manager.clone();
 

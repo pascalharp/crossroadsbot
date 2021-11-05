@@ -1,8 +1,8 @@
 use crate::{data::GLOB_COMMAND_PREFIX, db, utils::*};
-use chrono::{Duration, NaiveDateTime};
+use chrono::{Duration, NaiveDateTime, NaiveDate};
 use serenity::{
     builder::{CreateEmbed, CreateEmbedAuthor},
-    model::{id::EmojiId, id::RoleId, misc::Mention},
+    model::{id::EmojiId, id::RoleId, id::ChannelId, id::GuildId, misc::Mention},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -445,5 +445,47 @@ pub fn welcome_post_embed() -> CreateEmbed {
         ),
         false,
     );
+    e
+}
+
+const TRAINING_DAYS_FMT: &str = "%d %B %Y";
+pub fn signup_board_overview(groups: Vec<(NaiveDate, Option<ChannelId>, Vec<(db::Training, i64)>)>, gid: GuildId) -> CreateEmbed {
+    let mut e = CreateEmbed::xdefault();
+    e.title("Training overview");
+    e.description(" State | Training | Total sign ups");
+    for (date, channel_id, t_vec) in groups {
+        let name = date.format(TRAINING_DAYS_FMT);
+
+        let mut value = String::new();
+        if let Some(ch) = channel_id {
+            value.push_str(&format!("{}\n", Mention::from(ch)));
+        }
+
+        let title_width = t_vec
+            .iter()
+            .map(|t| t.0.title.len())
+            .fold(usize::MIN, std::cmp::max);
+
+        for t in t_vec {
+            let t_link = if let Some(ch) = channel_id {
+                match t.0.board_message() {
+                    Some(m) => format!("[`{:<twidth$}`]({})", &t.0.title, m.link(ch, Some(gid)), twidth = title_width),
+                    None => format!("{:<twidth$}", t.0.title, twidth = title_width)
+                }
+            } else {
+                format!("{:<twidth$}", t.0.title, twidth = title_width)
+            };
+            let state = match t.0.state {
+                db::TrainingState::Created => CONSTRUCTION_SITE_EMOJI,
+                db::TrainingState::Open => GREEN_CIRCLE_EMOJI,
+                db::TrainingState::Closed => RED_CIRCLE_EMOJI,
+                db::TrainingState::Started => RUNNING_EMOJI,
+                db::TrainingState::Finished => CROSS_EMOJI,
+            };
+            value.push_str(&format!("{} | {} | {}\n", state, t_link, t.1));
+        }
+
+        e.field(name, value, false);
+    }
     e
 }

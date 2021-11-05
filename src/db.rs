@@ -576,7 +576,19 @@ async fn count_trainings_by_state(ctx: &Context, state: TrainingState) -> QueryR
     .unwrap()
 }
 
-// TODO
+async fn count_signups_by_training(ctx: &Context, training_id: i32) -> QueryResult<i64> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        signups::table
+            .filter(signups::training_id.eq(training_id))
+            .count()
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+
+}
+
 async fn count_active_trainings_by_date(ctx: &Context, date: NaiveDate) -> QueryResult<i64> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -729,6 +741,10 @@ impl Training {
 
     pub async fn amount_active_by_day(ctx: &Context, date: NaiveDate) -> QueryResult<i64> {
         count_active_trainings_by_date(ctx, date).await
+    }
+
+    pub async fn get_signup_count(&self, ctx: &Context) -> QueryResult<i64> {
+        count_signups_by_training(ctx, self.id).await
     }
 
     pub async fn by_id(ctx: &Context, id: i32) -> QueryResult<Training> {
