@@ -1,5 +1,5 @@
 use crossroadsbot::{
-    commands, data::*, db, interactions, log::*, signup_board::*, status, utils::DIZZY_EMOJI,
+    commands, data::*, db, interactions, log::*, signup_board::*, status, utils::DIZZY_EMOJI, tasks,
 };
 use dashmap::DashSet;
 use diesel::pg::PgConnection;
@@ -12,7 +12,7 @@ use serenity::{
     model::prelude::*,
     prelude::*,
 };
-use std::{env, str::FromStr, sync::Arc};
+use std::{env, str::FromStr, sync::{Arc, atomic::{AtomicBool, Ordering}}};
 use tracing::{error, info};
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
@@ -21,7 +21,9 @@ extern crate diesel_migrations;
 use diesel_migrations::embed_migrations;
 embed_migrations!("migrations/");
 
-struct Handler;
+struct Handler{
+    signup_board_loop_running: AtomicBool,
+}
 
 #[async_trait]
 impl EventHandler for Handler {
@@ -53,15 +55,17 @@ impl EventHandler for Handler {
             .load_from_db(&ctx)
             .await
             .unwrap();
-        // and refresh it
-        info!("Resetting signup board");
-        match SignupBoard::reset(&ctx).await {
-            Ok(_) => (),
-            Err(e) => error!("Resetting failed: {}", e),
-        }
 
         info!("Setting presence");
         status::update_status(&ctx).await;
+
+        if !self.signup_board_loop_running.load(Ordering::Relaxed) {
+            // ctx is save to clone
+            let ctx = ctx.clone();
+            tokio::task::spawn(tasks::signup_board_task(ctx));
+            self.signup_board_loop_running.swap(true, Ordering::Relaxed);
+        }
+        info!("Starting signup board loop");
     }
 
     async fn resume(&self, _: Context, _: ResumedEvent) {
@@ -202,7 +206,9 @@ async fn main() {
     let mut client = Client::builder(token)
         .application_id(app_id)
         .framework(framework)
-        .event_handler(Handler)
+        .event_handler(Handler{
+            signup_board_loop_running: AtomicBool::new(false),
+        })
         .intents(GatewayIntents::non_privileged() | GatewayIntents::GUILD_MEMBERS)
         .await
         .expect("Error creating client");

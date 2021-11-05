@@ -445,7 +445,7 @@ impl SignupBoard {
     pub async fn update_training(ctx: &Context, training_id: i32) -> Result<Option<Message>> {
         let mut training = db::Training::by_id(ctx, training_id).await?;
         // only accept correct state
-        match training.state {
+        let ret = match training.state {
             db::TrainingState::Open | db::TrainingState::Closed | db::TrainingState::Started => {
                 let msg = Self::post_training(ctx, &mut training).await?;
                 Ok(Some(msg))
@@ -454,7 +454,9 @@ impl SignupBoard {
                 let _msg = Self::delete_training(ctx, &training).await?;
                 Ok(None)
             }
-        }
+        };
+        SignupBoard::get(ctx).await.read().await.update_overview(ctx).await?;
+        ret
     }
 
     pub async fn reset(ctx: &Context) -> Result<()> {

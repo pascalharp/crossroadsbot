@@ -448,7 +448,7 @@ pub fn welcome_post_embed() -> CreateEmbed {
     e
 }
 
-const TRAINING_DAYS_FMT: &str = "%d %B %Y";
+const BLANK: char = '⠀';
 pub fn signup_board_overview(
     groups: Vec<(NaiveDate, Option<ChannelId>, Vec<(db::Training, i64)>)>,
     gid: GuildId,
@@ -456,18 +456,21 @@ pub fn signup_board_overview(
     let mut e = CreateEmbed::xdefault();
     e.title("Training overview");
     e.description(" State | Training | Total sign ups");
-    for (date, channel_id, t_vec) in groups {
-        let name = date.format(TRAINING_DAYS_FMT);
+    for (_, channel_id, t_vec) in groups {
 
         let mut value = String::new();
         if let Some(ch) = channel_id {
-            value.push_str(&format!("{}\n", Mention::from(ch)));
+            value.push_str(&format!("__{}__\n\n", Mention::from(ch)));
+        } else {
+            continue;
         }
 
         let title_width = t_vec
             .iter()
             .map(|t| t.0.title.len())
             .fold(usize::MIN, std::cmp::max);
+
+        let name = BLANK;
 
         for t in t_vec {
             let t_link = if let Some(ch) = channel_id {
@@ -495,5 +498,7 @@ pub fn signup_board_overview(
 
         e.field(name, value, false);
     }
+    e.footer(|f| f.text("Last update"));
+    e.timestamp(&chrono::Utc::now());
     e
 }
