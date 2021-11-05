@@ -45,7 +45,14 @@ impl EventHandler for Handler {
         }
 
         // attempt to load SignupBoardData from db
-        data_read.get::<SignupBoardData>().unwrap().write().await.load_from_db(&ctx).await.unwrap();
+        data_read
+            .get::<SignupBoardData>()
+            .unwrap()
+            .write()
+            .await
+            .load_from_db(&ctx)
+            .await
+            .unwrap();
         // and refresh it
         info!("Resetting signup board");
         match SignupBoard::reset(&ctx).await {
@@ -217,7 +224,6 @@ async fn main() {
             overview_message_id: None,
         })));
     }
-
 
     let shard_manager = client.shard_manager.clone();
 

@@ -586,7 +586,6 @@ async fn count_signups_by_training(ctx: &Context, training_id: i32) -> QueryResu
     })
     .await
     .unwrap()
-
 }
 
 async fn count_active_trainings_by_date(ctx: &Context, date: NaiveDate) -> QueryResult<i64> {

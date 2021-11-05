@@ -1,8 +1,8 @@
 use crate::{data::GLOB_COMMAND_PREFIX, db, utils::*};
-use chrono::{Duration, NaiveDateTime, NaiveDate};
+use chrono::{Duration, NaiveDate, NaiveDateTime};
 use serenity::{
     builder::{CreateEmbed, CreateEmbedAuthor},
-    model::{id::EmojiId, id::RoleId, id::ChannelId, id::GuildId, misc::Mention},
+    model::{id::ChannelId, id::EmojiId, id::GuildId, id::RoleId, misc::Mention},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -449,7 +449,10 @@ pub fn welcome_post_embed() -> CreateEmbed {
 }
 
 const TRAINING_DAYS_FMT: &str = "%d %B %Y";
-pub fn signup_board_overview(groups: Vec<(NaiveDate, Option<ChannelId>, Vec<(db::Training, i64)>)>, gid: GuildId) -> CreateEmbed {
+pub fn signup_board_overview(
+    groups: Vec<(NaiveDate, Option<ChannelId>, Vec<(db::Training, i64)>)>,
+    gid: GuildId,
+) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
     e.title("Training overview");
     e.description(" State | Training | Total sign ups");
@@ -469,8 +472,13 @@ pub fn signup_board_overview(groups: Vec<(NaiveDate, Option<ChannelId>, Vec<(db:
         for t in t_vec {
             let t_link = if let Some(ch) = channel_id {
                 match t.0.board_message() {
-                    Some(m) => format!("[`{:<twidth$}`]({})", &t.0.title, m.link(ch, Some(gid)), twidth = title_width),
-                    None => format!("{:<twidth$}", t.0.title, twidth = title_width)
+                    Some(m) => format!(
+                        "[`{:<twidth$}`]({})",
+                        &t.0.title,
+                        m.link(ch, Some(gid)),
+                        twidth = title_width
+                    ),
+                    None => format!("{:<twidth$}", t.0.title, twidth = title_width),
                 }
             } else {
                 format!("{:<twidth$}", t.0.title, twidth = title_width)
