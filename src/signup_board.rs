@@ -77,6 +77,7 @@ async fn update_signup_board_training(
     };
 
     msg.edit(ctx, |m| {
+        m.content("");
         m.embed(|e| {
             e.0 = embeds::signupboard_embed(training, &roles, &tiers).0;
             e
