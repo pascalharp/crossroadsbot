@@ -436,6 +436,8 @@ impl SignupBoard {
         };
 
         channel.message(ctx, msg_id).await?.delete(ctx).await?;
+        // Unset message id in db
+        training.set_board_msg(ctx, None).await?;
         // check if channel is empty now and has to be deleted
         Self::check_channel(ctx, training.date.date()).await?;
         Ok(())
@@ -443,6 +445,7 @@ impl SignupBoard {
 
     // This updates or inserts a training to the signup board
     // Try to avoid calling this too often since it does a lot of networking
+    // This function also updates the overview message while post and delete dont
     pub async fn update_training(ctx: &Context, training_id: i32) -> Result<Option<Message>> {
         let mut training = db::Training::by_id(ctx, training_id).await?;
         // only accept correct state
@@ -468,9 +471,8 @@ impl SignupBoard {
     pub async fn reset(ctx: &Context) -> Result<()> {
         // load all trainings to be posted
         let trainings = db::Training::all_active(ctx).await?;
-        for t in trainings {
-            // rather inefficient since update_training calls the db again
-            SignupBoard::update_training(ctx, t.id).await?;
+        for mut t in trainings {
+            SignupBoard::post_training(ctx, &mut t).await?;
         }
         SignupBoard::get(ctx)
             .await
@@ -504,6 +506,14 @@ impl SignupBoard {
         // delete all channels
         for ch in channels {
             ch.delete(ctx).await?;
+        }
+
+        // Unset overview message
+        {
+            let lock = SignupBoard::get(ctx).await;
+            let mut sb = lock.write().await;
+            sb.overview_channel_id = None;
+            sb.overview_message_id = None;
         }
 
         // post channels again
