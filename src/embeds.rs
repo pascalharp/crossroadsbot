@@ -450,19 +450,25 @@ pub fn welcome_post_embed() -> CreateEmbed {
 
 const BLANK: char = '⠀';
 pub fn signup_board_overview(
-    groups: Vec<(NaiveDate, Option<ChannelId>, Vec<(db::Training, i64)>)>,
+    groups: Vec<(
+        NaiveDate,
+        usize,
+        Option<ChannelId>,
+        Vec<(db::Training, i64)>,
+    )>,
     gid: GuildId,
 ) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
     e.title("Training overview");
     e.description(" State | Training | Total sign ups");
-    for (_, channel_id, t_vec) in groups {
+    for (_, total_dedup, channel_id, t_vec) in groups {
         let mut value = String::new();
         if let Some(ch) = channel_id {
-            value.push_str(&format!("__{}__\n\n", Mention::from(ch)));
+            value.push_str(&format!("__{}__", Mention::from(ch)));
         } else {
             continue;
         }
+        value.push_str(&format!(" | {}\n\n", total_dedup));
 
         let title_width = t_vec
             .iter()

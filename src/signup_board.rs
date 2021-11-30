@@ -283,13 +283,23 @@ impl SignupBoard {
         }
 
         // Get the signup board channels for the dates
-        let mut ready: Vec<(NaiveDate, Option<ChannelId>, Vec<(db::Training, i64)>)> = Vec::new();
-        for (g, t) in groups {
-            let chan = db::SignupBoardChannel::by_day(ctx, g)
+        let mut ready: Vec<(
+            NaiveDate,
+            usize,
+            Option<ChannelId>,
+            Vec<(db::Training, i64)>,
+        )> = Vec::new();
+        for (d, t) in groups {
+            let chan = db::SignupBoardChannel::by_day(ctx, d)
                 .await
                 .ok()
                 .map(|sbc| sbc.channel());
-            ready.push((g, chan, t));
+            //FIXME do this properly without an extra db access
+            let mut total_users = db::User::by_signed_up_and_date(ctx, d).await?;
+            total_users.sort_by_key(|u| u.id);
+            total_users.dedup_by_key(|u| u.id);
+
+            ready.push((d, total_users.len(), chan, t));
         }
 
         chan.edit_message(ctx, msg, |m| {
