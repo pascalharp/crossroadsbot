@@ -238,6 +238,22 @@ async fn select_user_by_discord_id(ctx: &Context, discord_id: u64) -> QueryResul
     .unwrap()
 }
 
+async fn select_users_with_signup_by_date(
+    ctx: &Context,
+    date: NaiveDate,
+) -> QueryResult<Vec<User>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = users::table.inner_join(signups::table.inner_join(trainings::table));
+        join.filter(trainings::date.ge(date.and_hms(0, 0, 0)))
+            .filter(trainings::date.le(date.and_hms(23, 59, 59)))
+            .select(users::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn select_all_signups_by_user(ctx: &Context, user_id: i32) -> QueryResult<Vec<Signup>> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -375,7 +391,7 @@ async fn select_signups_by_training(ctx: &Context, id: i32) -> QueryResult<Vec<S
     .unwrap()
 }
 
-async fn select_signup_by_date(ctx: &Context, date: NaiveDate) -> QueryResult<Vec<Signup>> {
+async fn select_signups_by_date(ctx: &Context, date: NaiveDate) -> QueryResult<Vec<Signup>> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
         let join = signups::table.inner_join(trainings::table);
@@ -721,6 +737,10 @@ impl User {
     pub async fn all_signups(&self, ctx: &Context) -> QueryResult<Vec<Signup>> {
         select_all_signups_by_user(ctx, self.id).await
     }
+
+    pub async fn by_signed_up_and_date(ctx: &Context, date: NaiveDate) -> QueryResult<Vec<User>> {
+        select_users_with_signup_by_date(ctx, date).await
+    }
 }
 
 /* -- Training -- */
@@ -878,7 +898,7 @@ impl Signup {
     }
 
     pub async fn by_date(ctx: &Context, date: NaiveDate) -> QueryResult<Vec<Signup>> {
-        select_signup_by_date(ctx, date).await
+        select_signups_by_date(ctx, date).await
     }
 
     pub async fn remove(self, ctx: &Context) -> QueryResult<usize> {
