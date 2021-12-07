@@ -1,6 +1,7 @@
 use crate::components::ButtonInteraction;
 use crate::data::LogConfigData;
 use crate::utils;
+use serenity::model::interactions::application_command::ApplicationCommandInteraction;
 use serenity::{framework::standard::CommandResult, model::prelude::*, prelude::*};
 use std::future::Future;
 use std::ops::FnOnce;
@@ -13,6 +14,7 @@ pub enum LogType<'a> {
         m: &'a serenity::model::interactions::message_component::InteractionMessage,
     },
     Automatic(&'a str),
+    AppCmD(&'a ApplicationCommandInteraction)
 }
 
 impl std::fmt::Display for LogType<'_> {
@@ -21,6 +23,7 @@ impl std::fmt::Display for LogType<'_> {
             Self::Command(m) => write!(f, "Command ({})", m.content),
             Self::Interaction { i, m: _ } => write!(f, "Interaction ({})", i),
             Self::Automatic(s) => write!(f, "Automatic ({})", s),
+            Self::AppCmD(a) => write!(f, "Slash Command ({})", a.data.name),
         }
     }
 }
@@ -47,9 +50,18 @@ pub enum LogError {
         err: Box<dyn std::error::Error + Send + Sync>,
         reply: ReplyInfo,
     },
+    LogSlashReply {
+        err: Box<dyn std::error::Error + Send + Sync>,
+        aci: ApplicationCommandInteraction,
+    },
     LogReplyCustom {
         err: Box<dyn std::error::Error + Send + Sync>,
         reply: ReplyInfo,
+        reply_msg: String,
+    },
+    LogSlashCustomReply {
+        err: Box<dyn std::error::Error + Send + Sync>,
+        aci: ApplicationCommandInteraction,
         reply_msg: String,
     },
 }
@@ -59,11 +71,13 @@ impl std::fmt::Display for LogError {
         match self {
             LogError::LogOnly(err) => write!(f, "{}", err),
             LogError::LogReply { err, reply: _ } => write!(f, "{}", err),
+            LogError::LogSlashReply { err, aci: _ } => write!(f, "{}", err),
             LogError::LogReplyCustom {
                 err,
                 reply: _,
                 reply_msg: _,
             } => write!(f, "{}", err),
+            LogError::LogSlashCustomReply { err, aci: _, reply_msg: _ } => write!(f, "{}", err),
         }
     }
 }
@@ -79,9 +93,15 @@ impl From<LogError> for Box<dyn std::error::Error + Send + Sync> {
         match err {
             LogError::LogOnly(err) => err,
             LogError::LogReply { err, reply: _ } => err,
+            LogError::LogSlashReply { err, aci: _ } => err,
             LogError::LogReplyCustom {
                 err,
                 reply: _,
+                reply_msg: _,
+            } => err,
+            LogError::LogSlashCustomReply {
+                err,
+                aci: _,
                 reply_msg: _,
             } => err,
         }
@@ -94,6 +114,13 @@ impl LogError {
         S: ToString,
     {
         LogError::LogOnly(s.to_string().into()).with_reply(reply)
+    }
+
+    pub fn new_slash<S>(s: S, aci: ApplicationCommandInteraction) -> Self
+    where
+        S: ToString,
+    {
+        LogError::LogOnly(s.to_string().into()).with_slash_reply(aci)
     }
 
     pub fn new_silent<S>(s: S) -> Self
@@ -119,9 +146,15 @@ impl LogError {
         let err = match self {
             LogError::LogOnly(e) => e,
             LogError::LogReply { err, reply: _ } => err,
+            LogError::LogSlashReply { err, aci: _ } => err,
             LogError::LogReplyCustom {
                 err,
                 reply: _,
+                reply_msg: _,
+            } => err,
+            LogError::LogSlashCustomReply {
+                err,
+                aci: _,
                 reply_msg: _,
             } => err,
         };
@@ -132,15 +165,46 @@ impl LogError {
         let err = match self {
             LogError::LogOnly(e) => e,
             LogError::LogReply { err, reply: _ } => err,
+            LogError::LogSlashReply { err, aci: _ } => err,
             LogError::LogReplyCustom {
                 err,
                 reply: _,
+                reply_msg: _,
+            } => err,
+            LogError::LogSlashCustomReply {
+                err,
+                aci: _,
                 reply_msg: _,
             } => err,
         };
         LogError::LogReply {
             err,
             reply: msg.into(),
+        }
+    }
+
+    pub fn with_slash_reply(
+        self,
+        aci: ApplicationCommandInteraction,
+    ) -> Self {
+        let err = match self {
+            LogError::LogOnly(e) => e,
+            LogError::LogReply { err, reply: _ } => err,
+            LogError::LogSlashReply { err, aci: _ } => err,
+            LogError::LogReplyCustom {
+                err,
+                reply: _,
+                reply_msg: _,
+            } => err,
+            LogError::LogSlashCustomReply {
+                err,
+                aci: _,
+                reply_msg: _,
+            } => err,
+        };
+        LogError::LogSlashReply {
+            err,
+            aci,
         }
     }
 
@@ -152,9 +216,15 @@ impl LogError {
         let err = match self {
             LogError::LogOnly(e) => e,
             LogError::LogReply { err, reply: _ } => err,
+            LogError::LogSlashReply { err, aci: _ } => err,
             LogError::LogReplyCustom {
                 err,
                 reply: _,
+                reply_msg: _,
+            } => err,
+            LogError::LogSlashCustomReply {
+                err,
+                aci: _,
                 reply_msg: _,
             } => err,
         };
@@ -172,6 +242,8 @@ pub trait LogResultConversion<T> {
     fn log_only(self) -> LogResult<T>;
 
     fn log_reply(self, msg: &serenity::model::channel::Message) -> LogResult<T>;
+
+    fn log_slash_reply(self, aci: ApplicationCommandInteraction) -> LogResult<T>;
 
     fn log_custom_reply<S>(
         self,
@@ -205,6 +277,10 @@ where
 
     fn log_reply(self, msg: &serenity::model::channel::Message) -> LogResult<T> {
         self.log_only().map_err(|e| e.with_reply(msg))
+    }
+
+    fn log_slash_reply(self, aci: ApplicationCommandInteraction) -> LogResult<T> {
+        self.log_only().map_err(|e| e.with_slash_reply(aci))
     }
 
     fn log_custom_reply<S>(
@@ -288,6 +364,16 @@ async fn log_to_channel<T: std::fmt::Debug>(
                     LogType::Automatic(a) => {
                         e.field("Automatic", format!("`{}`", a), true);
                     }
+                    LogType::AppCmD(a) => {
+                        e.field(
+                            "Slash Command",
+                            format!(
+                                "`{}`",
+                                a.data.name
+                                ),
+                            true,
+                        );
+                    }
                 }
                 match result {
                     Ok(_) => {
@@ -318,6 +404,15 @@ async fn log_reply(ctx: &Context, err: &LogError) {
                 .await
                 .ok();
         }
+        LogError::LogSlashReply { err, aci} => {
+            aci.create_interaction_response(ctx, |r| {
+                r.kind(InteractionResponseType::ChannelMessageWithSource);
+                r.interaction_response_data(|d| {
+                    d.content(err.to_string());
+                    d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
+                })
+            }).await.ok();
+        }
         LogError::LogReplyCustom {
             err: _,
             reply,
@@ -331,6 +426,15 @@ async fn log_reply(ctx: &Context, err: &LogError) {
                 })
                 .await
                 .ok();
+        }
+        LogError::LogSlashCustomReply { err: _, aci, reply_msg,} => {
+            aci.create_interaction_response(ctx, |r| {
+                r.kind(InteractionResponseType::ChannelMessageWithSource);
+                r.interaction_response_data(|d| {
+                    d.content(reply_msg);
+                    d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
+                })
+            }).await.ok();
         }
     }
 }
@@ -392,4 +496,16 @@ where
 {
     let res = f().await;
     log_to_channel(ctx, &res, LogType::Automatic(what), user).await;
+}
+
+pub async fn log_slash<F, Fut>(ctx: &Context, cmd: &ApplicationCommandInteraction, f: F)
+where
+    F: FnOnce() -> Fut + Send,
+    Fut: Future<Output = LogResult<()>> + Send,
+{
+    let res = f().await;
+    if let Err(err) = &res {
+        log_reply(ctx, err).await;
+    }
+    log_to_channel(ctx, &res, LogType::AppCmD(cmd), &cmd.user).await;
 }

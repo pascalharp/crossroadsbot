@@ -1,5 +1,6 @@
 use crossroadsbot::{
-    commands, data::*, db, interactions, log::*, signup_board::*, status, tasks, utils::DIZZY_EMOJI,
+    commands, data::*, db, interactions, log::*, signup_board::*, slash_commands, status, tasks,
+    utils::DIZZY_EMOJI,
 };
 use dashmap::DashSet;
 use diesel::pg::PgConnection;
@@ -53,6 +54,60 @@ impl EventHandler for Handler {
             },
         }
 
+        // Register slash commands for main guild
+        let main_guild_id = {
+            ctx.data
+                .read()
+                .await
+                .get::<ConfigValuesData>()
+                .unwrap()
+                .clone()
+                .main_guild_id
+        };
+
+        info!("Setting up slash commands");
+        match main_guild_id
+            .set_application_commands(&ctx, |cmds| {
+                cmds.set_application_commands(slash_commands::AppCommands::create_default())
+            })
+            .await
+        {
+            Ok(cmds) => {
+                info!("Setting slash commands permissions for: {:#?}", cmds);
+                // Register slash commands for main guild
+                let confs = {
+                    ctx.data
+                        .read()
+                        .await
+                        .get::<ConfigValuesData>()
+                        .unwrap()
+                        .clone()
+                };
+
+                let perms = cmds
+                            .iter()
+                            .map(|c| slash_commands::AppCommands::from_str(&c.name).map(|ac| ac.permission(c, &confs)))
+                            .collect::<Result<Vec<_>,_>>();
+
+                info!("Permissions: {:?}", perms);
+
+                match perms {
+                    Err(e) => error!("Failed to figure out permissions for slash commands: {}", e),
+                    Ok(perms) => {
+                        if let Err(e) = main_guild_id
+                        .set_application_commands_permissions(&ctx, |p| {
+                            p.set_application_commands(perms)
+                        })
+                        .await
+                        {
+                            error!("Failed to set permissions for slash commands {:?}", e);
+                        }
+                    }
+                }
+            }
+            Err(e) => error!("Failed to create application commands: {:?}", e),
+        }
+
         // attempt to load SignupBoardData from db
         data_read
             .get::<SignupBoardData>()
@@ -80,13 +135,11 @@ impl EventHandler for Handler {
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        // we only care about message interactions for now
-        let interaction = match interaction.message_component() {
-            Some(i) => i,
-            None => return,
-        };
-
-        interactions::button_interaction(&ctx, &interaction).await;
+        match &interaction {
+            Interaction::MessageComponent(mci) => interactions::button_interaction(&ctx, &mci).await,
+            Interaction::ApplicationCommand(aci) => slash_commands::slash_command_interaction(&ctx, &aci).await,
+            _ => (),
+        }
     }
 
     async fn guild_member_removal(
