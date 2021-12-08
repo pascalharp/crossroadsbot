@@ -379,6 +379,19 @@ async fn select_trainings_by_tier(ctx: &Context, id: i32) -> QueryResult<Vec<Tra
     .unwrap()
 }
 
+async fn select_trainings_by_date(ctx: &Context, date: NaiveDate) -> QueryResult<Vec<Training>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        trainings::table
+            .filter(trainings::date.ge(date.and_hms(0, 0, 0)))
+            .filter(trainings::date.le(date.and_hms(23, 59, 59)))
+            .select(trainings::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn select_signups_by_training(ctx: &Context, id: i32) -> QueryResult<Vec<Signup>> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -789,6 +802,10 @@ impl Training {
         state: TrainingState,
     ) -> QueryResult<Training> {
         select_training_by_id_and_state(ctx, id, state).await
+    }
+
+    pub async fn by_date(ctx: &Context, date: NaiveDate) -> QueryResult<Vec<Training>> {
+        select_trainings_by_date(ctx, date).await
     }
 
     pub async fn set_state(self, ctx: &Context, state: TrainingState) -> QueryResult<Training> {

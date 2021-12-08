@@ -2,9 +2,13 @@ use std::{fmt::Display, str::FromStr};
 
 use serenity::{
     builder::{CreateApplicationCommand, CreateApplicationCommandPermissions},
-    model::interactions::{application_command::{
-        ApplicationCommand, ApplicationCommandPermissionType, ApplicationCommandInteraction,
-    }, InteractionResponseType, InteractionApplicationCommandCallbackDataFlags}, client::Context,
+    client::Context,
+    model::interactions::{
+        application_command::{
+            ApplicationCommand, ApplicationCommandInteraction, ApplicationCommandPermissionType,
+        },
+        InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
+    },
 };
 
 use tracing::error;
@@ -38,9 +42,7 @@ pub enum AppCommands {
 }
 
 /// All commands that should be created when the bot starts
-const DEFAULT_COMMANDS: [AppCommands; 1] = [
-    AppCommands::Training
-];
+const DEFAULT_COMMANDS: [AppCommands; 1] = [AppCommands::Training];
 
 impl FromStr for AppCommands {
     type Err = SlashCommandParseError;
@@ -61,18 +63,24 @@ impl AppCommands {
     }
 
     pub fn create_default() -> Vec<CreateApplicationCommand> {
-        DEFAULT_COMMANDS.iter().map(Self::create).collect::<Vec<_>>()
+        DEFAULT_COMMANDS
+            .iter()
+            .map(Self::create)
+            .collect::<Vec<_>>()
     }
 
-    pub fn permission(&self, ac: &ApplicationCommand, conf: &ConfigValues) -> CreateApplicationCommandPermissions {
+    pub fn permission(
+        &self,
+        ac: &ApplicationCommand,
+        conf: &ConfigValues,
+    ) -> CreateApplicationCommandPermissions {
         let mut perms = CreateApplicationCommandPermissions::default();
         perms.id(ac.id.0);
 
         // Here are all the configurations for Slash Command Permissions
         match self {
             Self::Training => perms.create_permissions(|p| {
-                p
-                    .permission(true)
+                p.permission(true)
                     .kind(ApplicationCommandPermissionType::Role)
                     .id(conf.squadmaker_role_id.0)
             }),
@@ -91,18 +99,18 @@ impl AppCommands {
                         d.content("Not yet implemented");
                         d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
                     })
-                }).await.unwrap();
+                })
+                .await
+                .unwrap();
             }
         }
     }
 }
 
 pub async fn slash_command_interaction(ctx: &Context, aci: &ApplicationCommandInteraction) {
-
     // Consider reworking to aci.data.id
     match AppCommands::from_str(&aci.data.name) {
         Ok(cmd) => cmd.handle(ctx, aci).await,
         Err(e) => error!("{}", e),
     }
-
 }

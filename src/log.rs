@@ -14,7 +14,7 @@ pub enum LogType<'a> {
         m: &'a serenity::model::interactions::message_component::InteractionMessage,
     },
     Automatic(&'a str),
-    AppCmD(&'a ApplicationCommandInteraction)
+    AppCmD(&'a ApplicationCommandInteraction),
 }
 
 impl std::fmt::Display for LogType<'_> {
@@ -77,7 +77,11 @@ impl std::fmt::Display for LogError {
                 reply: _,
                 reply_msg: _,
             } => write!(f, "{}", err),
-            LogError::LogSlashCustomReply { err, aci: _, reply_msg: _ } => write!(f, "{}", err),
+            LogError::LogSlashCustomReply {
+                err,
+                aci: _,
+                reply_msg: _,
+            } => write!(f, "{}", err),
         }
     }
 }
@@ -183,10 +187,7 @@ impl LogError {
         }
     }
 
-    pub fn with_slash_reply(
-        self,
-        aci: ApplicationCommandInteraction,
-    ) -> Self {
+    pub fn with_slash_reply(self, aci: ApplicationCommandInteraction) -> Self {
         let err = match self {
             LogError::LogOnly(e) => e,
             LogError::LogReply { err, reply: _ } => err,
@@ -202,10 +203,7 @@ impl LogError {
                 reply_msg: _,
             } => err,
         };
-        LogError::LogSlashReply {
-            err,
-            aci,
-        }
+        LogError::LogSlashReply { err, aci }
     }
 
     pub fn with_custom_reply(
@@ -243,7 +241,7 @@ pub trait LogResultConversion<T> {
 
     fn log_reply(self, msg: &serenity::model::channel::Message) -> LogResult<T>;
 
-    fn log_slash_reply(self, aci: ApplicationCommandInteraction) -> LogResult<T>;
+    fn log_slash_reply(self, aci: &ApplicationCommandInteraction) -> LogResult<T>;
 
     fn log_custom_reply<S>(
         self,
@@ -279,8 +277,8 @@ where
         self.log_only().map_err(|e| e.with_reply(msg))
     }
 
-    fn log_slash_reply(self, aci: ApplicationCommandInteraction) -> LogResult<T> {
-        self.log_only().map_err(|e| e.with_slash_reply(aci))
+    fn log_slash_reply(self, aci: &ApplicationCommandInteraction) -> LogResult<T> {
+        self.log_only().map_err(|e| e.with_slash_reply(aci.clone()))
     }
 
     fn log_custom_reply<S>(
@@ -365,14 +363,7 @@ async fn log_to_channel<T: std::fmt::Debug>(
                         e.field("Automatic", format!("`{}`", a), true);
                     }
                     LogType::AppCmD(a) => {
-                        e.field(
-                            "Slash Command",
-                            format!(
-                                "`{}`",
-                                a.data.name
-                                ),
-                            true,
-                        );
+                        e.field("Slash Command", format!("`{}`", a.data.name), true);
                     }
                 }
                 match result {
@@ -404,14 +395,16 @@ async fn log_reply(ctx: &Context, err: &LogError) {
                 .await
                 .ok();
         }
-        LogError::LogSlashReply { err, aci} => {
+        LogError::LogSlashReply { err, aci } => {
             aci.create_interaction_response(ctx, |r| {
                 r.kind(InteractionResponseType::ChannelMessageWithSource);
                 r.interaction_response_data(|d| {
                     d.content(err.to_string());
                     d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
                 })
-            }).await.ok();
+            })
+            .await
+            .ok();
         }
         LogError::LogReplyCustom {
             err: _,
@@ -427,14 +420,20 @@ async fn log_reply(ctx: &Context, err: &LogError) {
                 .await
                 .ok();
         }
-        LogError::LogSlashCustomReply { err: _, aci, reply_msg,} => {
+        LogError::LogSlashCustomReply {
+            err: _,
+            aci,
+            reply_msg,
+        } => {
             aci.create_interaction_response(ctx, |r| {
                 r.kind(InteractionResponseType::ChannelMessageWithSource);
                 r.interaction_response_data(|d| {
                     d.content(reply_msg);
                     d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
                 })
-            }).await.ok();
+            })
+            .await
+            .ok();
         }
     }
 }

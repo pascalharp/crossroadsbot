@@ -73,7 +73,7 @@ impl EventHandler for Handler {
             .await
         {
             Ok(cmds) => {
-                info!("Setting slash commands permissions for: {:#?}", cmds);
+                //info!("Setting slash commands permissions for: {:#?}", cmds);
                 // Register slash commands for main guild
                 let confs = {
                     ctx.data
@@ -85,20 +85,20 @@ impl EventHandler for Handler {
                 };
 
                 let perms = cmds
-                            .iter()
-                            .map(|c| slash_commands::AppCommands::from_str(&c.name).map(|ac| ac.permission(c, &confs)))
-                            .collect::<Result<Vec<_>,_>>();
-
-                info!("Permissions: {:?}", perms);
-
+                    .iter()
+                    .map(|c| {
+                        slash_commands::AppCommands::from_str(&c.name)
+                            .map(|ac| ac.permission(c, &confs))
+                    })
+                    .collect::<Result<Vec<_>, _>>();
                 match perms {
                     Err(e) => error!("Failed to figure out permissions for slash commands: {}", e),
                     Ok(perms) => {
                         if let Err(e) = main_guild_id
-                        .set_application_commands_permissions(&ctx, |p| {
-                            p.set_application_commands(perms)
-                        })
-                        .await
+                            .set_application_commands_permissions(&ctx, |p| {
+                                p.set_application_commands(perms)
+                            })
+                            .await
                         {
                             error!("Failed to set permissions for slash commands {:?}", e);
                         }
@@ -136,8 +136,12 @@ impl EventHandler for Handler {
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         match &interaction {
-            Interaction::MessageComponent(mci) => interactions::button_interaction(&ctx, &mci).await,
-            Interaction::ApplicationCommand(aci) => slash_commands::slash_command_interaction(&ctx, &aci).await,
+            Interaction::MessageComponent(mci) => {
+                interactions::button_interaction(&ctx, &mci).await
+            }
+            Interaction::ApplicationCommand(aci) => {
+                slash_commands::slash_command_interaction(&ctx, &aci).await
+            }
             _ => (),
         }
     }
