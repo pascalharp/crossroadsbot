@@ -7,7 +7,6 @@ use serenity::{
         application_command::{
             ApplicationCommand, ApplicationCommandInteraction, ApplicationCommandPermissionType,
         },
-        InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
     },
 };
 
@@ -92,17 +91,17 @@ impl AppCommands {
     async fn handle(&self, ctx: &Context, aci: &ApplicationCommandInteraction) {
         match self {
             Self::Training => training::handle(ctx, aci).await,
-            _ => {
-                aci.create_interaction_response(ctx, |r| {
-                    r.kind(InteractionResponseType::ChannelMessageWithSource);
-                    r.interaction_response_data(|d| {
-                        d.content("Not yet implemented");
-                        d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
-                    })
-                })
-                .await
-                .unwrap();
-            }
+            //_ => {
+            //    aci.create_interaction_response(ctx, |r| {
+            //        r.kind(InteractionResponseType::ChannelMessageWithSource);
+            //        r.interaction_response_data(|d| {
+            //            d.content("Not yet implemented");
+            //            d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
+            //        })
+            //    })
+            //    .await
+            //    .unwrap();
+            //}
         }
     }
 }
