@@ -484,12 +484,11 @@ async fn download(
     aci.create_interaction_response(ctx, |r| {
         r.kind(InteractionResponseType::ChannelMessageWithSource);
         r.interaction_response_data(|d| {
-            d.flags(MessageFlags::EPHEMERAL);
             d.content("Loading...")
         })
     }).await?;
 
-    let _msg = aci.get_interaction_response(ctx).await?;
+    let msg = aci.get_interaction_response(ctx).await?;
 
     let data = DownloadData {
         output: format,
@@ -518,9 +517,12 @@ async fn download(
         filename: String::from("signups.csv"),
     };
 
-    aci.create_followup_message(ctx, |r| {
-        r.content("Done");
-        r.add_file(file)
+    msg.channel_id.send_message(ctx, |m| {
+        m.add_file(file)
+    }).await?;
+
+    aci.edit_followup_message(ctx, msg.id, |r| {
+        r.content("Done")
     }).await?;
 
     Ok(())
