@@ -13,13 +13,13 @@ use serenity::{
     builder::{CreateApplicationCommand, CreateEmbed},
     client::Context,
     futures::future,
-    model::interactions::{
+};
+use serenity::model::interactions::{
         application_command::{
             ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
             ApplicationCommandOptionType,
         },
         InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
-    },
 };
 
 type MessageFlags = InteractionApplicationCommandCallbackDataFlags;
@@ -59,6 +59,23 @@ pub fn create() -> CreateApplicationCommand {
             o.description("Select training(s) with the specified id. Comma separated list")
         })
     });
+    app.create_option(|o| {
+        o.kind(ApplicationCommandOptionType::SubCommand);
+        o.name("download");
+        o.description("Download one or multiple training(s)");
+        o.create_sub_option(|o| {
+                o.kind(ApplicationCommandOptionType::String);
+                o.name("day");
+                o.description(
+                    "Select all trainings from that day. Format: yyyy-mm-dd. Comma separated list",
+                )
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("ids");
+            o.description("Select training(s) with the specified id. Comma separated list")
+        })
+    });
     app
 }
 
@@ -67,6 +84,7 @@ pub async fn handle(ctx: &Context, aci: &ApplicationCommandInteraction) {
         if let Some(sub) = aci.data.options.get(0) {
             match sub.name.as_ref() {
                 "set" => set(ctx, aci, sub).await,
+                "download" => download(ctx, aci, sub).await,
                 _ => Err(LogError::new_slash("Not yet handled", aci.clone())),
             }
         } else {
@@ -74,6 +92,49 @@ pub async fn handle(ctx: &Context, aci: &ApplicationCommandInteraction) {
         }
     })
     .await;
+}
+
+async fn trainings_from_days(ctx: &Context, value: &str) -> LogResult<Vec<db::Training>> {
+
+    let days: Vec<NaiveDate> = value
+        .split(',')
+        .map(|s| s.parse())
+        .collect::<Result<Vec<_>, _>>()
+        .log_only()?;
+
+    let trainings_fut = days
+        .into_iter()
+        .map(|d| db::Training::by_date(ctx, d))
+        .collect::<Vec<_>>();
+
+    Ok(
+        future::try_join_all(trainings_fut)
+            .await
+            .log_only()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+    )
+}
+
+async fn trainings_from_ids(ctx: &Context, value: &str) -> LogResult<Vec<db::Training>> {
+
+    let i: Vec<i32> = value
+        .split(',')
+        .map(|s| s.parse())
+        .collect::<Result<Vec<_>, _>>()
+        .log_only()?;
+
+    let trainings_fut = i
+        .into_iter()
+        .map(|i| db::Training::by_id(ctx, i))
+        .collect::<Vec<_>>();
+
+        Ok(
+            future::try_join_all(trainings_fut)
+                .await
+                .log_only()?
+        )
 }
 
 async fn set(
@@ -102,68 +163,41 @@ async fn set(
 
     // Although loading full trainings is a bit overhead
     // it also guarantees they exist
-    let mut ids: Vec<db::Training> = Vec::new();
+    let mut trainings: Vec<db::Training> = Vec::new();
 
-    if let Some(day_str) = cmds
+    if let Some(days) = cmds
         .get("day")
         .and_then(|d| d.value.as_ref())
-        .and_then(|d| d.as_str().to_owned())
-        .map(|d| d.split(','))
+        .and_then(|d| d.as_str())
     {
-        let days: Vec<NaiveDate> = day_str
-            .into_iter()
-            .map(|s| s.parse())
-            .collect::<Result<Vec<_>, _>>()
-            .log_slash_reply(aci)?;
-
-        let trainings_fut = days
-            .into_iter()
-            .map(|d| db::Training::by_date(ctx, d))
-            .collect::<Vec<_>>();
-
-        ids.append(
-            &mut future::try_join_all(trainings_fut)
-                .await
-                .log_slash_reply(aci)?
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>(),
+        trainings.append(
+            &mut trainings_from_days(ctx, days).await.log_slash_reply(aci)?
         );
     }
 
-    if let Some(id_str) = cmds
+    if let Some(ids) = cmds
         .get("ids")
-        .and_then(|i| i.value.as_ref())
-        .and_then(|i| i.as_str().to_owned())
-        .map(|i| i.split(','))
+        .and_then(|d| d.value.as_ref())
+        .and_then(|d| d.as_str())
     {
-        let i: Vec<i32> = id_str
-            .into_iter()
-            .map(|s| s.parse())
-            .collect::<Result<Vec<_>, _>>()
-            .log_slash_reply(aci)?;
-
-        let trainings_fut = i
-            .into_iter()
-            .map(|i| db::Training::by_id(ctx, i))
-            .collect::<Vec<_>>();
-
-        ids.append(
-            &mut future::try_join_all(trainings_fut)
-                .await
-                .log_slash_reply(aci)?,
+        trainings.append(
+            &mut trainings_from_ids(ctx, ids).await.log_slash_reply(aci)?
         );
+    }
+
+    if trainings.is_empty() {
+        return Err(LogError::new_slash("Select at least one training", aci.clone()));
     }
 
     // filter out multiple
-    ids.sort_by_key(|t| t.id);
-    ids.dedup_by_key(|t| t.id);
-    ids.sort_by_key(|t| t.date);
+    trainings.sort_by_key(|t| t.id);
+    trainings.dedup_by_key(|t| t.id);
+    trainings.sort_by_key(|t| t.date);
 
     let mut te = CreateEmbed::xdefault();
     te.title("Change training state");
     te.description(format!("Setting the following trainings to: **{}**", state));
-    te.fields(ids.iter().map(|id| {
+    te.fields(trainings.iter().map(|id| {
         (
             format!("{} | {}", id.id, id.title),
             format!("<t:{}>", id.date.timestamp()),
@@ -200,7 +234,7 @@ async fn set(
                         })
                         .await?;
 
-                    let update_futs: Vec<_> = ids
+                    let update_futs: Vec<_> = trainings
                         .into_iter()
                         .map(|t| t.set_state(ctx, state.clone()))
                         .collect();
@@ -285,6 +319,49 @@ async fn set(
             .await?;
         }
     };
+
+    Ok(())
+}
+
+async fn download(
+    ctx: &Context,
+    aci: &ApplicationCommandInteraction,
+    option: &ApplicationCommandInteractionDataOption,
+) -> LogResult<()> {
+    // Get subcommands
+    let cmds = option
+        .options
+        .iter()
+        .map(|o| (o.name.clone(), o))
+        .collect::<HashMap<_, _>>();
+
+    // Although loading full trainings is a bit overhead
+    // it also guarantees they exist
+    let mut trainings: Vec<db::Training> = Vec::new();
+
+    if let Some(days) = cmds
+        .get("day")
+        .and_then(|d| d.value.as_ref())
+        .and_then(|d| d.as_str())
+    {
+        trainings.append(
+            &mut trainings_from_days(ctx, days).await.log_slash_reply(aci)?
+        );
+    }
+
+    if let Some(ids) = cmds
+        .get("ids")
+        .and_then(|d| d.value.as_ref())
+        .and_then(|d| d.as_str())
+    {
+        trainings.append(
+            &mut trainings_from_ids(ctx, ids).await.log_slash_reply(aci)?
+        );
+    }
+
+    if trainings.is_empty() {
+        return Err(LogError::new_slash("Select at least one training", aci.clone()));
+    }
 
     Ok(())
 }
