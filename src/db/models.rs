@@ -3,11 +3,12 @@ use crate::db::schema::{
     training_roles, trainings, users,
 };
 use diesel_derive_enum::DbEnum;
+use serde::Serialize;
 use std::{fmt, str};
 
 use chrono::naive::{NaiveDate, NaiveDateTime};
 
-#[derive(Identifiable, Queryable, PartialEq, Debug)]
+#[derive(Identifiable, Queryable, PartialEq, Debug, Serialize)]
 #[table_name = "users"]
 pub struct User {
     pub id: i32,
@@ -46,7 +47,7 @@ pub struct NewSignup {
     pub training_id: i32,
 }
 
-#[derive(Debug, DbEnum, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, DbEnum, PartialEq, PartialOrd, Clone, Serialize)]
 #[DieselType = "Training_state"]
 pub enum TrainingState {
     Created,
@@ -83,7 +84,7 @@ impl str::FromStr for TrainingState {
     }
 }
 
-#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug, Serialize)]
 #[belongs_to(Tier)]
 #[table_name = "trainings"]
 pub struct Training {
@@ -103,7 +104,7 @@ pub(super) struct NewTraining {
     pub tier_id: Option<i32>,
 }
 
-#[derive(Identifiable, Queryable, Associations, Hash, PartialEq, Eq, Debug)]
+#[derive(Identifiable, Queryable, Associations, Hash, PartialEq, Eq, Debug, Serialize)]
 #[table_name = "roles"]
 pub struct Role {
     pub id: i32,

@@ -188,6 +188,7 @@ dependencies = [
  "itertools",
  "regex",
  "serde",
+ "serde_json",
  "serenity",
  "tokio",
  "tracing",
