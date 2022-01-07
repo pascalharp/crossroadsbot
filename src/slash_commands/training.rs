@@ -9,10 +9,7 @@ use crate::{
     utils::DEFAULT_TIMEOUT,
 };
 use chrono::{NaiveDate, NaiveDateTime};
-use serde::{
-    ser::{SerializeSeq, SerializeStruct},
-    Serialize,
-};
+use serde::Serialize;
 use serenity::model::interactions::{
     application_command::{
         ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
@@ -331,6 +328,7 @@ async fn set(
     Ok(())
 }
 
+#[derive(Serialize)]
 enum DonwloadFormat {
     Json,
     Csv,
@@ -359,13 +357,13 @@ struct SignupDataCsv<'a> {
     #[serde(rename = "Gw2 Account")]
     gw2_acc: &'a str,
     #[serde(rename = "Discord Account")]
-    discord_acc: &'a str,
+    discord_acc: String,
     #[serde(rename = "Discord Ping")]
-    discord_ping: &'a str,
+    discord_ping: String,
     #[serde(rename = "Training Name")]
     training_name: &'a str,
     #[serde(rename = "Roles")]
-    roles: &'a str,
+    roles: String,
     #[serde(rename = "Comment")]
     comment: Option<&'a str>,
 }
@@ -384,6 +382,7 @@ struct TierData {
     includes: Vec<Role>,
 }
 
+#[derive(Serialize)]
 struct DownloadData {
     output: DonwloadFormat,
     created: NaiveDateTime,
@@ -392,20 +391,17 @@ struct DownloadData {
 }
 
 impl DownloadData {
-    fn serialize_csv<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut seq = serializer.serialize_seq(Some(self.trainings.len()))?;
+    fn to_csv(&self) -> Vec<SignupDataCsv<'_>> {
+        let mut v = Vec::new();
 
         for t in &self.trainings {
             for s in &t.signups {
                 let elem = SignupDataCsv {
                     gw2_acc: &s.user.gw2_id,
-                    discord_acc: &s.member.user.tag(),
-                    discord_ping: &Mention::from(&s.member).to_string(),
+                    discord_acc: s.member.user.tag(),
+                    discord_ping: Mention::from(&s.member).to_string(),
                     training_name: &t.training.title,
-                    roles: &s
+                    roles: s
                         .roles
                         .iter()
                         .map(|r| r.as_str())
@@ -414,34 +410,11 @@ impl DownloadData {
                     comment: s.comment.as_deref(),
                 };
 
-                seq.serialize_element(&elem)?;
+                v.push(elem);
             }
         }
 
-        seq.end()
-    }
-
-    fn serialize_json<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let mut elem = serializer.serialize_struct("data", 2)?;
-        elem.serialize_field("created", &self.created)?;
-        elem.serialize_field("trainings", &self.trainings)?;
-        elem.serialize_field("tiers", &self.tiers)?;
-        elem.end()
-    }
-}
-
-impl Serialize for DownloadData {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self.output {
-            DonwloadFormat::Csv => self.serialize_csv(serializer),
-            DonwloadFormat::Json => self.serialize_json(serializer),
-        }
+        v
     }
 }
 
@@ -614,7 +587,12 @@ async fn download(
     let data_bytes = match data.output {
         DonwloadFormat::Csv => {
             let mut wrt = csv::Writer::from_writer(vec![]);
-            wrt.serialize(&data).log_slash_reply(aci)?;
+            let csv_data = data.to_csv();
+
+            for d in csv_data {
+                wrt.serialize(&d).log_slash_reply(aci)?;
+            }
+
             String::from_utf8(wrt.into_inner().log_slash_reply(aci)?)
                 .log_slash_reply(aci)?
                 .into_bytes()
@@ -627,7 +605,7 @@ async fn download(
 
     let file = AttachmentType::Bytes {
         data: Cow::from(data_bytes),
-        filename: String::from("signups.csv"),
+        filename: format!("signups.{}", data.output),
     };
 
     let msg = msg
