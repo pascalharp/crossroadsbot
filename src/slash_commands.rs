@@ -3,10 +3,8 @@ use std::{fmt::Display, str::FromStr};
 use serenity::{
     builder::{CreateApplicationCommand, CreateApplicationCommandPermissions},
     client::Context,
-    model::interactions::{
-        application_command::{
-            ApplicationCommand, ApplicationCommandInteraction, ApplicationCommandPermissionType,
-        },
+    model::interactions::application_command::{
+        ApplicationCommand, ApplicationCommandInteraction, ApplicationCommandPermissionType,
     },
 };
 
