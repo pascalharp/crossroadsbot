@@ -31,15 +31,17 @@ impl std::fmt::Display for SlashCommandParseError {
 impl std::error::Error for SlashCommandParseError {}
 
 mod training;
+mod training_boss;
 
 /// All slash commands
 #[derive(Debug)]
 pub enum AppCommands {
     Training,
+    TrainingBoss,
 }
 
 /// All commands that should be created when the bot starts
-const DEFAULT_COMMANDS: [AppCommands; 1] = [AppCommands::Training];
+const DEFAULT_COMMANDS: [AppCommands; 2] = [AppCommands::Training, AppCommands::TrainingBoss];
 
 impl FromStr for AppCommands {
     type Err = SlashCommandParseError;
@@ -47,6 +49,7 @@ impl FromStr for AppCommands {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             training::CMD_TRAINING => Ok(Self::Training),
+            training_boss::CMD_TRAINING_BOSS => Ok(Self::TrainingBoss),
             _ => Err(SlashCommandParseError(s.to_owned())),
         }
     }
@@ -56,6 +59,7 @@ impl AppCommands {
     pub fn create(&self) -> CreateApplicationCommand {
         match self {
             Self::Training => training::create(),
+            Self::TrainingBoss => training_boss::create(),
         }
     }
 
@@ -76,7 +80,7 @@ impl AppCommands {
 
         // Here are all the configurations for Slash Command Permissions
         match self {
-            Self::Training => perms.create_permissions(|p| {
+            Self::Training | Self::TrainingBoss => perms.create_permissions(|p| {
                 p.permission(true)
                     .kind(ApplicationCommandPermissionType::Role)
                     .id(conf.squadmaker_role_id.0)
@@ -89,17 +93,7 @@ impl AppCommands {
     async fn handle(&self, ctx: &Context, aci: &ApplicationCommandInteraction) {
         match self {
             Self::Training => training::handle(ctx, aci).await,
-            //_ => {
-            //    aci.create_interaction_response(ctx, |r| {
-            //        r.kind(InteractionResponseType::ChannelMessageWithSource);
-            //        r.interaction_response_data(|d| {
-            //            d.content("Not yet implemented");
-            //            d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
-            //        })
-            //    })
-            //    .await
-            //    .unwrap();
-            //}
+            Self::TrainingBoss => training_boss::handle(ctx, aci).await,
         }
     }
 }
