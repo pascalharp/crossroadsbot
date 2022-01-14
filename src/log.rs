@@ -11,7 +11,7 @@ pub enum LogType<'a> {
     Command(&'a serenity::model::channel::Message),
     Interaction {
         i: &'a ButtonInteraction,
-        m: &'a serenity::model::interactions::message_component::InteractionMessage,
+        m: &'a Message,
     },
     Automatic(&'a str),
     AppCmD(&'a ApplicationCommandInteraction),
@@ -334,12 +334,7 @@ async fn log_to_channel<T: std::fmt::Debug>(
                             format!(
                                 "`{}`\n{}",
                                 i,
-                                match m.clone().regular() {
-                                    Some(m) => {
-                                        format!("[Link]({})", m.link())
-                                    }
-                                    None => "Hidden message".to_string(),
-                                }
+                                format!("[Link]({})", m.link()),
                             ),
                             true,
                         );
