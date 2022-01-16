@@ -39,6 +39,10 @@ impl LogInfo {
             what: what.to_string(),
         }
     }
+
+    pub fn add_user(&mut self, user: User) {
+        self.user = Some(user);
+    }
 }
 
 impl From<&Message> for LogInfo {

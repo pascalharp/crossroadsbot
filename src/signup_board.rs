@@ -4,8 +4,8 @@ use chrono::NaiveDate;
 use itertools::Itertools;
 use serenity::{model::prelude::*, prelude::*};
 use std::{convert::TryFrom, mem, sync::Arc};
+use anyhow::Result;
 
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 type StdResult<T, E> = std::result::Result<T, E>;
 
 pub const SIGNUP_BOARD_NAME: &str = "signup_board_id";
@@ -128,7 +128,7 @@ fn title_sort_value(t: &db::Training) -> u64 {
     if t.title.contains("Intermediate") {
         return 8;
     }
-    if t.title.contains("Pracitce") {
+    if t.title.contains("Practice") {
         return 6;
     }
     return 0;

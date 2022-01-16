@@ -1,9 +1,10 @@
+use anyhow::bail;
 use crossroadsbot::{
-    commands, data::*, db, interactions, log::*, signup_board::*, slash_commands, status, tasks,
-    utils::DIZZY_EMOJI,
+    commands, data::*, db, interactions, signup_board::*, slash_commands, status, tasks,
+    utils::DIZZY_EMOJI, logging::*,
 };
 use dashmap::DashSet;
-use diesel::pg::PgConnection;
+use diesel::{pg::PgConnection, result::Error::NotFound};
 use diesel::prelude::*;
 use dotenv::dotenv;
 use serenity::{
@@ -168,10 +169,23 @@ impl EventHandler for Handler {
             return;
         }
 
-        log_automatic(&ctx, "left server", &user, || async {
-            // Load user if registered
-            let db_user = db::User::by_discord_id(&ctx, user.id).await?;
-            db_user.delete(&ctx).await?;
+        let ctx = &ctx;
+        let user_id = user.id;
+        let mut log_info = LogInfo::automatic("User left server");
+        log_info.add_user(user);
+
+        log_discord(&ctx, log_info,  |trace| async move {
+            trace.step("Loading user database info");
+            match db::User::by_discord_id(&ctx, user_id).await {
+                Ok(db_user) => {
+                    trace.step("Deleting user from db");
+                    db_user.delete(ctx).await?;
+                }
+                Err(NotFound) => {
+                    trace.step("User not found in database");
+                }
+                Err(e) => bail!(e),
+            };
             Ok(())
         })
         .await;
