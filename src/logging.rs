@@ -9,9 +9,12 @@ use serenity::{
     async_trait,
     builder::{CreateEmbed, CreateEmbedAuthor},
     model::{
-        interactions::application_command::{
-            ApplicationCommandInteraction, ApplicationCommandInteractionData,
-            ApplicationCommandInteractionDataOption,
+        interactions::{
+            application_command::{
+                ApplicationCommandInteraction, ApplicationCommandInteractionData,
+                ApplicationCommandInteractionDataOption,
+            },
+            message_component::MessageComponentInteraction,
         },
         prelude::*,
     },
@@ -104,8 +107,17 @@ impl From<&ApplicationCommandInteraction> for LogInfo {
         LogInfo {
             user: Some(aci.user.clone()),
             kind: "Application Command",
-            // TODO properly recreate the whole command
             what: fmt_app_command_data(&aci.data),
+        }
+    }
+}
+
+impl From<&MessageComponentInteraction> for LogInfo {
+    fn from(mci: &MessageComponentInteraction) -> Self {
+        LogInfo {
+            user: Some(mci.user.clone()),
+            kind: "Message Interaction",
+            what: mci.data.custom_id.to_string(),
         }
     }
 }

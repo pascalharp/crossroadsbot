@@ -1,10 +1,10 @@
 use crate::{components, data, data::SignupBoardData, db, embeds};
+use anyhow::Result;
 use chrono::Datelike;
 use chrono::NaiveDate;
 use itertools::Itertools;
 use serenity::{model::prelude::*, prelude::*};
 use std::{convert::TryFrom, mem, sync::Arc};
-use anyhow::Result;
 
 type StdResult<T, E> = std::result::Result<T, E>;
 

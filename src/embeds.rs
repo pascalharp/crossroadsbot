@@ -2,7 +2,14 @@ use crate::{data::GLOB_COMMAND_PREFIX, db, utils::*};
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 use serenity::{
     builder::{CreateEmbed, CreateEmbedAuthor},
-    model::{id::ChannelId, id::EmojiId, id::GuildId, id::RoleId, misc::Mention},
+    model::{
+        id::ChannelId,
+        id::EmojiId,
+        id::GuildId,
+        id::RoleId,
+        misc::Mention,
+        prelude::{CurrentUser, User},
+    },
 };
 use std::collections::{HashMap, HashSet};
 
@@ -226,9 +233,9 @@ pub fn training_embed_add_board_footer(e: &mut CreateEmbed, ts: &db::TrainingSta
     }
 }
 
-fn internal_register_embed(e: &mut CreateEmbed) {
+fn internal_register_embed(e: &mut CreateEmbed, bot: &CurrentUser) {
     e.description(
-        "To register with the bot simply use the register command (_possible in DM's_) with your \
+        "To register with the bot simply use the register command (_preferable in DM's_) with your \
         Guild Wars 2 account name.\n\
         This is your in game account name which you can also find on your friends list. It \
         consists of your chosen in game name followed by a dot and 4 digits\n\
@@ -236,6 +243,11 @@ fn internal_register_embed(e: &mut CreateEmbed) {
     );
     e.field("Usage:", "register AccountName.1234", false);
     e.field("Example:", "register Narturio.1234", false);
+    e.field(
+        "DM me!",
+        format!("Right click => {} => Message", Mention::from(bot)),
+        false,
+    );
     e.footer(|f| {
         f.text(format!(
             "Note: if you use this command outside of DM's please prefix it with `{}`",
@@ -244,17 +256,17 @@ fn internal_register_embed(e: &mut CreateEmbed) {
     });
 }
 
-pub fn not_registered_embed() -> CreateEmbed {
+pub fn not_registered_embed(bot: &CurrentUser) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
     e.title("Not yet registered");
-    internal_register_embed(&mut e);
+    internal_register_embed(&mut e, bot);
     e
 }
 
-pub fn register_instructions_embed() -> CreateEmbed {
+pub fn register_instructions_embed(bot: &CurrentUser) -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
     e.title("How to register");
-    internal_register_embed(&mut e);
+    internal_register_embed(&mut e, bot);
     e
 }
 

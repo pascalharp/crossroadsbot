@@ -76,10 +76,11 @@ pub async fn unregister(ctx: &Context, msg: &Message, _: Args) -> CommandResult 
 pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     log_command(ctx, msg, || async {
         let id = args.single_quoted::<i32>().log_reply(msg)?;
+        let bot = ctx.cache.current_user().await;
         let db_user = match db::User::by_discord_id(ctx, msg.author.id).await {
             Ok(u) => u,
             Err(diesel::NotFound) => {
-                let embed = not_registered_embed();
+                let embed = not_registered_embed(&bot);
                 msg.channel_id
                     .send_message(ctx, |m| {
                         m.reference_message(msg);
@@ -210,11 +211,12 @@ pub async fn join(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 pub async fn leave(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     log_command(ctx, msg, || async {
         let training_id = args.single_quoted::<i32>().log_reply(msg)?;
+        let bot = ctx.cache.current_user().await;
 
         let db_user = match db::User::by_discord_id(ctx, msg.author.id).await {
             Ok(u) => u,
             Err(diesel::NotFound) => {
-                let emb = not_registered_embed();
+                let emb = not_registered_embed(&bot);
                 msg.channel_id
                     .send_message(ctx, |m| {
                         m.reference_message(msg);
@@ -379,10 +381,11 @@ pub async fn edit(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 #[num_args(0)]
 pub async fn list(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
     log_command(ctx, msg, || async {
+        let bot = ctx.cache.current_user().await;
         let db_user = match db::User::by_discord_id(ctx, msg.author.id).await {
             Ok(u) => u,
             Err(diesel::NotFound) => {
-                let embed = not_registered_embed();
+                let embed = not_registered_embed(&bot);
                 msg.channel_id
                     .send_message(ctx, |m| {
                         m.reference_message(msg);

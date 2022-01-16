@@ -161,7 +161,7 @@ impl fmt::Display for ButtonResponse {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ButtonGeneralInteraction {
     List,
     Register,

@@ -1,11 +1,11 @@
 use anyhow::bail;
 use crossroadsbot::{
-    commands, data::*, db, interactions, signup_board::*, slash_commands, status, tasks,
-    utils::DIZZY_EMOJI, logging::*,
+    commands, data::*, db, interactions, logging::*, signup_board::*, slash_commands, status,
+    tasks, utils::DIZZY_EMOJI,
 };
 use dashmap::DashSet;
-use diesel::{pg::PgConnection, result::Error::NotFound};
 use diesel::prelude::*;
+use diesel::{pg::PgConnection, result::Error::NotFound};
 use dotenv::dotenv;
 use serenity::{
     async_trait,
@@ -174,7 +174,7 @@ impl EventHandler for Handler {
         let mut log_info = LogInfo::automatic("User left server");
         log_info.add_user(user);
 
-        log_discord(&ctx, log_info,  |trace| async move {
+        log_discord(&ctx, log_info, |trace| async move {
             trace.step("Loading user database info");
             match db::User::by_discord_id(&ctx, user_id).await {
                 Ok(db_user) => {
