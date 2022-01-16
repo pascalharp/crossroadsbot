@@ -1,13 +1,15 @@
 use std::{borrow::Cow, collections::HashMap};
 
+use super::helpers::*;
 use crate::{
     components, data,
     db::{self, TrainingState},
     embeds::CrossroadsEmbeds,
-    log::*,
+    logging::*,
     signup_board, status,
     utils::DEFAULT_TIMEOUT,
 };
+use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use chrono::{NaiveDate, NaiveDateTime};
 use serde::Serialize;
 use serenity::model::interactions::{
@@ -94,26 +96,26 @@ pub fn create() -> CreateApplicationCommand {
 }
 
 pub async fn handle(ctx: &Context, aci: &ApplicationCommandInteraction) {
-    log_slash(ctx, aci, || async {
+    log_discord(ctx, aci, || async {
         if let Some(sub) = aci.data.options.get(0) {
             match sub.name.as_ref() {
                 "set" => set(ctx, aci, sub).await,
                 "download" => download(ctx, aci, sub).await,
-                _ => Err(LogError::new_slash("Not yet handled", aci.clone())),
+                _ => bail!("{} not yet available", sub.name),
             }
         } else {
-            Err(LogError::new_slash("Invalid command", aci.clone()))
+            bail!("Invalid command")
         }
     })
     .await;
 }
 
-async fn trainings_from_days(ctx: &Context, value: &str) -> LogResult<Vec<db::Training>> {
+async fn trainings_from_days(ctx: &Context, value: &str) -> Result<Vec<db::Training>> {
     let days: Vec<NaiveDate> = value
         .split(',')
         .map(|s| s.parse())
         .collect::<Result<Vec<_>, _>>()
-        .log_only()?;
+        .context("Could not parse date")?;
 
     let trainings_fut = days
         .into_iter()
@@ -121,33 +123,33 @@ async fn trainings_from_days(ctx: &Context, value: &str) -> LogResult<Vec<db::Tr
         .collect::<Vec<_>>();
 
     Ok(future::try_join_all(trainings_fut)
-        .await
-        .log_only()?
+        .await?
         .into_iter()
         .flatten()
         .collect::<Vec<_>>())
 }
 
-async fn trainings_from_ids(ctx: &Context, value: &str) -> LogResult<Vec<db::Training>> {
+async fn trainings_from_ids(ctx: &Context, value: &str) -> Result<Vec<db::Training>> {
     let i: Vec<i32> = value
         .split(',')
         .map(|s| s.parse())
-        .collect::<Result<Vec<_>, _>>()
-        .log_only()?;
+        .collect::<Result<Vec<_>, _>>()?;
 
     let trainings_fut = i
         .into_iter()
         .map(|i| db::Training::by_id(ctx, i))
         .collect::<Vec<_>>();
 
-    Ok(future::try_join_all(trainings_fut).await.log_only()?)
+    Ok(future::try_join_all(trainings_fut)
+        .await
+        .context("Training id does not exist")?)
 }
 
 async fn set(
     ctx: &Context,
     aci: &ApplicationCommandInteraction,
     option: &ApplicationCommandInteractionDataOption,
-) -> LogResult<()> {
+) -> Result<()> {
     // Get subcommands
     let cmds = option
         .options
@@ -156,7 +158,7 @@ async fn set(
         .collect::<HashMap<_, _>>();
 
     // required and pre defined so fine to unwrap
-    let state: TrainingState = cmds
+    let state = cmds
         .get("state")
         .unwrap()
         .value
@@ -164,8 +166,8 @@ async fn set(
         .unwrap()
         .as_str()
         .unwrap()
-        .parse()
-        .log_slash_reply(aci)?;
+        .parse::<TrainingState>()
+        .unwrap();
 
     // Although loading full trainings is a bit overhead
     // it also guarantees they exist
@@ -176,7 +178,12 @@ async fn set(
         .and_then(|d| d.value.as_ref())
         .and_then(|d| d.as_str())
     {
-        trainings.append(&mut trainings_from_days(ctx, days).await.log_slash_reply(aci)?);
+        trainings.append(
+            &mut trainings_from_days(ctx, days)
+                .await
+                .map_err_reply(|what| quick_ch_msg_with_src(ctx, aci, what))
+                .await?,
+        );
     }
 
     if let Some(ids) = cmds
@@ -184,14 +191,18 @@ async fn set(
         .and_then(|d| d.value.as_ref())
         .and_then(|d| d.as_str())
     {
-        trainings.append(&mut trainings_from_ids(ctx, ids).await.log_slash_reply(aci)?);
+        trainings.append(
+            &mut trainings_from_ids(ctx, ids)
+                .await
+                .map_err_reply(|what| quick_ch_msg_with_src(ctx, aci, what))
+                .await?,
+        );
     }
 
     if trainings.is_empty() {
-        return Err(LogError::new_slash(
-            "Select at least one training",
-            aci.clone(),
-        ));
+        Err(anyhow!("Select at least one training"))
+            .map_err_reply(|what| quick_ch_msg_with_src(ctx, aci, what))
+            .await?;
     }
 
     // filter out multiple
@@ -315,6 +326,9 @@ async fn set(
             }
         }
         None => {
+            Err(anyhow!("Timed out"))
+                .map_err_reply(|w| quick_edit_flup_msg(ctx, aci, msg.id, w))
+                .await?;
             aci.edit_followup_message(ctx, msg.id, |m| {
                 m.flags(MessageFlags::EPHEMERAL);
                 m.content("Timed out");
@@ -422,18 +436,15 @@ async fn download(
     ctx: &Context,
     aci: &ApplicationCommandInteraction,
     option: &ApplicationCommandInteractionDataOption,
-) -> LogResult<()> {
+) -> Result<()> {
     let guild_id = match ctx.data.read().await.get::<data::ConfigValuesData>() {
         Some(conf) => conf.main_guild_id,
         None => {
-            return LogError::new_slash("Guild configuration could not be loaded", aci.clone())
-                .into()
+            bail!("Guild configuration could not be loaded");
         }
     };
 
-    let guild = PartialGuild::get(ctx, guild_id)
-        .await
-        .log_slash_reply(aci)?;
+    let guild = PartialGuild::get(ctx, guild_id).await?;
 
     // Get subcommands
     let cmds = option
@@ -451,7 +462,7 @@ async fn download(
         .and_then(|d| d.value.as_ref())
         .and_then(|d| d.as_str())
     {
-        trainings.append(&mut trainings_from_days(ctx, days).await.log_slash_reply(aci)?);
+        trainings.append(&mut trainings_from_days(ctx, days).await?);
     }
 
     if let Some(ids) = cmds
@@ -459,14 +470,11 @@ async fn download(
         .and_then(|d| d.value.as_ref())
         .and_then(|d| d.as_str())
     {
-        trainings.append(&mut trainings_from_ids(ctx, ids).await.log_slash_reply(aci)?);
+        trainings.append(&mut trainings_from_ids(ctx, ids).await?);
     }
 
     if trainings.is_empty() {
-        return Err(LogError::new_slash(
-            "Select at least one training",
-            aci.clone(),
-        ));
+        bail!("Select at least one training");
     }
 
     // filter out multiple
@@ -504,11 +512,11 @@ async fn download(
     let mut tds: Vec<TrainingData> = Vec::with_capacity(trainings.len());
 
     for t in trainings {
-        let signups = t.get_signups(ctx).await.log_slash_reply(aci)?;
+        let signups = t.get_signups(ctx).await?;
         let mut sds: Vec<SignupData> = Vec::with_capacity(signups.len());
 
         for s in signups {
-            let user = s.get_user(ctx).await.log_slash_reply(aci)?;
+            let user = s.get_user(ctx).await?;
 
             let member = match guild.member(ctx, user.discord_id()).await {
                 Ok(du) => du,
@@ -523,8 +531,7 @@ async fn download(
 
             let roles = s
                 .get_roles(ctx)
-                .await
-                .log_slash_reply(aci)?
+                .await?
                 .into_iter()
                 .map(|r| r.repr)
                 .collect::<Vec<_>>();
@@ -537,7 +544,7 @@ async fn download(
             });
         }
 
-        let available_roles = t.all_roles(ctx).await.log_slash_reply(aci)?;
+        let available_roles = t.all_roles(ctx).await?;
 
         tds.push(TrainingData {
             training: t,
@@ -546,14 +553,13 @@ async fn download(
         });
     }
 
-    let dbtiers = db::Tier::all(ctx).await.log_slash_reply(aci)?;
+    let dbtiers = db::Tier::all(ctx).await?;
     let mut tiers: Vec<TierData> = Vec::with_capacity(dbtiers.len());
 
     for t in dbtiers {
         let dr = t
             .get_discord_roles(ctx)
-            .await
-            .log_slash_reply(aci)?
+            .await?
             .iter()
             .map(|t| guild.roles.get(&RoleId::from(t.discord_role_id as u64)))
             .collect::<Vec<_>>();
@@ -590,15 +596,13 @@ async fn download(
             let csv_data = data.to_csv();
 
             for d in csv_data {
-                wrt.serialize(&d).log_slash_reply(aci)?;
+                wrt.serialize(&d)?;
             }
 
-            String::from_utf8(wrt.into_inner().log_slash_reply(aci)?)
-                .log_slash_reply(aci)?
-                .into_bytes()
+            String::from_utf8(wrt.into_inner()?)?.into_bytes()
         }
         DonwloadFormat::Json => {
-            let json = serde_json::to_string_pretty(&data).log_slash_reply(aci)?;
+            let json = serde_json::to_string_pretty(&data)?;
             json.as_bytes().to_vec()
         }
     };

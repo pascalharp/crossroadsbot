@@ -331,11 +331,7 @@ async fn log_to_channel<T: std::fmt::Debug>(
                     LogType::Interaction { i, m } => {
                         e.field(
                             "Interaction",
-                            format!(
-                                "`{}`\n{}",
-                                i,
-                                format!("[Link]({})", m.link()),
-                            ),
+                            format!("`{}`\n{}", i, format!("[Link]({})", m.link()),),
                             true,
                         );
                     }

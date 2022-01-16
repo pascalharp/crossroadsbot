@@ -22,3 +22,4 @@ serde = { version = "1.0.126" }
 serde_json = { version = "1.0" }
 csv = { version = "1.1" }
 itertools = { version = "0.10.1" }
+anyhow = { version = "1.0.52" }

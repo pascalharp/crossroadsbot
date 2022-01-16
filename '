@@ -3,8 +3,14 @@ use std::{fmt::Display, str::FromStr};
 use serenity::{
     builder::{CreateApplicationCommand, CreateApplicationCommandPermissions},
     client::Context,
-    model::interactions::application_command::{
-        ApplicationCommand, ApplicationCommandInteraction, ApplicationCommandPermissionType,
+    model::{
+        id::MessageId,
+        interactions::{
+            application_command::{
+                ApplicationCommand, ApplicationCommandInteraction, ApplicationCommandPermissionType,
+            },
+            InteractionResponseType,
+        },
     },
 };
 
@@ -106,16 +112,14 @@ pub async fn slash_command_interaction(ctx: &Context, aci: &ApplicationCommandIn
     }
 }
 
-// helper functions for quick replies.
-// Edits nuke the previous content. Always ephemeral
+// helper functions for quick replies. Always ephemeral
 pub mod helpers {
     use serenity::{
         client::Context,
         model::{
             id::MessageId,
             interactions::{
-                application_command::ApplicationCommandInteraction,
-                InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
+                application_command::ApplicationCommandInteraction, InteractionResponseType, InteractionApplicationCommandCallbackDataFlags,
             },
         },
     };
@@ -147,8 +151,6 @@ pub mod helpers {
             r.kind(InteractionResponseType::UpdateMessage);
             r.interaction_response_data(|d| {
                 d.content(cont.to_string());
-                d.embeds(Vec::new());
-                d.components(|c| c);
                 d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
             })
         })
@@ -163,11 +165,10 @@ pub mod helpers {
         cont: C,
     ) -> anyhow::Result<()> {
         aci.edit_original_interaction_response(ctx, |d| {
-            d.content(cont.to_string());
-            d.set_embeds(Vec::new());
-            d.components(|c| c)
-        })
-        .await?;
+                d.content(cont.to_string());
+                d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
+            })
+            .await?;
         Ok(())
     }
 
@@ -177,11 +178,8 @@ pub mod helpers {
         aci: &ApplicationCommandInteraction,
         cont: C,
     ) -> anyhow::Result<()> {
-        aci.create_followup_message(ctx, |d| {
-            d.content(cont.to_string());
-            d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
-        })
-        .await?;
+        aci.create_followup_message(ctx, |d| d.content(cont.to_string()))
+            .await?;
         Ok(())
     }
 
@@ -192,12 +190,8 @@ pub mod helpers {
         msg_id: M,
         cont: C,
     ) -> anyhow::Result<()> {
-        aci.edit_followup_message(ctx, msg_id, |d| {
-            d.content(cont.to_string());
-            d.embeds(Vec::new());
-            d.components(|c| c)
-        })
-        .await?;
+        aci.edit_followup_message(ctx, msg_id, |d| d.content(cont.to_string()))
+            .await?;
         Ok(())
     }
 }
