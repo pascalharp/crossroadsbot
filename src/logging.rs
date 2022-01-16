@@ -85,8 +85,8 @@ fn fmt_app_command_data_opt(data: &ApplicationCommandInteractionDataOption) -> S
             data.name,
             data.value
                 .as_ref()
-                .and_then(|v| v.as_str())
-                .unwrap_or("<empty>")
+                .and_then(|v| Some(v.to_string()))
+                .unwrap_or_else(|| "<empty>".to_string())
         ),
     }
 }

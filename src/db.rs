@@ -616,6 +616,13 @@ async fn select_signup_board_channel_by_date(
         .unwrap()
 }
 
+async fn select_all_training_bosses(ctx: &Context) -> QueryResult<Vec<TrainingBoss>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || training_bosses::table.load(&pool.conn()))
+        .await
+        .unwrap()
+}
+
 // Count
 async fn count_trainings_by_state(ctx: &Context, state: TrainingState) -> QueryResult<i64> {
     let pool = DBPool::load(ctx).await;
@@ -1075,5 +1082,9 @@ impl TrainingBoss {
         };
 
         insert_training_boss(ctx, tb).await
+    }
+
+    pub async fn all(ctx: &Context) -> QueryResult<Vec<Self>> {
+        select_all_training_bosses(ctx).await
     }
 }

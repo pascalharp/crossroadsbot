@@ -206,8 +206,8 @@ pub struct SignupBoardChannel {
 #[table_name = "training_bosses"]
 pub struct TrainingBoss {
     pub id: i32,
-    pub name: String,
     pub repr: String,
+    pub name: String,
     pub wing: i32,
     pub position: i32,
 }
@@ -215,8 +215,8 @@ pub struct TrainingBoss {
 #[derive(Insertable, Associations, Debug)]
 #[table_name = "training_bosses"]
 pub struct NewTrainingBoss {
-    pub name: String,
     pub repr: String,
+    pub name: String,
     pub wing: i32,
     pub position: i32,
 }

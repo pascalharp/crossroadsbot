@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::convert::TryInto;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use serenity::{
     builder::{CreateApplicationCommand, CreateEmbed},
     client::Context,
@@ -81,6 +81,11 @@ pub fn create() -> CreateApplicationCommand {
             o.required(true)
         })
     });
+    app.create_option(|o| {
+        o.kind(ApplicationCommandOptionType::SubCommand);
+        o.name("list");
+        o.description("List all available bosses")
+    });
     app
 }
 
@@ -91,6 +96,7 @@ pub async fn handle(ctx: &Context, aci: &ApplicationCommandInteraction) {
             match sub.name.as_ref() {
                 "add" => add(ctx, aci, sub, trace).await,
                 "remove" => remove(ctx, aci, sub, trace).await,
+                "list" => list(ctx, aci, sub, trace).await,
                 _ => bail!("{} not yet available", sub.name),
             }
         } else {
@@ -172,5 +178,46 @@ async fn remove(
     _option: &ApplicationCommandInteractionDataOption,
     _trace: LogTrace,
 ) -> Result<()> {
+    Ok(())
+}
+
+async fn list(
+    ctx: &Context,
+    aci: &ApplicationCommandInteraction,
+    _option: &ApplicationCommandInteractionDataOption,
+    trace: LogTrace,
+) -> Result<()> {
+    trace.step("Loading training bosses");
+    let bosses = db::TrainingBoss::all(ctx)
+        .await
+        .context("Failed to load training bosses =(")
+        .map_err_reply(|what| super::helpers::quick_ch_msg_with_src(ctx, aci, what))
+        .await?;
+
+    trace.step("Replying with data");
+    aci.create_interaction_response(ctx, |r| {
+        r.kind(InteractionResponseType::ChannelMessageWithSource);
+        r.interaction_response_data(|d| {
+            d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL);
+            for chunk in bosses.chunks(25) {
+                // cause of field limits
+                let mut emb = CreateEmbed::xdefault();
+                for boss in chunk.iter() {
+                    emb.field(
+                        &boss.name,
+                        format!(
+                            "Id: {}\nRepr: {}\nWing: {}\nBoss: {}",
+                            boss.id, boss.repr, boss.wing, boss.position
+                        ),
+                        true,
+                    );
+                }
+                d.add_embed(emb);
+            }
+            d
+        })
+    })
+    .await?;
+
     Ok(())
 }
