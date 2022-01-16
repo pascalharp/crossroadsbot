@@ -623,6 +623,17 @@ async fn select_all_training_bosses(ctx: &Context) -> QueryResult<Vec<TrainingBo
         .unwrap()
 }
 
+async fn select_training_boss_by_repr(ctx: &Context, repr: String) -> QueryResult<TrainingBoss> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        training_bosses::table
+            .filter(training_bosses::repr.eq(repr))
+            .first(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 // Count
 async fn count_trainings_by_state(ctx: &Context, state: TrainingState) -> QueryResult<i64> {
     let pool = DBPool::load(ctx).await;
@@ -1086,5 +1097,9 @@ impl TrainingBoss {
 
     pub async fn all(ctx: &Context) -> QueryResult<Vec<Self>> {
         select_all_training_bosses(ctx).await
+    }
+
+    pub async fn by_repr(ctx: &Context, repr: String) -> QueryResult<Self> {
+        select_training_boss_by_repr(ctx, repr).await
     }
 }

@@ -1,16 +1,16 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, convert::TryInto, ops::Add};
 
 use super::helpers::*;
 use crate::{
     components, data,
     db::{self, TrainingState},
-    embeds::CrossroadsEmbeds,
+    embeds::{embed_add_roles, CrossroadsEmbeds},
     logging::*,
     signup_board, status,
     utils::DEFAULT_TIMEOUT,
 };
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use serde::Serialize;
 use serenity::model::interactions::{
     application_command::{
@@ -40,6 +40,46 @@ pub fn create() -> CreateApplicationCommand {
     app.name(CMD_TRAINING);
     app.description("Manage trainings");
     app.default_permission(false);
+    app.create_option(|o| {
+        o.kind(ApplicationCommandOptionType::SubCommand);
+        o.name("add");
+        o.description("Add a new Training");
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("name");
+            o.description("The name of the training");
+            o.required(true)
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("day");
+            o.description("Day in UTC. Format: yyyy-mm-dd");
+            o.required(true)
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("time");
+            o.description("Time in UTC. Format: HH:MM:SS");
+            o.required(true)
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("roles");
+            o.description("The roles available for the training. Comma separated list of repr's. Example: dps,druid,qfb");
+            o.required(true)
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("bosses");
+            o.description("The bosses available for the training. Comma separated list of repr's. Example: vg,gorse,trio");
+            o.required(true)
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("tier");
+            o.description("The required tier for the training. If left empty training is open for everyone")
+        })
+    });
     app.create_option(|o| {
         o.kind(ApplicationCommandOptionType::SubCommand);
         o.name("set");
@@ -100,6 +140,7 @@ pub async fn handle(ctx: &Context, aci: &ApplicationCommandInteraction) {
         trace.step("Parsing command");
         if let Some(sub) = aci.data.options.get(0) {
             match sub.name.as_ref() {
+                "add" => add(ctx, aci, sub, trace).await,
                 "set" => set(ctx, aci, sub, trace).await,
                 "download" => download(ctx, aci, sub).await,
                 _ => bail!("{} not yet available", sub.name),
@@ -144,6 +185,126 @@ async fn trainings_from_ids(ctx: &Context, value: &str) -> Result<Vec<db::Traini
     Ok(future::try_join_all(trainings_fut)
         .await
         .context("Training id does not exist")?)
+}
+
+async fn add(
+    ctx: &Context,
+    aci: &ApplicationCommandInteraction,
+    option: &ApplicationCommandInteractionDataOption,
+    trace: LogTrace,
+) -> Result<()> {
+    let cmds = command_map(option);
+
+    trace.step("Parsing basic training data");
+
+    let name = cmds
+        .get("name")
+        .and_then(|n| n.as_str())
+        .ok_or(anyhow!("name not set"))?;
+
+    let day: NaiveDate = cmds
+        .get("day")
+        .and_then(|n| n.as_str())
+        .ok_or(anyhow!("day not set"))?
+        .parse()
+        .context("Could not parse date")
+        .map_err_reply(|what| quick_ch_msg_with_src(ctx, aci, what))
+        .await?;
+
+    let time: NaiveTime = cmds
+        .get("time")
+        .and_then(|n| n.as_str())
+        .ok_or(anyhow!("day not set"))?
+        .parse()
+        .context("Could not parse time")
+        .map_err_reply(|what| quick_ch_msg_with_src(ctx, aci, what))
+        .await?;
+
+    let datetime: NaiveDateTime = day.and_time(time);
+
+    let mut emb = CreateEmbed::xdefault();
+    emb.title("Creating a new training");
+    emb.field("Name", name, false);
+    emb.field("Date/Time", format!("<t:{}>", datetime.timestamp()), false);
+
+    let mut emb_loading_roles = emb.clone();
+    emb_loading_roles.field("Roles", "Loading...", false);
+    aci.create_interaction_response(ctx, |r| {
+        r.kind(InteractionResponseType::ChannelMessageWithSource);
+        r.interaction_response_data(|d| {
+            d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL);
+            d.add_embed(emb_loading_roles)
+        })
+    })
+    .await?;
+
+    let msg = aci.get_interaction_response(ctx).await?;
+
+    trace.step("Loading training roles");
+
+    let roles_str: Vec<&str> = cmds
+        .get("roles")
+        .and_then(|n| n.as_str())
+        .ok_or(anyhow!("roles not set"))?
+        .split(",")
+        .into_iter()
+        .map(|s| s.trim())
+        .collect();
+
+    let mut roles: Vec<db::Role> = Vec::with_capacity(roles_str.len());
+    for r in roles_str {
+        let nr = db::Role::by_repr(ctx, r.to_string())
+            .await
+            .with_context(|| format!("Failed to load role: {}", r))
+            .map_err_reply(|what| quick_edit_orig_rsp(ctx, aci, what))
+            .await?;
+        roles.push(nr);
+    }
+
+    embed_add_roles(&mut emb, &roles, true, false);
+
+    let mut emb_loading_bosses = emb.clone();
+    emb_loading_bosses.field("Bosses", "Loading...", false);
+    aci.edit_original_interaction_response(ctx, |d| d.add_embed(emb_loading_bosses))
+        .await?;
+
+    trace.step("Loading training bosses");
+
+    let bosses_str: Vec<&str> = cmds
+        .get("bosses")
+        .and_then(|n| n.as_str())
+        .ok_or(anyhow!("roles not set"))?
+        .split(",")
+        .into_iter()
+        .map(|s| s.trim())
+        .collect();
+
+    let mut bosses: Vec<db::TrainingBoss> = Vec::with_capacity(bosses_str.len());
+    for b in bosses_str {
+        let nb = db::TrainingBoss::by_repr(ctx, b.to_string())
+            .await
+            .with_context(|| format!("Failed to load boss {}", b))
+            .map_err_reply(|what| quick_edit_orig_rsp(ctx, aci, what))
+            .await?;
+        bosses.push(nb);
+    }
+
+    emb.field(
+        "Bosses",
+        bosses
+            .iter()
+            .map(|b| b.name.clone())
+            .collect::<Vec<String>>()
+            .join("\n"),
+        false,
+    );
+
+    let mut emb_loading_tier = emb.clone();
+    emb_loading_tier.field("Tier", "Loading...", false);
+    aci.edit_original_interaction_response(ctx, |d| d.add_embed(emb_loading_tier))
+        .await?;
+
+    Ok(())
 }
 
 async fn set(

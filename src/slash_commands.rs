@@ -109,16 +109,35 @@ pub async fn slash_command_interaction(ctx: &Context, aci: &ApplicationCommandIn
 // helper functions for quick replies.
 // Edits nuke the previous content. Always ephemeral
 pub mod helpers {
+    use std::collections::HashMap;
+
+    use serde_json::Value;
     use serenity::{
         client::Context,
         model::{
             id::MessageId,
             interactions::{
-                application_command::ApplicationCommandInteraction,
+                application_command::{
+                    ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
+                },
                 InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
             },
         },
     };
+
+    /// Helps to quickly access commands
+    pub fn command_map(opt: &ApplicationCommandInteractionDataOption) -> HashMap<String, Value> {
+        opt.options
+            .iter()
+            .filter_map(|o| {
+                if let Some(val) = &o.value {
+                    Some((o.name.clone(), val.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
 
     /// Creates an Interaction response with: ChannelMessageWithSource
     pub async fn quick_ch_msg_with_src<C: ToString>(
@@ -163,8 +182,9 @@ pub mod helpers {
         cont: C,
     ) -> anyhow::Result<()> {
         aci.edit_original_interaction_response(ctx, |d| {
-            d.content(cont.to_string());
+            d.content("");
             d.set_embeds(Vec::new());
+            d.create_embed(|e| e.field("Info", cont, false));
             d.components(|c| c)
         })
         .await?;
