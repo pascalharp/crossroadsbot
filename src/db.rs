@@ -151,6 +151,17 @@ async fn insert_signup_board_channel(
     .unwrap()
 }
 
+async fn insert_training_boss(ctx: &Context, tb: NewTrainingBoss) -> QueryResult<TrainingBoss> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::insert_into(training_bosses::table)
+            .values(tb)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn upsert_config(ctx: &Context, conf: Config) -> QueryResult<Config> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -1045,5 +1056,24 @@ impl SignupBoardChannel {
 
     pub fn channel(&self) -> ChannelId {
         ChannelId::from(self.channel_id as u64)
+    }
+}
+
+impl TrainingBoss {
+    pub async fn insert(
+        ctx: &Context,
+        name: String,
+        repr: String,
+        wing: i32,
+        position: i32,
+    ) -> QueryResult<Self> {
+        let tb = NewTrainingBoss {
+            name,
+            repr,
+            wing,
+            position,
+        };
+
+        insert_training_boss(ctx, tb).await
     }
 }

@@ -1,6 +1,6 @@
 use crate::db::schema::{
     config, roles, signup_board_channels, signup_roles, signups, tier_mappings, tiers,
-    training_roles, trainings, users,
+    training_bosses, training_roles, trainings, users,
 };
 use diesel_derive_enum::DbEnum;
 use serde::Serialize;
@@ -200,4 +200,23 @@ pub struct Config {
 pub struct SignupBoardChannel {
     pub day: NaiveDate,
     pub channel_id: i64,
+}
+
+#[derive(Identifiable, Queryable, Associations, Hash, PartialEq, Eq, Debug, Serialize)]
+#[table_name = "training_bosses"]
+pub struct TrainingBoss {
+    pub id: i32,
+    pub name: String,
+    pub repr: String,
+    pub wing: i32,
+    pub position: i32,
+}
+
+#[derive(Insertable, Associations, Debug)]
+#[table_name = "training_bosses"]
+pub struct NewTrainingBoss {
+    pub name: String,
+    pub repr: String,
+    pub wing: i32,
+    pub position: i32,
 }
