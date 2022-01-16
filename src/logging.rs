@@ -1,6 +1,10 @@
-use std::future::Future;
+use std::{
+    future::Future,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::{Error, Result};
+use chrono::{NaiveDateTime, Utc};
 use serenity::{
     async_trait,
     builder::{CreateEmbed, CreateEmbedAuthor},
@@ -13,10 +17,11 @@ use serenity::{
     },
     prelude::Context as SerenityContext,
 };
-use tracing::error;
+use tracing::{error, info};
 
 use crate::data::LogConfigData;
 
+#[derive(Debug)]
 pub struct LogInfo {
     /// The user that initiated
     user: Option<User>,
@@ -101,6 +106,20 @@ impl From<&ApplicationCommandInteraction> for LogInfo {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct LogTrace(Arc<Mutex<Vec<(NaiveDateTime, &'static str)>>>);
+
+impl LogTrace {
+    fn new() -> Self {
+        LogTrace(Arc::new(Mutex::new(Vec::new())))
+    }
+
+    pub fn step(&self, step: &'static str) {
+        let time = Utc::now().naive_utc();
+        self.0.lock().unwrap().push((time, step));
+    }
+}
+
 fn log_basic_embed(info: LogInfo) -> CreateEmbed {
     let mut emb = CreateEmbed::default();
 
@@ -112,6 +131,7 @@ fn log_basic_embed(info: LogInfo) -> CreateEmbed {
         }
 
         emb.set_author(auth);
+        emb.description(format!("User Id: {}", u.id));
     }
 
     emb.field("Kind", info.kind, false);
@@ -120,7 +140,7 @@ fn log_basic_embed(info: LogInfo) -> CreateEmbed {
     emb
 }
 
-async fn log_to_channel(ctx: &SerenityContext, info: LogInfo, res: Result<()>) {
+async fn log_to_channel(ctx: &SerenityContext, info: LogInfo, trace: LogTrace, res: Result<()>) {
     let log_channel_info = {
         ctx.data
             .read()
@@ -135,6 +155,29 @@ async fn log_to_channel(ctx: &SerenityContext, info: LogInfo, res: Result<()>) {
 
     if let Some(chan) = log_channel_info {
         let mut emb = log_basic_embed(info);
+
+        match Arc::<std::sync::Mutex<Vec<(NaiveDateTime, &'static str)>>>::try_unwrap(trace.0) {
+            Ok(trace) => {
+                // We are the only holder of the trace at this moment
+                let trace = trace.into_inner().unwrap();
+                emb.field(
+                    "Trace",
+                    trace
+                        .into_iter()
+                        .map(|(time, step)| format!("<t:{}:T> {}", time.timestamp(), step))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    false,
+                );
+            }
+            Err(_) => {
+                emb.field(
+                    "Trace",
+                    "__The trace is still in use somewhere! Fix code =(__",
+                    false,
+                );
+            }
+        };
 
         match res {
             Ok(_) => {
@@ -151,6 +194,8 @@ async fn log_to_channel(ctx: &SerenityContext, info: LogInfo, res: Result<()>) {
         if let Err(log_err) = log_err {
             error!("Failed to log message to discord: {:?}", log_err);
         }
+    } else {
+        info!("Discord log channel not set up");
     }
 }
 
@@ -159,12 +204,15 @@ async fn log_to_channel(ctx: &SerenityContext, info: LogInfo, res: Result<()>) {
 pub async fn log_discord<I, F, Fut>(ctx: &SerenityContext, info: I, f: F)
 where
     I: Into<LogInfo>,
-    F: FnOnce() -> Fut,
+    F: FnOnce(LogTrace) -> Fut,
     Fut: Future<Output = Result<()>> + Send,
 {
     let log_info: LogInfo = info.into();
-    let result = f().await;
-    log_to_channel(ctx, log_info, result).await;
+    let log_trace = LogTrace::new();
+    log_trace.step("Start");
+    let result = f(log_trace.clone()).await;
+    log_trace.step("End");
+    log_to_channel(ctx, log_info, log_trace, result).await;
 }
 
 // A trait to help to reply with information to the user

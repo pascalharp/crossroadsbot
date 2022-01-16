@@ -96,10 +96,11 @@ pub fn create() -> CreateApplicationCommand {
 }
 
 pub async fn handle(ctx: &Context, aci: &ApplicationCommandInteraction) {
-    log_discord(ctx, aci, || async {
+    log_discord(ctx, aci, |trace| async move {
+        trace.step("Parsing command");
         if let Some(sub) = aci.data.options.get(0) {
             match sub.name.as_ref() {
-                "set" => set(ctx, aci, sub).await,
+                "set" => set(ctx, aci, sub, trace).await,
                 "download" => download(ctx, aci, sub).await,
                 _ => bail!("{} not yet available", sub.name),
             }
@@ -149,6 +150,7 @@ async fn set(
     ctx: &Context,
     aci: &ApplicationCommandInteraction,
     option: &ApplicationCommandInteractionDataOption,
+    trace: LogTrace,
 ) -> Result<()> {
     // Get subcommands
     let cmds = option
@@ -205,6 +207,8 @@ async fn set(
             .await?;
     }
 
+    trace.step("Traning(s) loaded");
+
     // filter out multiple
     trainings.sort_by_key(|t| t.id);
     trainings.dedup_by_key(|t| t.id);
@@ -231,6 +235,7 @@ async fn set(
     })
     .await?;
 
+    trace.step("Waiting for confirmation");
     let msg = aci.get_interaction_response(ctx).await?;
     match msg
         .await_component_interaction(ctx)
@@ -240,6 +245,7 @@ async fn set(
         Some(response) => {
             match components::resolve_button_response(&response) {
                 components::ButtonResponse::Confirm => {
+                    trace.step("Confirmed");
                     response
                         .create_interaction_response(ctx, |r| {
                             r.kind(InteractionResponseType::UpdateMessage);
@@ -250,6 +256,7 @@ async fn set(
                         })
                         .await?;
 
+                    trace.step("Updating traning(s)");
                     let update_futs: Vec<_> = trainings
                         .into_iter()
                         .map(|t| t.set_state(ctx, state.clone()))
@@ -267,6 +274,7 @@ async fn set(
                         })
                         .await?;
 
+                    trace.step("Updating signup board");
                     let mut se = CreateEmbed::xdefault();
                     se.title("Signup board updates");
                     for id in trainings.iter().map(|t| t.id) {
@@ -309,6 +317,7 @@ async fn set(
                     status::update_status(ctx).await;
                 }
                 components::ButtonResponse::Abort => {
+                    trace.step("Aborted");
                     response
                         .create_interaction_response(ctx, |r| {
                             r.kind(InteractionResponseType::UpdateMessage);
