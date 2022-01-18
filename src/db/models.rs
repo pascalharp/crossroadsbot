@@ -210,6 +210,8 @@ pub struct TrainingBoss {
     pub name: String,
     pub wing: i32,
     pub position: i32,
+    pub emoji: i64,
+    pub url: Option<String>,
 }
 
 #[derive(Insertable, Associations, Debug)]
@@ -219,4 +221,6 @@ pub struct NewTrainingBoss {
     pub name: String,
     pub wing: i32,
     pub position: i32,
+    pub emoji: i64,
+    pub url: Option<String>,
 }

@@ -14,7 +14,7 @@ use serenity::{
     prelude::*,
 };
 
-use anyhow::{anyhow, bail, Context as ErrContext, Result};
+use anyhow::{bail, Context as ErrContext, Result};
 use std::collections::{HashMap, HashSet};
 pub mod helpers {
     use serenity::{

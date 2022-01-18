@@ -7,7 +7,6 @@ use std::{
 use anyhow::{Error, Result};
 use chrono::{NaiveDateTime, Utc};
 use serenity::{
-    Result as SerenityResult,
     async_trait,
     builder::{CreateEmbed, CreateEmbedAuthor},
     model::{
@@ -236,20 +235,20 @@ where
 // A trait to help to reply with information to the user
 #[async_trait]
 pub trait ReplyHelper<T, E> {
-    async fn map_err_reply<F, Fut, R>(self, f: F) -> Result<T>
+    async fn map_err_reply<F, Fut, R, U>(self, f: F) -> Result<T>
     where
         F: FnOnce(String) -> Fut + Send,
         R: Into<Error>,
-        Fut: Future<Output = StdResult<(), R>> + Send;
+        Fut: Future<Output = StdResult<U, R>> + Send;
 }
 
 #[async_trait]
 impl<T: Send, E: Into<Error> + Send + Sync> ReplyHelper<T, E> for Result<T, E> {
-    async fn map_err_reply<F, Fut, R>(self, f: F) -> Result<T>
+    async fn map_err_reply<F, Fut, R, U>(self, f: F) -> Result<T>
     where
         F: FnOnce(String) -> Fut + Send,
         R: Into<Error>,
-        Fut: Future<Output = StdResult<(), R>> + Send,
+        Fut: Future<Output = StdResult<U, R>> + Send,
     {
         match self {
             Ok(ok) => Ok(ok),

@@ -112,18 +112,7 @@ pub mod helpers {
     use std::collections::HashMap;
 
     use serde_json::Value;
-    use serenity::{
-        client::Context,
-        model::{
-            id::MessageId,
-            interactions::{
-                application_command::{
-                    ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
-                },
-                InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
-            },
-        },
-    };
+    use serenity::model::interactions::application_command::ApplicationCommandInteractionDataOption;
 
     /// Helps to quickly access commands
     pub fn command_map(opt: &ApplicationCommandInteractionDataOption) -> HashMap<String, Value> {
@@ -137,87 +126,5 @@ pub mod helpers {
                 }
             })
             .collect()
-    }
-
-    /// Creates an Interaction response with: ChannelMessageWithSource
-    pub async fn quick_ch_msg_with_src<C: ToString>(
-        ctx: &Context,
-        aci: &ApplicationCommandInteraction,
-        cont: C,
-    ) -> anyhow::Result<()> {
-        aci.create_interaction_response(ctx, |r| {
-            r.kind(InteractionResponseType::ChannelMessageWithSource);
-            r.interaction_response_data(|d| {
-                d.content(cont.to_string());
-                d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
-            })
-        })
-        .await?;
-        Ok(())
-    }
-
-    /// Creates an Interaction response with: UpdateMessage
-    pub async fn quick_update_msg<C: ToString>(
-        ctx: &Context,
-        aci: &ApplicationCommandInteraction,
-        cont: C,
-    ) -> anyhow::Result<()> {
-        aci.create_interaction_response(ctx, |r| {
-            r.kind(InteractionResponseType::UpdateMessage);
-            r.interaction_response_data(|d| {
-                d.content(cont.to_string());
-                d.embeds(Vec::new());
-                d.components(|c| c);
-                d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
-            })
-        })
-        .await?;
-        Ok(())
-    }
-
-    /// Edits the original interaction response
-    pub async fn quick_edit_orig_rsp<C: ToString>(
-        ctx: &Context,
-        aci: &ApplicationCommandInteraction,
-        cont: C,
-    ) -> anyhow::Result<()> {
-        aci.edit_original_interaction_response(ctx, |d| {
-            d.content("");
-            d.set_embeds(Vec::new());
-            d.create_embed(|e| e.field("Info", cont, false));
-            d.components(|c| c)
-        })
-        .await?;
-        Ok(())
-    }
-
-    /// Creates a follwup up message
-    pub async fn quick_create_flup_msg<C: ToString>(
-        ctx: &Context,
-        aci: &ApplicationCommandInteraction,
-        cont: C,
-    ) -> anyhow::Result<()> {
-        aci.create_followup_message(ctx, |d| {
-            d.content(cont.to_string());
-            d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
-        })
-        .await?;
-        Ok(())
-    }
-
-    /// Edits the follwup up message
-    pub async fn quick_edit_flup_msg<M: Into<MessageId>, C: ToString>(
-        ctx: &Context,
-        aci: &ApplicationCommandInteraction,
-        msg_id: M,
-        cont: C,
-    ) -> anyhow::Result<()> {
-        aci.edit_followup_message(ctx, msg_id, |d| {
-            d.content(cont.to_string());
-            d.embeds(Vec::new());
-            d.components(|c| c)
-        })
-        .await?;
-        Ok(())
     }
 }

@@ -10,7 +10,8 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::result::QueryResult;
 use serenity::client::Context;
-use serenity::model::id::{ChannelId, MessageId, UserId};
+use serenity::model::id::{ChannelId, MessageId, UserId, EmojiId};
+use url::Url;
 use std::env;
 use std::sync::Arc;
 use tokio::task;
@@ -1084,12 +1085,16 @@ impl TrainingBoss {
         repr: String,
         wing: i32,
         position: i32,
+        emoji: EmojiId,
+        url: Option<Url>
     ) -> QueryResult<Self> {
         let tb = NewTrainingBoss {
             name,
             repr,
             wing,
             position,
+            emoji: emoji.0 as i64,
+            url: url.and_then(|u| Some(u.to_string())),
         };
 
         insert_training_boss(ctx, tb).await

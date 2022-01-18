@@ -203,6 +203,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
@@ -1169,7 +1170,7 @@ dependencies = [
 [[package]]
 name = "serenity_tools"
 version = "0.1.0"
-source = "git+https://github.com/pascalharp/serenity_tools.git?branch=main#5d4706b261fb976274181f12517553b4ee2b44b7"
+source = "git+https://github.com/pascalharp/serenity_tools.git?branch=main#15b4772011f5f0a9ad7bc5d9359d178eb6e0da78"
 dependencies = [
  "serenity",
 ]

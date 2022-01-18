@@ -221,7 +221,7 @@ async fn add(
         .ok_or(anyhow!("day not set"))?
         .parse()
         .context("Could not parse time")
-        .map_err_reply(|what| quick_ch_msg_with_src(ctx, aci, what))
+        .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
         .await?;
 
     let datetime: NaiveDateTime = day.and_time(time);
@@ -260,7 +260,7 @@ async fn add(
         let nr = db::Role::by_repr(ctx, r.to_string())
             .await
             .with_context(|| format!("Failed to load role: {}", r))
-            .map_err_reply(|what| quick_edit_orig_rsp(ctx, aci, what))
+            .map_err_reply(|what| aci.edit_quick_error(ctx, what))
             .await?;
         roles.push(nr);
     }
@@ -289,7 +289,7 @@ async fn add(
         let nb = db::TrainingBoss::by_repr(ctx, b.to_string())
             .await
             .with_context(|| format!("Failed to load boss {}", b))
-            .map_err_reply(|what| quick_edit_orig_rsp(ctx, aci, what))
+            .map_err_reply(|what| aci.edit_quick_error(ctx, what))
             .await?;
         bosses.push(nb);
     }
@@ -346,7 +346,7 @@ async fn set(
         trainings.append(
             &mut trainings_from_days(ctx, days)
                 .await
-                .map_err_reply(|what| quick_ch_msg_with_src(ctx, aci, what))
+                .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
                 .await?,
         );
     }
@@ -359,14 +359,14 @@ async fn set(
         trainings.append(
             &mut trainings_from_ids(ctx, ids)
                 .await
-                .map_err_reply(|what| quick_ch_msg_with_src(ctx, aci, what))
+                .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
                 .await?,
         );
     }
 
     if trainings.is_empty() {
         Err(anyhow!("Select at least one training"))
-            .map_err_reply(|what| quick_ch_msg_with_src(ctx, aci, what))
+            .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
             .await?;
     }
 
@@ -499,15 +499,8 @@ async fn set(
         }
         None => {
             Err(anyhow!("Timed out"))
-                .map_err_reply(|w| quick_edit_flup_msg(ctx, aci, msg.id, w))
+                .map_err_reply(|w| aci.edit_followup_quick_info(ctx, &msg, w))
                 .await?;
-            aci.edit_followup_message(ctx, msg.id, |m| {
-                m.flags(MessageFlags::EPHEMERAL);
-                m.content("Timed out");
-                m.create_embed(|e| e);
-                m.components(|c| c)
-            })
-            .await?;
         }
     };
 

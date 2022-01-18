@@ -8,7 +8,7 @@ use serenity::{
         id::GuildId,
         id::RoleId,
         misc::Mention,
-        prelude::{CurrentUser, User},
+        prelude::CurrentUser,
     },
 };
 use std::collections::{HashMap, HashSet};

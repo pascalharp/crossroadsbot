@@ -5,6 +5,8 @@ CREATE TABLE training_bosses (
 	name TEXT NOT NULL,
 	wing INT NOT NULL,
 	position INT NOT NULL,
+	emoji BIGINT NOT NULL,
+	url TEXT,
 	UNIQUE (wing, position)
 );
 CREATE TABLE training_boss_mappings (
