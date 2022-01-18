@@ -13,6 +13,7 @@ diesel_migrations = { version = "1.4.0" }
 dotenv = { version = "0.15.0" }
 chrono = { version = "0.4" }
 serenity = { git = "https://github.com/serenity-rs/serenity", branch = "current", features = ["framework", "cache", "standard_framework", "collector", "rustls_backend", "unstable_discord_api"] }
+serenity_tools = { git = "https://github.com/pascalharp/serenity_tools.git", branch = "main" }
 tokio = { version = "1.5.0", features = ["full"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.2" }

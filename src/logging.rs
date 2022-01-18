@@ -1,4 +1,5 @@
 use std::{
+    result::Result as StdResult,
     future::Future,
     sync::{Arc, Mutex},
 };
@@ -6,6 +7,7 @@ use std::{
 use anyhow::{Error, Result};
 use chrono::{NaiveDateTime, Utc};
 use serenity::{
+    Result as SerenityResult,
     async_trait,
     builder::{CreateEmbed, CreateEmbedAuthor},
     model::{
@@ -234,28 +236,32 @@ where
 // A trait to help to reply with information to the user
 #[async_trait]
 pub trait ReplyHelper<T, E> {
-    async fn map_err_reply<F, Fut>(self, f: F) -> Result<T>
+    async fn map_err_reply<F, Fut, R>(self, f: F) -> Result<T>
     where
         F: FnOnce(String) -> Fut + Send,
-        Fut: Future<Output = Result<()>> + Send;
+        R: Into<Error>,
+        Fut: Future<Output = StdResult<(), R>> + Send;
 }
 
 #[async_trait]
 impl<T: Send, E: Into<Error> + Send + Sync> ReplyHelper<T, E> for Result<T, E> {
-    async fn map_err_reply<F, Fut>(self, f: F) -> Result<T>
+    async fn map_err_reply<F, Fut, R>(self, f: F) -> Result<T>
     where
         F: FnOnce(String) -> Fut + Send,
-        Fut: Future<Output = Result<()>> + Send,
+        R: Into<Error>,
+        Fut: Future<Output = StdResult<(), R>> + Send,
     {
         match self {
             Ok(ok) => Ok(ok),
             Err(err) => {
                 let err: Error = err.into();
-                let res = f(err.to_string()).await;
-                match res {
-                    Err(rerr) => Err(err
+                match f(err.to_string()).await {
+                    Err(rerr) => {
+                        let rerr: Error = rerr.into();
+                        Err(err
                         .context(rerr)
-                        .context("Failed to respond to user with error")),
+                        .context("Failed to respond to user with error"))
+                    },
                     Ok(_) => Err(err),
                 }
             }

@@ -178,6 +178,55 @@ pub fn training_embed_add_tier(
     }
 }
 
+pub fn embed_fields_chunked<'a, T>(
+    e: &'a mut CreateEmbed,
+    content: &'a [T],
+    title: &str,
+    inline: bool,
+    count: usize,
+    ) -> &'a mut CreateEmbed
+    where
+        T: std::fmt::Display
+{
+
+    let chunks = content.chunks(count);
+    for c in chunks {
+        let field_text = c
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n");
+        e.field(title, field_text, inline);
+    }
+
+    e
+}
+
+pub fn embed_fields_chunked_fmt<'a, T, F>(
+    e: &'a mut CreateEmbed,
+    content: &'a [T],
+    fmt: F,
+    title: &str,
+    inline: bool,
+    count: usize,
+    ) -> &'a mut CreateEmbed
+    where
+        F: Fn(&T) -> String
+{
+
+    let chunks = content.chunks(count);
+    for c in chunks {
+        let field_text = c
+            .iter()
+            .map(|t| fmt(t))
+            .collect::<Vec<_>>()
+            .join("\n");
+        e.field(title, field_text, inline);
+    }
+
+    e
+}
+
 pub fn embed_add_roles(e: &mut CreateEmbed, roles: &[db::Role], inline: bool, reprs: bool) {
     let title_width = roles
         .iter()

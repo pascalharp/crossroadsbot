@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap, convert::TryInto, ops::Add};
+use std::{borrow::Cow, collections::HashMap};
 
 use super::helpers::*;
 use crate::{
@@ -29,6 +29,10 @@ use serenity::{
         id::RoleId,
         misc::Mention,
     },
+};
+use serenity_tools::{
+    builder::{CreateEmbedExt, CreateActionRowExt},
+    interactions::ApplicationCommandInteractionExt,
 };
 
 type MessageFlags = InteractionApplicationCommandCallbackDataFlags;
@@ -208,7 +212,7 @@ async fn add(
         .ok_or(anyhow!("day not set"))?
         .parse()
         .context("Could not parse date")
-        .map_err_reply(|what| quick_ch_msg_with_src(ctx, aci, what))
+        .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
         .await?;
 
     let time: NaiveTime = cmds
@@ -279,6 +283,7 @@ async fn add(
         .map(|s| s.trim())
         .collect();
 
+
     let mut bosses: Vec<db::TrainingBoss> = Vec::with_capacity(bosses_str.len());
     for b in bosses_str {
         let nb = db::TrainingBoss::by_repr(ctx, b.to_string())
@@ -289,20 +294,17 @@ async fn add(
         bosses.push(nb);
     }
 
-    emb.field(
-        "Bosses",
-        bosses
-            .iter()
-            .map(|b| b.name.clone())
-            .collect::<Vec<String>>()
-            .join("\n"),
-        false,
-    );
+    emb.fields_chunked_fmt(&bosses, |b| b.name.clone(), "Boss Pool", false, 10);
 
     let mut emb_loading_tier = emb.clone();
     emb_loading_tier.field("Tier", "Loading...", false);
-    aci.edit_original_interaction_response(ctx, |d| d.add_embed(emb_loading_tier))
-        .await?;
+    aci.edit_original_interaction_response(ctx, |d| {
+        d.add_embed(emb_loading_tier);
+        d.components(|c| {
+            c.create_action_row(|a| a.confirm_button().abort_button())
+        })
+    })
+    .await?;
 
     Ok(())
 }

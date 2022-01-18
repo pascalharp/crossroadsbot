@@ -157,7 +157,7 @@ dependencies = [
 [[package]]
 name = "command_attr"
 version = "0.3.7"
-source = "git+https://github.com/serenity-rs/serenity?branch=current#9e10d546441ccdaccb1a1ad1d94c915e95869eba"
+source = "git+https://github.com/serenity-rs/serenity?branch=current#93b66d00454037284c95db07adcda971fef99e9e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -199,6 +199,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serenity",
+ "serenity_tools",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1118,9 +1119,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.74"
+version = "1.0.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee2bb9cd061c5865d345bb02ca49fcef1391741b672b54a0bf7b679badec3142"
+checksum = "c059c05b48c5c0067d4b4b2b4f0732dd65feb52daf7e0ea09cd87e7dadc1af79"
 dependencies = [
  "itoa 1.0.1",
  "ryu",
@@ -1129,12 +1130,12 @@ dependencies = [
 
 [[package]]
 name = "serde_urlencoded"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edfa57a7f8d9c1d260a549e7224100f6c43d43f9103e06dd8b4095a9b2b43ce9"
+checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
 dependencies = [
  "form_urlencoded",
- "itoa 0.4.8",
+ "itoa 1.0.1",
  "ryu",
  "serde",
 ]
@@ -1142,7 +1143,7 @@ dependencies = [
 [[package]]
 name = "serenity"
 version = "0.10.9"
-source = "git+https://github.com/serenity-rs/serenity?branch=current#9e10d546441ccdaccb1a1ad1d94c915e95869eba"
+source = "git+https://github.com/serenity-rs/serenity?branch=current#93b66d00454037284c95db07adcda971fef99e9e"
 dependencies = [
  "async-trait",
  "async-tungstenite",
@@ -1163,6 +1164,14 @@ dependencies = [
  "typemap_rev",
  "url",
  "uwl",
+]
+
+[[package]]
+name = "serenity_tools"
+version = "0.1.0"
+source = "git+https://github.com/pascalharp/serenity_tools.git?branch=main#5d4706b261fb976274181f12517553b4ee2b44b7"
+dependencies = [
+ "serenity",
 ]
 
 [[package]]
@@ -1204,9 +1213,9 @@ checksum = "9def91fd1e018fe007022791f865d0ccc9b3a0d5001e01aabb8b40e46000afb5"
 
 [[package]]
 name = "smallvec"
-version = "1.7.0"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ecab6c735a6bb4139c0caafd0cc3635748bbb3acf4550e8138122099251f309"
+checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
 
 [[package]]
 name = "socket2"
