@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::HashMap};
 use super::helpers::*;
 use crate::{
     components, data,
-    db::{self, TrainingState},
+    db::{self, Tier, TrainingState},
     embeds::{embed_add_roles, CrossroadsEmbeds},
     logging::*,
     signup_board, status,
@@ -23,6 +23,7 @@ use serenity::{
     builder::{CreateApplicationCommand, CreateEmbed},
     client::Context,
     futures::future,
+    futures::future::OptionFuture,
     http::AttachmentType,
     model::{
         guild::{Member, PartialGuild, Role},
@@ -31,7 +32,7 @@ use serenity::{
     },
 };
 use serenity_tools::{
-    builder::{CreateEmbedExt, CreateActionRowExt},
+    builder::{CreateActionRowExt, CreateEmbedExt},
     interactions::ApplicationCommandInteractionExt,
 };
 
@@ -212,7 +213,7 @@ async fn add(
         .ok_or(anyhow!("day not set"))?
         .parse()
         .context("Could not parse date")
-        .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?;
 
     let time: NaiveTime = cmds
@@ -221,7 +222,7 @@ async fn add(
         .ok_or(anyhow!("day not set"))?
         .parse()
         .context("Could not parse time")
-        .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?;
 
     let datetime: NaiveDateTime = day.and_time(time);
@@ -283,7 +284,6 @@ async fn add(
         .map(|s| s.trim())
         .collect();
 
-
     let mut bosses: Vec<db::TrainingBoss> = Vec::with_capacity(bosses_str.len());
     for b in bosses_str {
         let nb = db::TrainingBoss::by_repr(ctx, b.to_string())
@@ -298,11 +298,31 @@ async fn add(
 
     let mut emb_loading_tier = emb.clone();
     emb_loading_tier.field("Tier", "Loading...", false);
+    aci.edit_original_interaction_response(ctx, |d| d.add_embed(emb_loading_tier))
+        .await?;
+
+    trace.step("Loading tier");
+    let tier_fut: OptionFuture<_> = cmds
+        .get("tier")
+        .and_then(|v| v.as_str())
+        .map(|t| Tier::by_name(ctx, t.to_owned()))
+        .into();
+
+    let tier = tier_fut
+        .await
+        .transpose()
+        .context("Failed to load tier")
+        .map_err_reply(|what| aci.edit_quick_error(ctx, what))
+        .await?;
+
+    if let Some(t) = &tier {
+        emb.field("Tier", &t.name, false);
+    } else {
+        emb.field("Tier", "Open for everyone", false);
+    }
     aci.edit_original_interaction_response(ctx, |d| {
-        d.add_embed(emb_loading_tier);
-        d.components(|c| {
-            c.create_action_row(|a| a.confirm_button().abort_button())
-        })
+        d.add_embed(emb);
+        d.components(|c| c.create_action_row(|a| a.confirm_button().abort_button()))
     })
     .await?;
 
@@ -346,7 +366,7 @@ async fn set(
         trainings.append(
             &mut trainings_from_days(ctx, days)
                 .await
-                .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+                .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
                 .await?,
         );
     }
@@ -359,14 +379,14 @@ async fn set(
         trainings.append(
             &mut trainings_from_ids(ctx, ids)
                 .await
-                .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+                .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
                 .await?,
         );
     }
 
     if trainings.is_empty() {
         Err(anyhow!("Select at least one training"))
-            .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+            .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
             .await?;
     }
 

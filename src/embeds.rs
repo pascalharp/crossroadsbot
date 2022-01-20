@@ -3,12 +3,7 @@ use chrono::{Duration, NaiveDate, NaiveDateTime};
 use serenity::{
     builder::{CreateEmbed, CreateEmbedAuthor},
     model::{
-        id::ChannelId,
-        id::EmojiId,
-        id::GuildId,
-        id::RoleId,
-        misc::Mention,
-        prelude::CurrentUser,
+        id::ChannelId, id::EmojiId, id::GuildId, id::RoleId, misc::Mention, prelude::CurrentUser,
     },
 };
 use std::collections::{HashMap, HashSet};
@@ -184,11 +179,10 @@ pub fn embed_fields_chunked<'a, T>(
     title: &str,
     inline: bool,
     count: usize,
-    ) -> &'a mut CreateEmbed
-    where
-        T: std::fmt::Display
+) -> &'a mut CreateEmbed
+where
+    T: std::fmt::Display,
 {
-
     let chunks = content.chunks(count);
     for c in chunks {
         let field_text = c
@@ -209,18 +203,13 @@ pub fn embed_fields_chunked_fmt<'a, T, F>(
     title: &str,
     inline: bool,
     count: usize,
-    ) -> &'a mut CreateEmbed
-    where
-        F: Fn(&T) -> String
+) -> &'a mut CreateEmbed
+where
+    F: Fn(&T) -> String,
 {
-
     let chunks = content.chunks(count);
     for c in chunks {
-        let field_text = c
-            .iter()
-            .map(|t| fmt(t))
-            .collect::<Vec<_>>()
-            .join("\n");
+        let field_text = c.iter().map(|t| fmt(t)).collect::<Vec<_>>().join("\n");
         e.field(title, field_text, inline);
     }
 

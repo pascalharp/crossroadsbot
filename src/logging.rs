@@ -1,6 +1,6 @@
 use std::{
-    result::Result as StdResult,
     future::Future,
+    result::Result as StdResult,
     sync::{Arc, Mutex},
 };
 
@@ -258,9 +258,9 @@ impl<T: Send, E: Into<Error> + Send + Sync> ReplyHelper<T, E> for Result<T, E> {
                     Err(rerr) => {
                         let rerr: Error = rerr.into();
                         Err(err
-                        .context(rerr)
-                        .context("Failed to respond to user with error"))
-                    },
+                            .context(rerr)
+                            .context("Failed to respond to user with error"))
+                    }
                     Ok(_) => Err(err),
                 }
             }

@@ -1,26 +1,38 @@
-use std::convert::TryInto;
+use std::{convert::TryInto, time::Duration};
 
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
+use itertools::Itertools;
 use serenity::{
     builder::{CreateApplicationCommand, CreateEmbed},
     client::Context,
-    model::{interactions::{
-        application_command::{
-            ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
-            ApplicationCommandOptionType,
+    model::{
+        guild::Guild,
+        id::EmojiId,
+        interactions::{
+            application_command::{
+                ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
+                ApplicationCommandOptionType,
+            },
+            InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
         },
-        InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
-    }, guild::Guild, misc::Mention, id::EmojiId},
+        misc::Mention,
+    },
 };
 use url::Url;
 
 use crate::{
-    db,
+    data::ConfigValuesData,
+    db::{self, TrainingBoss},
     embeds::CrossroadsEmbeds,
-    logging::*, data::ConfigValuesData,
+    logging::*,
 };
 
-use serenity_tools::interactions::ApplicationCommandInteractionExt;
+use serenity_tools::{
+    builder::CreateComponentsExt,
+    collectors::MessageCollectorExt,
+    components::Button,
+    interactions::{ApplicationCommandInteractionExt, MessageComponentInteractionExt},
+};
 
 use super::helpers::command_map;
 
@@ -127,14 +139,13 @@ async fn add(
     option: &ApplicationCommandInteractionDataOption,
     trace: LogTrace,
 ) -> Result<()> {
-
     let cmds = command_map(option);
 
     let name = cmds
         .get("name")
         .and_then(|d| d.as_str())
         .ok_or(anyhow!("name is required"))
-        .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
         .to_owned();
 
@@ -142,7 +153,7 @@ async fn add(
         .get("repr")
         .and_then(|d| d.as_str())
         .ok_or(anyhow!("repr is required"))
-        .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
         .to_owned();
 
@@ -150,7 +161,7 @@ async fn add(
         .get("wing")
         .and_then(|d| d.as_i64())
         .ok_or(anyhow!("wing is required"))
-        .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
         .try_into()?;
 
@@ -158,7 +169,7 @@ async fn add(
         .get("position")
         .and_then(|d| d.as_i64())
         .ok_or(anyhow!("position is required"))
-        .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
         .try_into()?;
 
@@ -172,12 +183,12 @@ async fn add(
         Some(url) => {
             let u = url
                 .context("Could not parse Url")
-                .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+                .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
                 .await?;
 
             if u.scheme() != "https" {
                 Err(anyhow!("Only https is allowed: {}", u))
-                    .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+                    .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
                     .await?;
             }
 
@@ -189,7 +200,7 @@ async fn add(
         .get("emoji")
         .and_then(|d| d.as_str())
         .context("emoji is required")
-        .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?;
 
     // load all emojis from discord emoji guild
@@ -202,16 +213,23 @@ async fn add(
         .emoji_guild_id;
     let emoji_guild = Guild::get(ctx, gid).await?;
 
-    let emoji_id = match emoji_guild.emojis(ctx).await?.into_iter().find(|e| e.name == emoji_str) {
+    let emoji_id = match emoji_guild
+        .emojis(ctx)
+        .await?
+        .into_iter()
+        .find(|e| e.name == emoji_str)
+    {
         Some(e) => e.id,
         None => {
-            Err(anyhow!("The emoji: {} was not found in the emoji guild", emoji_str))
-                .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
-                .await?;
+            Err(anyhow!(
+                "The emoji {} was not found in the emoji guild",
+                emoji_str
+            ))
+            .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+            .await?;
             return Ok(());
         }
     };
-
 
     trace.step("Replying with data");
     aci.create_interaction_response(ctx, |r| {
@@ -230,30 +248,55 @@ async fn add(
             } else {
                 emb.field("Url", "No url provided", false);
             }
-            d.add_embed(emb)
+            d.add_embed(emb);
+            d.components(|c| c.confirm_abort_row())
         })
     })
     .await?;
 
-    trace.step("Waiting for confirm TODO");
-    //TODO
-    Err(anyhow!("TODO"))?;
+    let msg = aci.get_interaction_response(ctx).await?;
+    trace.step("Waiting for confirm");
 
-    //trace.step("Inserting into database");
-    //let boss = db::TrainingBoss::insert(ctx, name, repr, wing, position)
-    //    .await
-    //    .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
-    //    .await?;
+    if let Some(react) = msg
+        .await_confirm_abort_interaction(ctx)
+        .timeout(Duration::from_secs(60))
+        .await
+    {
+        react.defer(ctx).await?;
+        match react.parse_button()? {
+            Button::Confirm => {
+                trace.step("Confirmed, inserting to database");
+                let boss = db::TrainingBoss::insert(ctx, name, repr, wing, position, emoji_id, url)
+                    .await
+                    .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+                    .await?;
+                aci.edit_quick_info(ctx, format!("Created boss:\n{}", boss))
+                    .await?;
+            }
+            Button::Abort => {
+                trace.step("Aborted");
+                aci.edit_quick_info(ctx, "Aborted").await?;
+            }
+        }
+    } else {
+        Err(anyhow!("Timed out"))
+            .map_err_reply(|what| aci.edit_quick_info(ctx, what))
+            .await?;
+    }
 
     Ok(())
 }
 
 async fn remove(
-    _ctx: &Context,
-    _aci: &ApplicationCommandInteraction,
+    ctx: &Context,
+    aci: &ApplicationCommandInteraction,
     _option: &ApplicationCommandInteractionDataOption,
-    _trace: LogTrace,
+    trace: LogTrace,
 ) -> Result<()> {
+    trace.step("TODO");
+    Err(anyhow!("Not yet implemented"))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+        .await?;
     Ok(())
 }
 
@@ -264,33 +307,39 @@ async fn list(
     trace: LogTrace,
 ) -> Result<()> {
     trace.step("Loading training bosses");
-    let bosses = db::TrainingBoss::all(ctx)
+    let mut bosses = db::TrainingBoss::all(ctx)
         .await
         .context("Failed to load training bosses =(")
-        .map_err_reply(|what| aci.create_quick_error(ctx, InteractionResponseType::ChannelMessageWithSource, what, true))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?;
+
+    trace.step("Sorting bosses");
+
+    bosses.sort_by_key(|b| b.wing);
+    let mut bosses_grouped: Vec<(i32, Vec<TrainingBoss>)> = Vec::new();
+    for (w, b) in &bosses.into_iter().group_by(|b| b.wing) {
+        bosses_grouped.push((w, b.collect()));
+    }
+    bosses_grouped.sort_by_key(|(k, _)| *k);
 
     trace.step("Replying with data");
     aci.create_interaction_response(ctx, |r| {
         r.kind(InteractionResponseType::ChannelMessageWithSource);
         r.interaction_response_data(|d| {
             d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL);
-            for chunk in bosses.chunks(25) {
-                // cause of field limits
-                let mut emb = CreateEmbed::xdefault();
-                for boss in chunk.iter() {
-                    emb.field(
-                        &boss.name,
-                        format!(
-                            "Id: {}\nRepr: {}\nWing: {}\nBoss: {}",
-                            boss.id, boss.repr, boss.wing, boss.position
-                        ),
-                        true,
+            d.create_embed(|e| {
+                for (w, b) in bosses_grouped {
+                    e.field(
+                        format!("Wing {}", w),
+                        b.iter()
+                            .map(|b| b.to_string())
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                        false,
                     );
                 }
-                d.add_embed(emb);
-            }
-            d
+                e
+            })
         })
     })
     .await?;

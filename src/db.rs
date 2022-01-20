@@ -10,11 +10,14 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::result::QueryResult;
 use serenity::client::Context;
-use serenity::model::id::{ChannelId, MessageId, UserId, EmojiId};
-use url::Url;
+use serenity::model::{
+    id::{ChannelId, EmojiId, MessageId, UserId},
+    misc::Mention,
+};
 use std::env;
 use std::sync::Arc;
 use tokio::task;
+use url::Url;
 
 pub mod models;
 pub mod schema;
@@ -1086,7 +1089,7 @@ impl TrainingBoss {
         wing: i32,
         position: i32,
         emoji: EmojiId,
-        url: Option<Url>
+        url: Option<Url>,
     ) -> QueryResult<Self> {
         let tb = NewTrainingBoss {
             name,
@@ -1106,5 +1109,28 @@ impl TrainingBoss {
 
     pub async fn by_repr(ctx: &Context, repr: String) -> QueryResult<Self> {
         select_training_boss_by_repr(ctx, repr).await
+    }
+}
+
+impl std::fmt::Display for TrainingBoss {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(url) = &self.url {
+            write!(
+                f,
+                "{} | {} | [{}]({})",
+                Mention::from(EmojiId::from(self.emoji as u64)),
+                self.repr,
+                self.name,
+                url
+            )
+        } else {
+            write!(
+                f,
+                "{} | {} | {}",
+                Mention::from(EmojiId::from(self.emoji as u64)),
+                self.repr,
+                self.name
+            )
+        }
     }
 }
