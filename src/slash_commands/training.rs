@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, time::Duration};
 
 use super::helpers::*;
 use crate::{
@@ -33,7 +33,7 @@ use serenity::{
 };
 use serenity_tools::{
     builder::{CreateActionRowExt, CreateEmbedExt},
-    interactions::ApplicationCommandInteractionExt,
+    interactions::{ApplicationCommandInteractionExt, MessageComponentInteractionExt}, collectors::MessageCollectorExt, components::Button,
 };
 
 type MessageFlags = InteractionApplicationCommandCallbackDataFlags;
@@ -219,7 +219,7 @@ async fn add(
     let time: NaiveTime = cmds
         .get("time")
         .and_then(|n| n.as_str())
-        .ok_or(anyhow!("day not set"))?
+        .ok_or(anyhow!("time not set"))?
         .parse()
         .context("Could not parse time")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
@@ -278,7 +278,7 @@ async fn add(
     let bosses_str: Vec<&str> = cmds
         .get("bosses")
         .and_then(|n| n.as_str())
-        .ok_or(anyhow!("roles not set"))?
+        .ok_or(anyhow!("bosses not set"))?
         .split(",")
         .into_iter()
         .map(|s| s.trim())
@@ -321,10 +321,57 @@ async fn add(
         emb.field("Tier", "Open for everyone", false);
     }
     aci.edit_original_interaction_response(ctx, |d| {
-        d.add_embed(emb);
+        d.add_embed(emb.clone());
         d.components(|c| c.create_action_row(|a| a.confirm_button().abort_button()))
     })
     .await?;
+
+    trace.step("Waiting for confirm");
+
+    if let Some(react) = msg.await_confirm_abort_interaction(ctx).timeout(Duration::from_secs(60)).await {
+        react.defer(ctx).await?;
+        match react.parse_button()? {
+                Button::Confirm => {
+                trace.step("Confirmed. Saving training");
+                let training = db::Training::insert(ctx, name.to_string(), datetime, tier.map(|t| t.id))
+                    .await
+                    .map_err_reply(|what| aci.edit_quick_error(ctx, what))
+                    .await?;
+
+                trace.step("Saving roles");
+                for r in roles {
+                    training.add_role(ctx, r.id)
+                        .await
+                        .map_err_reply(|what| aci.edit_quick_error(ctx, what))
+                        .await?;
+                }
+
+                trace.step("Saving training bosses");
+                for tb in bosses {
+                    training.add_training_boss(ctx, tb.id)
+                        .await
+                        .map_err_reply(|what| aci.edit_quick_error(ctx, what))
+                        .await?;
+                }
+
+                emb.field("Training ID", training.id, false);
+                emb.footer(|f| f.text(format!("Training added {}", crate::utils::CHECK_EMOJI )));
+                aci.edit_original_interaction_response(ctx, |d| {
+                    d.add_embed(emb);
+                    d.components(|c| c)
+                })
+                .await?;
+            },
+            Button::Abort => {
+                trace.step("Aborted");
+                aci.edit_quick_info(ctx, "Aborted").await?;
+            }
+        }
+    } else {
+        Err(anyhow!("Timed out"))
+            .map_err_reply(|what| aci.edit_quick_info(ctx, what))
+            .await?;
+    }
 
     Ok(())
 }

@@ -268,7 +268,7 @@ async fn add(
                 trace.step("Confirmed, inserting to database");
                 let boss = db::TrainingBoss::insert(ctx, name, repr, wing, position, emoji_id, url)
                     .await
-                    .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+                    .map_err_reply(|what| aci.edit_quick_error(ctx, what))
                     .await?;
                 aci.edit_quick_info(ctx, format!("Created boss:\n{}", boss))
                     .await?;

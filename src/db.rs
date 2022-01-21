@@ -108,6 +108,17 @@ async fn insert_training_role(ctx: &Context, tr: NewTrainingRole) -> QueryResult
     .unwrap()
 }
 
+async fn insert_training_boss_mapping(ctx: &Context, tbm: TrainingBossMapping) -> QueryResult<TrainingBossMapping> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::insert_into(training_boss_mappings::table)
+            .values(&tbm)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn insert_signup(ctx: &Context, s: NewSignup) -> QueryResult<Signup> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -638,6 +649,20 @@ async fn select_training_boss_by_repr(ctx: &Context, repr: String) -> QueryResul
     .unwrap()
 }
 
+async fn select_training_bosses_by_training(ctx: &Context, id: i32) -> QueryResult<Vec<TrainingBoss>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        training_boss_mappings::table
+            .inner_join(trainings::table)
+            .inner_join(training_bosses::table)
+            .filter(trainings::id.eq(id))
+            .select(training_bosses::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 // Count
 async fn count_trainings_by_state(ctx: &Context, state: TrainingState) -> QueryResult<i64> {
     let pool = DBPool::load(ctx).await;
@@ -868,12 +893,25 @@ impl Training {
         insert_training_role(ctx, training_role).await
     }
 
+    pub async fn add_training_boss(&self, ctx: &Context, training_boss_id: i32) -> QueryResult<TrainingBossMapping> {
+        let mapping = TrainingBossMapping {
+            training_id: self.id,
+            training_boss_id,
+        };
+
+        insert_training_boss_mapping(ctx, mapping).await
+    }
+
     pub async fn get_training_roles(&self, ctx: &Context) -> QueryResult<Vec<TrainingRole>> {
         select_training_roles_by_training(ctx, self.id).await
     }
 
     pub async fn all_roles(&self, ctx: &Context) -> QueryResult<Vec<Role>> {
         select_roles_by_training(ctx, self.id).await
+    }
+
+    pub async fn all_training_bosses(&self, ctx: &Context) -> QueryResult<Vec<TrainingBoss>> {
+        select_training_bosses_by_training(ctx, self.id).await
     }
 
     pub async fn active_roles(&self, ctx: &Context) -> QueryResult<Vec<Role>> {
