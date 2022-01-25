@@ -331,7 +331,7 @@ async fn add(
     if let Some(react) = msg.await_confirm_abort_interaction(ctx).timeout(Duration::from_secs(60)).await {
         react.defer(ctx).await?;
         match react.parse_button()? {
-                Button::Confirm => {
+            Button::Confirm => {
                 trace.step("Confirmed. Saving training");
                 let training = db::Training::insert(ctx, name.to_string(), datetime, tier.map(|t| t.id))
                     .await
@@ -366,6 +366,7 @@ async fn add(
                 trace.step("Aborted");
                 aci.edit_quick_info(ctx, "Aborted").await?;
             }
+            _ => bail!("Unexpected interaction"),
         }
     } else {
         Err(anyhow!("Timed out"))

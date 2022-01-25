@@ -32,16 +32,22 @@ impl std::error::Error for SlashCommandParseError {}
 
 mod training;
 mod training_boss;
+mod testing;
 
 /// All slash commands
 #[derive(Debug)]
 pub enum AppCommands {
     Training,
     TrainingBoss,
+    Testing,
 }
 
 /// All commands that should be created when the bot starts
-const DEFAULT_COMMANDS: [AppCommands; 2] = [AppCommands::Training, AppCommands::TrainingBoss];
+const DEFAULT_COMMANDS: [AppCommands; 3] = [
+    AppCommands::Training,
+    AppCommands::TrainingBoss,
+    AppCommands::Testing,
+];
 
 impl FromStr for AppCommands {
     type Err = SlashCommandParseError;
@@ -50,6 +56,7 @@ impl FromStr for AppCommands {
         match s {
             training::CMD_TRAINING => Ok(Self::Training),
             training_boss::CMD_TRAINING_BOSS => Ok(Self::TrainingBoss),
+            testing::CMD_TESTING => Ok(Self::Testing),
             _ => Err(SlashCommandParseError(s.to_owned())),
         }
     }
@@ -60,6 +67,7 @@ impl AppCommands {
         match self {
             Self::Training => training::create(),
             Self::TrainingBoss => training_boss::create(),
+            Self::Testing => testing::create(),
         }
     }
 
@@ -80,7 +88,7 @@ impl AppCommands {
 
         // Here are all the configurations for Slash Command Permissions
         match self {
-            Self::Training | Self::TrainingBoss => perms.create_permissions(|p| {
+            Self::Training | Self::TrainingBoss | Self::Testing => perms.create_permissions(|p| {
                 p.permission(true)
                     .kind(ApplicationCommandPermissionType::Role)
                     .id(conf.squadmaker_role_id.0)
@@ -94,6 +102,7 @@ impl AppCommands {
         match self {
             Self::Training => training::handle(ctx, aci).await,
             Self::TrainingBoss => training_boss::handle(ctx, aci).await,
+            Self::Testing => testing::handle(ctx, aci).await,
         }
     }
 }
@@ -106,8 +115,6 @@ pub async fn slash_command_interaction(ctx: &Context, aci: &ApplicationCommandIn
     }
 }
 
-// helper functions for quick replies.
-// Edits nuke the previous content. Always ephemeral
 pub mod helpers {
     use std::collections::HashMap;
 

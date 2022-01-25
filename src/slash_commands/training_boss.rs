@@ -277,6 +277,7 @@ async fn add(
                 trace.step("Aborted");
                 aci.edit_quick_info(ctx, "Aborted").await?;
             }
+            _ => bail!("Unexpected interaction")
         }
     } else {
         Err(anyhow!("Timed out"))
