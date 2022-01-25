@@ -232,6 +232,22 @@ where
     log_to_channel(ctx, log_info, log_trace, result).await;
 }
 
+pub async fn log_discord_err_only<I, F, Fut>(ctx: &SerenityContext, info: I, f: F)
+where
+    I: Into<LogInfo>,
+    F: FnOnce(LogTrace) -> Fut,
+    Fut: Future<Output = Result<()>> + Send,
+{
+    let log_info: LogInfo = info.into();
+    let log_trace = LogTrace::new();
+    log_trace.step("Start");
+    let result = f(log_trace.clone()).await;
+    log_trace.step("End");
+    if result.is_err() {
+        log_to_channel(ctx, log_info, log_trace, result).await;
+    }
+}
+
 // A trait to help to reply with information to the user
 #[async_trait]
 pub trait ReplyHelper<T, E> {

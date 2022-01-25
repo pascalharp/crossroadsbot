@@ -6,7 +6,7 @@ use std::time::Duration;
 pub async fn signup_board_task(ctx: Context) {
     let ctx = &ctx;
     loop {
-        log_discord(
+        log_discord_err_only(
             ctx,
             LogInfo::automatic("Update Signup Board"),
             |trace| async move {
