@@ -36,41 +36,42 @@ pub enum ButtonResponse {
 }
 
 #[derive(Debug)]
-pub struct ButtonInteractionParseError {}
+pub struct GlobalInteractionParseError {}
 
-impl std::fmt::Display for ButtonInteractionParseError {
+impl std::fmt::Display for GlobalInteractionParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Invalid format")
     }
 }
 
-impl std::error::Error for ButtonInteractionParseError {}
+impl std::error::Error for GlobalInteractionParseError {}
 
+/// Interactions that are not received over a collector
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum ButtonInteraction {
+pub enum GlobalInteraction {
     Training(ButtonTrainingInteraction),
-    General(ButtonGeneralInteraction),
+    Overview(OverviewMessageInteraction),
 }
 
-impl std::str::FromStr for ButtonInteraction {
-    type Err = ButtonInteractionParseError;
+impl std::str::FromStr for GlobalInteraction {
+    type Err = GlobalInteractionParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Ok(bti) = s.parse::<ButtonTrainingInteraction>() {
             return Ok(Self::Training(bti));
-        } else if let Ok(bgi) = s.parse::<ButtonGeneralInteraction>() {
-            return Ok(Self::General(bgi));
+        } else if let Ok(bgi) = s.parse::<OverviewMessageInteraction>() {
+            return Ok(Self::Overview(bgi));
         }
-        Err(ButtonInteractionParseError {})
+        Err(GlobalInteractionParseError {})
     }
 }
 
-impl std::fmt::Display for ButtonInteraction {
+impl std::fmt::Display for GlobalInteraction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ButtonInteraction::Training(bti) => write!(f, "{}", bti),
-            ButtonInteraction::General(bgi) => write!(f, "{}", bgi),
+            Self::Training(bti) => write!(f, "{}", bti),
+            Self::Overview(bgi) => write!(f, "{}", bgi),
         }
     }
 }
@@ -125,26 +126,26 @@ impl std::fmt::Display for ButtonTrainingInteraction {
 }
 
 impl std::str::FromStr for ButtonTrainingInteraction {
-    type Err = ButtonInteractionParseError;
+    type Err = GlobalInteractionParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<_> = s.split('_').collect();
         if parts.len() != 3 {
-            return Err(ButtonInteractionParseError {});
+            return Err(GlobalInteractionParseError {});
         }
         if !(*parts.get(0).unwrap()).eq("training") {
-            return Err(ButtonInteractionParseError {});
+            return Err(GlobalInteractionParseError {});
         }
         let training_id = match parts.get(2).unwrap().parse::<i32>() {
             Ok(i) => i,
-            Err(_) => return Err(ButtonInteractionParseError {}),
+            Err(_) => return Err(GlobalInteractionParseError {}),
         };
         match *parts.get(1).unwrap() {
             "join" => Ok(ButtonTrainingInteraction::Join(training_id)),
             "edit" => Ok(ButtonTrainingInteraction::Edit(training_id)),
             "leave" => Ok(ButtonTrainingInteraction::Leave(training_id)),
             "comment" => Ok(ButtonTrainingInteraction::Comment(training_id)),
-            _ => Err(ButtonInteractionParseError {}),
+            _ => Err(GlobalInteractionParseError {}),
         }
     }
 }
@@ -162,21 +163,21 @@ impl fmt::Display for ButtonResponse {
 }
 
 #[derive(Debug, Clone)]
-pub enum ButtonGeneralInteraction {
+pub enum OverviewMessageInteraction {
     List,
     Register,
 }
 
-impl ButtonGeneralInteraction {
+impl OverviewMessageInteraction {
     pub fn button(&self) -> CreateButton {
         let mut b = CreateButton::default();
         match self {
-            ButtonGeneralInteraction::List => {
+            Self::List => {
                 b.style(ButtonStyle::Primary);
                 b.label(COMPONENT_LABEL_LIST);
                 b.emoji(ReactionType::from(DOCUMENT_EMOJI));
             }
-            ButtonGeneralInteraction::Register => {
+           Self::Register => {
                 b.style(ButtonStyle::Primary);
                 b.label(COMPONENT_LABEL_REGISTER);
                 b.emoji(ReactionType::from(MEMO_EMOJI));
@@ -187,30 +188,30 @@ impl ButtonGeneralInteraction {
     }
 }
 
-impl std::str::FromStr for ButtonGeneralInteraction {
-    type Err = ButtonInteractionParseError;
+impl std::str::FromStr for OverviewMessageInteraction {
+    type Err = GlobalInteractionParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<_> = s.split('_').collect();
         if parts.len() != 2 {
-            return Err(ButtonInteractionParseError {});
+            return Err(GlobalInteractionParseError {});
         }
         if !(*parts.get(0).unwrap()).eq("general") {
-            return Err(ButtonInteractionParseError {});
+            return Err(GlobalInteractionParseError {});
         }
         match *parts.get(1).unwrap() {
-            "list" => Ok(ButtonGeneralInteraction::List),
-            "register" => Ok(ButtonGeneralInteraction::Register),
-            _ => Err(ButtonInteractionParseError {}),
+            "list" => Ok(Self::List),
+            "register" => Ok(Self::Register),
+            _ => Err(GlobalInteractionParseError {}),
         }
     }
 }
 
-impl std::fmt::Display for ButtonGeneralInteraction {
+impl std::fmt::Display for OverviewMessageInteraction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ButtonGeneralInteraction::List => write!(f, "general_list"),
-            ButtonGeneralInteraction::Register => write!(f, "general_register"),
+            Self::List => write!(f, "general_list"),
+            Self::Register => write!(f, "general_register"),
         }
     }
 }
@@ -236,19 +237,19 @@ impl std::fmt::Display for SelectionRolePriority {
 }
 
 impl std::str::FromStr for SelectionRolePriority {
-    type Err = ButtonInteractionParseError;
+    type Err = GlobalInteractionParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let split = s
             .split_once("selection_role_priority_")
-            .ok_or(ButtonInteractionParseError {})?;
+            .ok_or(GlobalInteractionParseError {})?;
         match split.1 {
             "very_high" => Ok(SelectionRolePriority::VeryHigh),
             "high" => Ok(SelectionRolePriority::High),
             "default" => Ok(SelectionRolePriority::Default),
             "low" => Ok(SelectionRolePriority::Low),
             "very_low" => Ok(SelectionRolePriority::VeryLow),
-            _ => Err(ButtonInteractionParseError {}),
+            _ => Err(GlobalInteractionParseError {}),
         }
     }
 }
@@ -390,8 +391,8 @@ pub fn join_action_row(training_id: i32) -> CreateActionRow {
 
 pub fn register_list_action_row() -> CreateActionRow {
     let mut ar = CreateActionRow::default();
-    ar.add_button(ButtonGeneralInteraction::Register.button());
-    ar.add_button(ButtonGeneralInteraction::List.button());
+    ar.add_button(OverviewMessageInteraction::Register.button());
+    ar.add_button(OverviewMessageInteraction::List.button());
     ar
 }
 

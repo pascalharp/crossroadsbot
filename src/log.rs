@@ -1,4 +1,4 @@
-use crate::components::ButtonInteraction;
+use crate::components::GlobalInteraction;
 use crate::data::LogConfigData;
 use crate::utils;
 use serenity::model::interactions::application_command::ApplicationCommandInteraction;
@@ -10,7 +10,7 @@ use tracing::info;
 pub enum LogType<'a> {
     Command(&'a serenity::model::channel::Message),
     Interaction {
-        i: &'a ButtonInteraction,
+        i: &'a GlobalInteraction,
         m: &'a Message,
     },
     Automatic(&'a str),
@@ -454,7 +454,7 @@ where
 pub async fn log_interaction<F, Fut>(
     ctx: &Context,
     action: &serenity::model::interactions::message_component::MessageComponentInteraction,
-    i: &ButtonInteraction,
+    i: &GlobalInteraction,
     f: F,
 ) where
     F: FnOnce() -> Fut + Send,

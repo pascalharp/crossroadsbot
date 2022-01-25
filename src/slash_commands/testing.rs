@@ -1,13 +1,8 @@
-use std::time::Duration;
-
 use anyhow::{bail, Result};
 use serenity::{builder::CreateApplicationCommand, model::{interactions::application_command::{ApplicationCommandOptionType, ApplicationCommandInteraction, ApplicationCommandInteractionDataOption}, channel::ReactionType, id::EmojiId}, client::Context};
 use serenity_tools::{interactions::ApplicationCommandInteractionExt, collectors::*};
 
 use crate::{logging::{log_discord, LogTrace}, db};
-
-use super::helpers::command_map;
-
 
 pub const CMD_TESTING: &'static str = "xtest";
 pub fn create() -> CreateApplicationCommand {
@@ -51,12 +46,17 @@ async fn selector(
     let conf = PagedSelectorConfig::default();
     let mut msg = aci.get_interaction_response(ctx).await?;
     let mut select = UpdatAbleMessage::ApplicationCommand(&aci, &mut msg);
-    select.paged_selector(
+    let selected = select.paged_selector(
         ctx,
         conf,
         &bosses,
         |b| (ReactionType::from(EmojiId::from(b.emoji as u64)), b.repr.to_string())
     ).await?;
+
+    match selected {
+        None => aci.edit_quick_info(ctx, "Aborted").await?,
+        Some(s) => aci.edit_quick_info(ctx, format!("Selected {} bosses", s.len())).await?,
+    };
 
     Ok(())
 }

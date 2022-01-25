@@ -707,12 +707,12 @@ async fn button_register_interaction(
 async fn button_general_interaction(
     ctx: &Context,
     mci: &MessageComponentInteraction,
-    bgi: &ButtonGeneralInteraction,
+    ovi: &OverviewMessageInteraction,
 ) -> () {
     log_discord(ctx, mci, |trace| async move {
-        match bgi {
-            ButtonGeneralInteraction::List => button_list_interaction(ctx, mci, trace).await,
-            ButtonGeneralInteraction::Register => {
+        match ovi {
+            OverviewMessageInteraction::List => button_list_interaction(ctx, mci, trace).await,
+            OverviewMessageInteraction::Register => {
                 button_register_interaction(ctx, mci, trace).await
             }
         }
@@ -722,15 +722,15 @@ async fn button_general_interaction(
 
 pub async fn button_interaction(ctx: &Context, mci: &MessageComponentInteraction) {
     // Check what interaction to handle
-    if let Ok(bi) = mci.data.custom_id.parse::<ButtonInteraction>() {
+    if let Ok(bi) = mci.data.custom_id.parse::<GlobalInteraction>() {
         match &bi {
-            ButtonInteraction::Training(bti) => {
+            GlobalInteraction::Training(bti) => {
                 log_interaction(ctx, mci, &bi, || async {
                     button_training_interaction(ctx, mci, bti).await
                 })
                 .await;
             }
-            ButtonInteraction::General(bgi) => button_general_interaction(ctx, mci, bgi).await,
+            GlobalInteraction::Overview(bgi) => button_general_interaction(ctx, mci, bgi).await,
         }
     };
 }
