@@ -567,7 +567,9 @@ async fn button_general_interaction(
             OverviewMessageInteraction::Register => {
                 register_info::interaction(ctx, mci, trace).await
             }
-            OverviewMessageInteraction::TrainingSelect => bail!("Not yet implemented"),
+            OverviewMessageInteraction::TrainingSelect => {
+                select_training::interaction(ctx, mci, trace).await
+            }
         }
     })
     .await
