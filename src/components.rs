@@ -166,27 +166,28 @@ impl fmt::Display for ButtonResponse {
 pub enum OverviewMessageInteraction {
     List,
     Register,
+    TrainingSelect,
 }
 
-impl OverviewMessageInteraction {
-    pub fn button(&self) -> CreateButton {
-        let mut b = CreateButton::default();
-        match self {
-            Self::List => {
-                b.style(ButtonStyle::Primary);
-                b.label(COMPONENT_LABEL_LIST);
-                b.emoji(ReactionType::from(DOCUMENT_EMOJI));
-            }
-           Self::Register => {
-                b.style(ButtonStyle::Primary);
-                b.label(COMPONENT_LABEL_REGISTER);
-                b.emoji(ReactionType::from(MEMO_EMOJI));
-            }
-        };
-        b.custom_id(self.to_string());
-        b
-    }
-}
+//impl OverviewMessageInteraction {
+//    pub fn button(&self) -> CreateButton {
+//        let mut b = CreateButton::default();
+//        match self {
+//            Self::List => {
+//                b.style(ButtonStyle::Primary);
+//                b.label(COMPONENT_LABEL_LIST);
+//                b.emoji(ReactionType::from(DOCUMENT_EMOJI));
+//            }
+//           Self::Register => {
+//                b.style(ButtonStyle::Primary);
+//                b.label(COMPONENT_LABEL_REGISTER);
+//                b.emoji(ReactionType::from(MEMO_EMOJI));
+//            }
+//        };
+//        b.custom_id(self.to_string());
+//        b
+//    }
+//}
 
 impl std::str::FromStr for OverviewMessageInteraction {
     type Err = GlobalInteractionParseError;
@@ -196,12 +197,13 @@ impl std::str::FromStr for OverviewMessageInteraction {
         if parts.len() != 2 {
             return Err(GlobalInteractionParseError {});
         }
-        if !(*parts.get(0).unwrap()).eq("general") {
+        if !(*parts.get(0).unwrap()).eq("overview") {
             return Err(GlobalInteractionParseError {});
         }
         match *parts.get(1).unwrap() {
             "list" => Ok(Self::List),
             "register" => Ok(Self::Register),
+            "trainingselect" => Ok(Self::TrainingSelect),
             _ => Err(GlobalInteractionParseError {}),
         }
     }
@@ -210,8 +212,9 @@ impl std::str::FromStr for OverviewMessageInteraction {
 impl std::fmt::Display for OverviewMessageInteraction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::List => write!(f, "general_list"),
-            Self::Register => write!(f, "general_register"),
+            Self::List => write!(f, "overview_list"),
+            Self::Register => write!(f, "overview_register"),
+            Self::TrainingSelect => write!(f, "overview_trainingselect"),
         }
     }
 }
@@ -389,10 +392,46 @@ pub fn join_action_row(training_id: i32) -> CreateActionRow {
     ar
 }
 
-pub fn register_list_action_row() -> CreateActionRow {
+pub fn overview_register_list_action_row() -> CreateActionRow {
     let mut ar = CreateActionRow::default();
-    ar.add_button(OverviewMessageInteraction::Register.button());
-    ar.add_button(OverviewMessageInteraction::List.button());
+
+    let mut b = CreateButton::default();
+    b.style(ButtonStyle::Primary);
+    b.custom_id(OverviewMessageInteraction::List);
+    b.label(COMPONENT_LABEL_LIST);
+    b.emoji(ReactionType::from(DOCUMENT_EMOJI));
+    ar.add_button(b);
+
+    let mut b = CreateButton::default();
+    b.style(ButtonStyle::Primary);
+    b.custom_id(OverviewMessageInteraction::Register);
+    b.label(COMPONENT_LABEL_REGISTER);
+    b.emoji(ReactionType::from(MEMO_EMOJI));
+    ar.add_button(b);
+
+    ar
+}
+
+pub fn overview_training_select_action_row(trainings: &[&db::Training]) -> CreateActionRow {
+    let mut ar = CreateActionRow::default();
+    ar.create_select_menu(|sm| {
+        sm.custom_id(OverviewMessageInteraction::TrainingSelect);
+        sm.placeholder("Select a training");
+        sm.options(|o| {
+            for t in trainings {
+                if t.state != db::TrainingState::Open {
+                    continue;
+                }
+                o.create_option(|smo| {
+                    let label = format!("{} | {}", t.date.format("%a, %m, %Y"), t.title);
+                    smo.label(label);
+                    smo.value(t.id);
+                    smo
+                });
+            }
+            o
+        })
+    });
     ar
 }
 

@@ -1,8 +1,22 @@
 use anyhow::{bail, Result};
-use serenity::{builder::CreateApplicationCommand, model::{interactions::application_command::{ApplicationCommandOptionType, ApplicationCommandInteraction, ApplicationCommandInteractionDataOption}, channel::ReactionType, id::EmojiId}, client::Context};
-use serenity_tools::{interactions::ApplicationCommandInteractionExt, collectors::*};
+use serenity::{
+    builder::CreateApplicationCommand,
+    client::Context,
+    model::{
+        channel::ReactionType,
+        id::EmojiId,
+        interactions::application_command::{
+            ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
+            ApplicationCommandOptionType,
+        },
+    },
+};
+use serenity_tools::{collectors::*, interactions::ApplicationCommandInteractionExt};
 
-use crate::{logging::{log_discord, LogTrace}, db};
+use crate::{
+    db,
+    logging::{log_discord, LogTrace},
+};
 
 pub const CMD_TESTING: &'static str = "xtest";
 pub fn create() -> CreateApplicationCommand {
@@ -46,16 +60,21 @@ async fn selector(
     let conf = PagedSelectorConfig::default();
     let mut msg = aci.get_interaction_response(ctx).await?;
     let mut select = UpdatAbleMessage::ApplicationCommand(&aci, &mut msg);
-    let selected = select.paged_selector(
-        ctx,
-        conf,
-        &bosses,
-        |b| (ReactionType::from(EmojiId::from(b.emoji as u64)), b.repr.to_string())
-    ).await?;
+    let selected = select
+        .paged_selector(ctx, conf, &bosses, |b| {
+            (
+                ReactionType::from(EmojiId::from(b.emoji as u64)),
+                b.repr.to_string(),
+            )
+        })
+        .await?;
 
     match selected {
         None => aci.edit_quick_info(ctx, "Aborted").await?,
-        Some(s) => aci.edit_quick_info(ctx, format!("Selected {} bosses", s.len())).await?,
+        Some(s) => {
+            aci.edit_quick_info(ctx, format!("Selected {} bosses", s.len()))
+                .await?
+        }
     };
 
     Ok(())

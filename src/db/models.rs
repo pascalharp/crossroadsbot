@@ -1,6 +1,6 @@
 use crate::db::schema::{
     config, roles, signup_board_channels, signup_roles, signups, tier_mappings, tiers,
-    training_bosses, training_roles, trainings, users, training_boss_mappings,
+    training_boss_mappings, training_bosses, training_roles, trainings, users,
 };
 use diesel_derive_enum::DbEnum;
 use serde::Serialize;
@@ -84,7 +84,7 @@ impl str::FromStr for TrainingState {
     }
 }
 
-#[derive(Identifiable, Queryable, Associations, PartialEq, Debug, Serialize)]
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug, Serialize, Clone)]
 #[belongs_to(Tier)]
 #[table_name = "trainings"]
 pub struct Training {
@@ -226,7 +226,7 @@ pub struct NewTrainingBoss {
 }
 
 #[derive(Insertable, Queryable, Associations, Debug, Hash, PartialEq, Eq)]
-    #[table_name = "training_boss_mappings"]
+#[table_name = "training_boss_mappings"]
 pub struct TrainingBossMapping {
     pub training_id: i32,
     pub training_boss_id: i32,

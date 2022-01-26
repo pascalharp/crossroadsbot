@@ -275,6 +275,7 @@ impl SignupBoard {
         // Group by dates
         let mut groups: Vec<(NaiveDate, Vec<(db::Training, i64)>)> = Vec::new();
         for (g, t) in trainings
+            .clone()
             .into_iter()
             .group_by(|a| a.0.date.date())
             .into_iter()
@@ -305,7 +306,13 @@ impl SignupBoard {
         chan.edit_message(ctx, msg, |m| {
             m.content("");
             m.set_embed(embeds::signup_board_overview(ready, gid));
-            m.components(|c| c.add_action_row(components::register_list_action_row()))
+            m.components(|c| {
+                c.add_action_row(components::overview_register_list_action_row());
+                c.add_action_row(components::overview_training_select_action_row(
+                    &trainings.iter().map(|(t, _)| t).collect::<Vec<_>>(),
+                ));
+                c
+            })
         })
         .await?;
 

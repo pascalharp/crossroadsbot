@@ -33,7 +33,9 @@ use serenity::{
 };
 use serenity_tools::{
     builder::{CreateActionRowExt, CreateEmbedExt},
-    interactions::{ApplicationCommandInteractionExt, MessageComponentInteractionExt}, collectors::MessageCollectorExt, components::Button,
+    collectors::MessageCollectorExt,
+    components::Button,
+    interactions::{ApplicationCommandInteractionExt, MessageComponentInteractionExt},
 };
 
 type MessageFlags = InteractionApplicationCommandCallbackDataFlags;
@@ -328,19 +330,25 @@ async fn add(
 
     trace.step("Waiting for confirm");
 
-    if let Some(react) = msg.await_confirm_abort_interaction(ctx).timeout(Duration::from_secs(60)).await {
+    if let Some(react) = msg
+        .await_confirm_abort_interaction(ctx)
+        .timeout(Duration::from_secs(60))
+        .await
+    {
         react.defer(ctx).await?;
         match react.parse_button()? {
             Button::Confirm => {
                 trace.step("Confirmed. Saving training");
-                let training = db::Training::insert(ctx, name.to_string(), datetime, tier.map(|t| t.id))
-                    .await
-                    .map_err_reply(|what| aci.edit_quick_error(ctx, what))
-                    .await?;
+                let training =
+                    db::Training::insert(ctx, name.to_string(), datetime, tier.map(|t| t.id))
+                        .await
+                        .map_err_reply(|what| aci.edit_quick_error(ctx, what))
+                        .await?;
 
                 trace.step("Saving roles");
                 for r in roles {
-                    training.add_role(ctx, r.id)
+                    training
+                        .add_role(ctx, r.id)
                         .await
                         .map_err_reply(|what| aci.edit_quick_error(ctx, what))
                         .await?;
@@ -348,20 +356,21 @@ async fn add(
 
                 trace.step("Saving training bosses");
                 for tb in bosses {
-                    training.add_training_boss(ctx, tb.id)
+                    training
+                        .add_training_boss(ctx, tb.id)
                         .await
                         .map_err_reply(|what| aci.edit_quick_error(ctx, what))
                         .await?;
                 }
 
                 emb.field("Training ID", training.id, false);
-                emb.footer(|f| f.text(format!("Training added {}", crate::utils::CHECK_EMOJI )));
+                emb.footer(|f| f.text(format!("Training added {}", crate::utils::CHECK_EMOJI)));
                 aci.edit_original_interaction_response(ctx, |d| {
                     d.add_embed(emb);
                     d.components(|c| c)
                 })
                 .await?;
-            },
+            }
             Button::Abort => {
                 trace.step("Aborted");
                 aci.edit_quick_info(ctx, "Aborted").await?;

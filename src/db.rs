@@ -108,7 +108,10 @@ async fn insert_training_role(ctx: &Context, tr: NewTrainingRole) -> QueryResult
     .unwrap()
 }
 
-async fn insert_training_boss_mapping(ctx: &Context, tbm: TrainingBossMapping) -> QueryResult<TrainingBossMapping> {
+async fn insert_training_boss_mapping(
+    ctx: &Context,
+    tbm: TrainingBossMapping,
+) -> QueryResult<TrainingBossMapping> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
         diesel::insert_into(training_boss_mappings::table)
@@ -649,7 +652,10 @@ async fn select_training_boss_by_repr(ctx: &Context, repr: String) -> QueryResul
     .unwrap()
 }
 
-async fn select_training_bosses_by_training(ctx: &Context, id: i32) -> QueryResult<Vec<TrainingBoss>> {
+async fn select_training_bosses_by_training(
+    ctx: &Context,
+    id: i32,
+) -> QueryResult<Vec<TrainingBoss>> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
         training_boss_mappings::table
@@ -893,7 +899,11 @@ impl Training {
         insert_training_role(ctx, training_role).await
     }
 
-    pub async fn add_training_boss(&self, ctx: &Context, training_boss_id: i32) -> QueryResult<TrainingBossMapping> {
+    pub async fn add_training_boss(
+        &self,
+        ctx: &Context,
+        training_boss_id: i32,
+    ) -> QueryResult<TrainingBossMapping> {
         let mapping = TrainingBossMapping {
             training_id: self.id,
             training_boss_id,

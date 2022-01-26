@@ -30,9 +30,9 @@ impl std::fmt::Display for SlashCommandParseError {
 
 impl std::error::Error for SlashCommandParseError {}
 
+mod testing;
 mod training;
 mod training_boss;
-mod testing;
 
 /// All slash commands
 #[derive(Debug)]
