@@ -1,5 +1,8 @@
+use std::collections::{HashMap, HashSet};
+
 use crate::{components::*, conversation::*, db, embeds::*, log::*, logging::*, utils::*};
 
+use anyhow::bail;
 use serenity::{
     collector::MessageCollectorBuilder,
     futures::{future, StreamExt},
@@ -14,101 +17,9 @@ use serenity::{
     prelude::*,
 };
 
-use anyhow::{bail, Context as ErrContext, Result};
-use std::collections::{HashMap, HashSet};
-pub mod helpers {
-    use serenity::{
-        client::Context,
-        model::{
-            id::MessageId,
-            interactions::{
-                message_component::MessageComponentInteraction,
-                InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
-            },
-        },
-    };
-
-    /// Creates an Interaction response with: ChannelMessageWithSource
-    pub async fn quick_ch_msg_with_src<C: ToString>(
-        ctx: &Context,
-        aci: &MessageComponentInteraction,
-        cont: C,
-    ) -> anyhow::Result<()> {
-        aci.create_interaction_response(ctx, |r| {
-            r.kind(InteractionResponseType::ChannelMessageWithSource);
-            r.interaction_response_data(|d| {
-                d.content(cont.to_string());
-                d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
-            })
-        })
-        .await?;
-        Ok(())
-    }
-
-    /// Creates an Interaction response with: UpdateMessage
-    pub async fn quick_update_msg<C: ToString>(
-        ctx: &Context,
-        aci: &MessageComponentInteraction,
-        cont: C,
-    ) -> anyhow::Result<()> {
-        aci.create_interaction_response(ctx, |r| {
-            r.kind(InteractionResponseType::UpdateMessage);
-            r.interaction_response_data(|d| {
-                d.content(cont.to_string());
-                d.embeds(Vec::new());
-                d.components(|c| c);
-                d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
-            })
-        })
-        .await?;
-        Ok(())
-    }
-
-    /// Edits the original interaction response
-    pub async fn quick_edit_orig_rsp<C: ToString>(
-        ctx: &Context,
-        aci: &MessageComponentInteraction,
-        cont: C,
-    ) -> anyhow::Result<()> {
-        aci.edit_original_interaction_response(ctx, |d| {
-            d.content(cont.to_string());
-            d.set_embeds(Vec::new());
-            d.components(|c| c)
-        })
-        .await?;
-        Ok(())
-    }
-
-    /// Creates a follwup up message
-    pub async fn quick_create_flup_msg<C: ToString>(
-        ctx: &Context,
-        aci: &MessageComponentInteraction,
-        cont: C,
-    ) -> anyhow::Result<()> {
-        aci.create_followup_message(ctx, |d| {
-            d.content(cont.to_string());
-            d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
-        })
-        .await?;
-        Ok(())
-    }
-
-    /// Edits the follwup up message
-    pub async fn quick_edit_flup_msg<M: Into<MessageId>, C: ToString>(
-        ctx: &Context,
-        aci: &MessageComponentInteraction,
-        msg_id: M,
-        cont: C,
-    ) -> anyhow::Result<()> {
-        aci.edit_followup_message(ctx, msg_id, |d| {
-            d.content(cont.to_string());
-            d.embeds(Vec::new());
-            d.components(|c| c)
-        })
-        .await?;
-        Ok(())
-    }
-}
+mod list_signups;
+mod register_info;
+mod select_training;
 
 async fn join_button_interaction(
     ctx: &Context,
@@ -645,65 +556,6 @@ async fn button_training_interaction(
     Ok(())
 }
 
-async fn button_list_interaction(
-    ctx: &Context,
-    mci: &MessageComponentInteraction,
-    trace: LogTrace,
-) -> Result<()> {
-    trace.step("Loading user from database");
-    let db_user = match db::User::by_discord_id(ctx, mci.user.id).await {
-        Ok(u) => u,
-        Err(diesel::NotFound) => {
-            return Err(diesel::NotFound)
-                .context("Not yet registered. Please register first")
-                .map_err_reply(|what| self::helpers::quick_ch_msg_with_src(ctx, mci, what))
-                .await
-        }
-        Err(e) => bail!(e),
-    };
-
-    trace.step("Loading sign ups for active training(s)");
-    let signups = db_user.active_signups(ctx).await?;
-    let mut roles: HashMap<i32, Vec<db::Role>> = HashMap::with_capacity(signups.len());
-    for (s, _) in &signups {
-        let signup_roles = s.clone().get_roles(ctx).await?;
-        roles.insert(s.id, signup_roles);
-    }
-
-    trace.step("Replying to user with result");
-    let emb = signup_list_embed(&signups, &roles);
-    mci.create_interaction_response(ctx, |r| {
-        r.kind(InteractionResponseType::ChannelMessageWithSource);
-        r.interaction_response_data(|d| {
-            d.flags(CallbackDataFlags::EPHEMERAL);
-            d.add_embed(emb)
-        })
-    })
-    .await?;
-
-    Ok(())
-}
-
-async fn button_register_interaction(
-    ctx: &Context,
-    mci: &MessageComponentInteraction,
-    trace: LogTrace,
-) -> Result<()> {
-    let bot = ctx.cache.current_user().await;
-    trace.step("Sending register information");
-    mci.create_interaction_response(ctx, |r| {
-        r.kind(InteractionResponseType::ChannelMessageWithSource);
-        r.interaction_response_data(|d| {
-            d.flags(CallbackDataFlags::EPHEMERAL);
-            d.add_embed(register_instructions_embed(&bot))
-        });
-        r
-    })
-    .await?;
-
-    Ok(())
-}
-
 async fn button_general_interaction(
     ctx: &Context,
     mci: &MessageComponentInteraction,
@@ -711,9 +563,9 @@ async fn button_general_interaction(
 ) -> () {
     log_discord(ctx, mci, |trace| async move {
         match ovi {
-            OverviewMessageInteraction::List => button_list_interaction(ctx, mci, trace).await,
+            OverviewMessageInteraction::List => list_signups::interaction(ctx, mci, trace).await,
             OverviewMessageInteraction::Register => {
-                button_register_interaction(ctx, mci, trace).await
+                register_info::interaction(ctx, mci, trace).await
             }
             OverviewMessageInteraction::TrainingSelect => bail!("Not yet implemented"),
         }
