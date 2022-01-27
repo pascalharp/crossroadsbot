@@ -1044,6 +1044,17 @@ impl Role {
     }
 }
 
+impl std::fmt::Display for Role {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} | {}",
+            Mention::from(EmojiId::from(self.emoji as u64)),
+            self.title
+        )
+    }
+}
+
 // --- Tier ---
 impl Tier {
     pub async fn insert(ctx: &Context, name: String) -> QueryResult<Tier> {

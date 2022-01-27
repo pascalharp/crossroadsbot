@@ -169,26 +169,6 @@ pub enum OverviewMessageInteraction {
     TrainingSelect,
 }
 
-//impl OverviewMessageInteraction {
-//    pub fn button(&self) -> CreateButton {
-//        let mut b = CreateButton::default();
-//        match self {
-//            Self::List => {
-//                b.style(ButtonStyle::Primary);
-//                b.label(COMPONENT_LABEL_LIST);
-//                b.emoji(ReactionType::from(DOCUMENT_EMOJI));
-//            }
-//           Self::Register => {
-//                b.style(ButtonStyle::Primary);
-//                b.label(COMPONENT_LABEL_REGISTER);
-//                b.emoji(ReactionType::from(MEMO_EMOJI));
-//            }
-//        };
-//        b.custom_id(self.to_string());
-//        b
-//    }
-//}
-
 impl std::str::FromStr for OverviewMessageInteraction {
     type Err = GlobalInteractionParseError;
 
@@ -418,6 +398,10 @@ pub fn overview_training_select_action_row(trainings: &[&db::Training]) -> Creat
         sm.custom_id(OverviewMessageInteraction::TrainingSelect);
         sm.placeholder("Select a training");
         sm.options(|o| {
+            o.create_option(|smo| {
+                smo.label("Clear selection");
+                smo.value("clear")
+            });
             for t in trainings {
                 if t.state != db::TrainingState::Open {
                     continue;

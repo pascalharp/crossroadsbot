@@ -59,7 +59,7 @@ fn google_calendar_link(training: &db::Training) -> String {
 
 const TRAINING_TIME_FMT: &str = "%H:%M (UTC)";
 // common embed fields
-fn field_training_date(training: &db::Training) -> (String, String, bool) {
+pub fn field_training_date(training: &db::Training) -> (String, String, bool) {
     (
         "**Date**".to_string(),
         format!(
