@@ -25,6 +25,32 @@ use tracing::{error, info};
 
 use crate::data::LogConfigData;
 
+/// An error that isn't really an error. Yeah that makes sense
+#[derive(Debug)]
+pub enum InfoError {
+    TimedOut,
+    Aborted,
+    AbortedOrTimedOut,
+}
+
+impl InfoError {
+    pub fn err(self) -> Result<(), Self> {
+        Err(self)
+    }
+}
+
+impl std::fmt::Display for InfoError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TimedOut => write!(f, "Timed out"),
+            Self::Aborted => write!(f, "Aborted"),
+            Self::AbortedOrTimedOut => write!(f, "Aborted or Timed out"),
+        }
+    }
+}
+
+impl std::error::Error for InfoError {}
+
 #[derive(Debug)]
 pub struct LogInfo {
     /// The user that initiated
@@ -201,7 +227,11 @@ async fn log_to_channel(ctx: &SerenityContext, info: LogInfo, trace: LogTrace, r
                 emb.color((0, 255, 0));
             }
             Err(err) => {
-                emb.color((255, 0, 0));
+                if err.downcast_ref::<InfoError>().is_some() {
+                    emb.color((255, 255, 0));
+                } else {
+                    emb.color((255, 0, 0));
+                }
                 emb.field("Error", format!("```\n{:?}\n```", err), false);
             }
         }

@@ -2,7 +2,6 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{components::*, conversation::*, db, embeds::*, log::*, logging::*, utils::*};
 
-use anyhow::bail;
 use serenity::{
     collector::MessageCollectorBuilder,
     futures::{future, StreamExt},
