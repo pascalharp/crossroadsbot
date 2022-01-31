@@ -221,11 +221,7 @@ async fn log_to_channel(ctx: &SerenityContext, info: LogInfo, trace: LogTrace, r
                 trace_split.push(curr_str);
 
                 for t in trace_split {
-                    emb.field(
-                        "Trace",
-                        t,
-                        true,
-                    );
+                    emb.field("Trace", t, true);
                 }
             }
             Err(_) => {

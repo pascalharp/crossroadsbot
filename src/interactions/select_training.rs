@@ -435,9 +435,7 @@ async fn edit_signup(
                     ar.add_button(Buttons::EditPreferences.button());
                     ar.add_button(Buttons::AddComment.button())
                 });
-                c.create_action_row(|ar| {
-                    ar.add_button(Buttons::Leave.button())
-                })
+                c.create_action_row(|ar| ar.add_button(Buttons::Leave.button()))
             })
         })
         .await?;

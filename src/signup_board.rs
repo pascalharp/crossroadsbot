@@ -1,8 +1,10 @@
-use crate::{components, data, data::SignupBoardData, db, embeds};
+use crate::embeds::CrossroadsEmbeds;
+use crate::{components, data, data::SignupBoardData, db, embeds, utils};
 use anyhow::Result;
 use chrono::Datelike;
 use chrono::NaiveDate;
 use itertools::Itertools;
+use serenity::builder::CreateEmbed;
 use serenity::{model::prelude::*, prelude::*};
 use std::{convert::TryFrom, mem, sync::Arc};
 
@@ -208,6 +210,7 @@ impl SignupBoard {
         Ok(())
     }
 
+    // TODO rework this
     // this creates the channel for the overview message and the
     // overview message itself.
     // It first tries to remove the old channel and then creates the new one
@@ -249,8 +252,155 @@ impl SignupBoard {
         Ok(())
     }
 
-    // Updates the overview message if available
     pub async fn update_overview(&self, ctx: &Context) -> Result<()> {
+        let msg = match self.overview_message_id {
+            Some(m) => m,
+            None => return Err(SignupBoardError::OverviewMessageNotSet.into()),
+        };
+        let chan = match self.overview_channel_id {
+            Some(c) => c,
+            None => return Err(SignupBoardError::OverviewChannelNotSet.into()),
+        };
+
+        let active_trainings = db::Training::all_active(ctx).await?;
+
+        struct TierInfo {
+            _tier: db::Tier,
+            discord: Vec<RoleId>,
+        }
+
+        struct TrainingInfo {
+            training: db::Training,
+            signup_count: i64,
+            tier_info: Option<TierInfo>,
+            bosses: Vec<db::TrainingBoss>,
+        }
+
+        let mut trainings: Vec<TrainingInfo> = Vec::new();
+        for training in active_trainings {
+            let signup_count = training.get_signup_count(ctx).await?;
+            let tier = training.get_tier(ctx).await.transpose()?;
+            let tier_info = if let Some(_tier) = tier {
+                let discord = _tier
+                    .get_discord_roles(ctx)
+                    .await?
+                    .into_iter()
+                    .map(|t| RoleId::from(t.discord_role_id as u64))
+                    .collect::<Vec<_>>();
+
+                Some(TierInfo { _tier, discord })
+            } else {
+                None
+            };
+            let mut bosses = training.all_training_bosses(ctx).await?;
+            bosses.sort_by_key(|b| b.position);
+            bosses.sort_by_key(|b| b.wing);
+
+            trainings.push(TrainingInfo {
+                training,
+                signup_count,
+                tier_info,
+                bosses,
+            });
+        }
+
+        // Sort by custom names and dates
+        trainings.sort_by(|a, b| title_sort_value(&b.training).cmp(&title_sort_value(&a.training)));
+        trainings.sort_by(|a, b| a.training.date.date().cmp(&b.training.date.date()));
+
+        let mut _groups: Vec<(NaiveDate, Vec<&TrainingInfo>)> = Vec::new();
+        for (d, v) in trainings
+            .iter()
+            .group_by(|t| t.training.date.date())
+            .into_iter()
+        {
+            _groups.push((d, v.collect()));
+        }
+
+        let mut groups: Vec<(NaiveDate, Vec<&TrainingInfo>, usize)> =
+            Vec::with_capacity(_groups.len());
+        for (d, v) in _groups {
+            // FIXME do this without extra db access
+            let mut total_users = db::User::by_signed_up_and_date(ctx, d).await?;
+            total_users.sort_by_key(|u| u.id);
+            total_users.dedup_by_key(|u| u.id);
+            groups.push((d, v, total_users.len()));
+        }
+
+        chan.edit_message(ctx, msg, |m| {
+            m.add_embed(|e| {
+                e.0 = CreateEmbed::xdefault().0;
+                e.title("Sign up for a training");
+                e.field(
+                    "How to",
+                    "Before you can sign up you have to be registered. For more information on how to register \
+                     click the button at the end of the message.
+
+                    To **sign up**, **sign out** or to **edit** your sign-up select the training from the select menu below.",
+                    false)
+            });
+            for (date, trainings, total) in groups {
+                m.add_embed(|e| {
+                    e.title(date.format("__**%A**, %v__"));
+                    e.description(&format!("Total sign-up count: {}", total));
+                    for t in trainings {
+                        let mut details = format!("`     Time    ` <t:{}:t>", t.training.date.timestamp());
+                        if let Some(tier) = &t.tier_info {
+                            details.push_str(&format!("\n`     Tier    ` {}", tier.discord.iter().map(|d| Mention::from(*d)).join(" ")));
+                        } else {
+                            details.push_str("\n`     Tier    ` None, open for everyone");
+                        }
+                        details.push_str(&format!("\n`Sign-up count` {}", t.signup_count));
+                        match t.bosses.len() {
+                            0 => (),
+                            1 => details.push_str("\n`     Boss    `"),
+                            _ => details.push_str("\n`  Boss Pool  `"),
+                        }
+                        let mut bosses_str: Vec<String> = Vec::with_capacity(t.bosses.len());
+                        for b in &t.bosses {
+                            match &b.url {
+                                Some(url) => bosses_str.push(format!("[{}]({})", b.name, url)),
+                                None => bosses_str.push(format!("{}", b.name))
+                            }
+                        }
+                        let bosses_str = bosses_str.join(", ");
+                        details.push_str(&bosses_str);
+
+                        e.field(
+                            format!(
+                                "{}    **{}**",
+                                match t.training.state {
+                                    db::TrainingState::Created => utils::CONSTRUCTION_SITE_EMOJI,
+                                    db::TrainingState::Open => utils::GREEN_CIRCLE_EMOJI,
+                                    db::TrainingState::Closed => utils::RED_CIRCLE_EMOJI,
+                                    db::TrainingState::Started => utils::RUNNING_EMOJI,
+                                    db::TrainingState::Finished => utils::CROSS_EMOJI,
+                                },
+                                &t.training.title),
+                            details,
+                            false
+                        );
+                    }
+                    e
+                });
+            }
+            m.components(|c| {
+                c.add_action_row(components::overview_register_list_action_row());
+                if trainings.len() >= 1 {
+                    c.add_action_row(components::overview_training_select_action_row(
+                        &trainings.iter().map(|t| &t.training).collect::<Vec<_>>(),
+                    ));
+                }
+                c
+            });
+            m
+        }).await?;
+
+        Ok(())
+    }
+
+    // Updates the overview message if available
+    pub async fn _update_overview(&self, ctx: &Context) -> Result<()> {
         let msg = match self.overview_message_id {
             Some(m) => m,
             None => return Err(SignupBoardError::OverviewMessageNotSet.into()),
@@ -262,6 +412,7 @@ impl SignupBoard {
         let gid = load_guild_id(ctx).await?;
 
         let active_trainings = db::Training::all_active(ctx).await?;
+
         let mut trainings: Vec<(db::Training, i64)> = Vec::new();
         for at in active_trainings {
             let count = at.get_signup_count(ctx).await?;

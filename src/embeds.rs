@@ -46,7 +46,7 @@ fn discord_timestamp(dt: &NaiveDateTime) -> String {
 }
 
 const GOOGLE_CALENDAR_TIME_FMT: &str = "%Y%m%dT%H%M%SZ";
-fn google_calendar_link(training: &db::Training) -> String {
+pub fn google_calendar_link(training: &db::Training) -> String {
     let begin = training.date.format(GOOGLE_CALENDAR_TIME_FMT);
     let end = (training.date + Duration::hours(2)).format(GOOGLE_CALENDAR_TIME_FMT);
     format!(
