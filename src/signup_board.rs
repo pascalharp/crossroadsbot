@@ -327,9 +327,11 @@ impl SignupBoard {
             groups.push((d, v, total_users.len()));
         }
 
+        let base_emb = CreateEmbed::xdefault();
+
         chan.edit_message(ctx, msg, |m| {
             m.add_embed(|e| {
-                e.0 = CreateEmbed::xdefault().0;
+                e.0 = base_emb.0.clone();
                 e.title("Sign up for a training");
                 e.field(
                     "How to",
@@ -337,24 +339,27 @@ impl SignupBoard {
                      click the button at the end of the message.
 
                     To **sign up**, **sign out** or to **edit** your sign-up select the training from the select menu below.",
-                    false)
+                    false);
+                e.footer(|f| f.text("Last update"));
+                e.timestamp(&chrono::Utc::now())
             });
             for (date, trainings, total) in groups {
                 m.add_embed(|e| {
+                    e.0 = base_emb.0.clone();
                     e.title(date.format("__**%A**, %v__"));
                     e.description(&format!("Total sign-up count: {}", total));
                     for t in trainings {
-                        let mut details = format!("`     Time    ` <t:{}:t>", t.training.date.timestamp());
+                        let mut details = format!("`     Time    `   <t:{}:t>", t.training.date.timestamp());
                         if let Some(tier) = &t.tier_info {
-                            details.push_str(&format!("\n`     Tier    ` {}", tier.discord.iter().map(|d| Mention::from(*d)).join(" ")));
+                            details.push_str(&format!("\n`Tier required`   {}", tier.discord.iter().map(|d| Mention::from(*d)).join(" ")));
                         } else {
-                            details.push_str("\n`     Tier    ` None, open for everyone");
+                            details.push_str("\n`Tier required`   None");
                         }
-                        details.push_str(&format!("\n`Sign-up count` {}", t.signup_count));
+                        details.push_str(&format!("\n`Sign-up count`   {}", t.signup_count));
                         match t.bosses.len() {
                             0 => (),
-                            1 => details.push_str("\n`     Boss    `"),
-                            _ => details.push_str("\n`  Boss Pool  `"),
+                            1 => details.push_str("\n`     Boss    `   "),
+                            _ => details.push_str("\n`  Boss Pool  `   "),
                         }
                         let mut bosses_str: Vec<String> = Vec::with_capacity(t.bosses.len());
                         for b in &t.bosses {

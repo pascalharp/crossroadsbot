@@ -42,8 +42,8 @@ enum Buttons {
 impl Display for Buttons {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), FmtError> {
         match self {
-            Self::Join => write!(f, "Sign up"),
-            Self::Leave => write!(f, "Remove Signup"),
+            Self::Join => write!(f, "Sign Up"),
+            Self::Leave => write!(f, "Sign Out"),
             Self::EditRoles => write!(f, "Edit Roles"),
             Self::EditPreferences => write!(f, "Edit Boss Preferences (soon TM)"),
             Self::AddComment => write!(f, "Add a comment"),
@@ -204,9 +204,9 @@ async fn not_signed_up(
     let mut emb = CreateEmbed::xdefault();
     emb.title(&training.title);
     if can_join {
-        emb.description("You are not yet signed up");
+        emb.description("❌ You are not yet signed up");
     } else {
-        emb.description("You do not have the required tier to join");
+        emb.description("⚠ You do not have the required tier to join");
     }
     let (a, b, c) = embeds::field_training_date(&training);
     emb.field(a, b, c);
@@ -380,7 +380,7 @@ async fn edit_signup(
     base_emb.title(&training.title);
     let (a, b, c) = embeds::field_training_date(&training);
     base_emb.field(a, b, c);
-    base_emb.description("You are signed up");
+    base_emb.description("✅ You are signed up");
 
     let mut msg = mci.get_interaction_response(ctx).await?;
 
