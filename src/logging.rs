@@ -203,15 +203,30 @@ async fn log_to_channel(ctx: &SerenityContext, info: LogInfo, trace: LogTrace, r
             Ok(trace) => {
                 // We are the only holder of the trace at this moment
                 let trace = trace.into_inner().unwrap();
-                emb.field(
-                    "Trace",
-                    trace
-                        .into_iter()
-                        .map(|(time, step)| format!("<t:{}:T> {}", time.timestamp(), step))
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                    false,
-                );
+
+                let mut trace_split: Vec<String> = Vec::new();
+                let mut curr_str = String::from("");
+                for (time, step) in trace {
+                    let line_str = format!("<t:{}:T> {}", time.timestamp(), step);
+
+                    if curr_str.len() + line_str.len() + 1 > 1024 {
+                        // would exceed discord field len max
+                        trace_split.push(curr_str);
+                        curr_str = line_str;
+                    } else {
+                        curr_str.push_str("\n");
+                        curr_str.push_str(&line_str);
+                    }
+                }
+                trace_split.push(curr_str);
+
+                for t in trace_split {
+                    emb.field(
+                        "Trace",
+                        t,
+                        true,
+                    );
+                }
             }
             Err(_) => {
                 emb.field(

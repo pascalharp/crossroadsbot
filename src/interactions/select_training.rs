@@ -36,16 +36,18 @@ enum Buttons {
     EditRoles,
     EditPreferences,
     AddComment,
+    Dismiss,
 }
 
 impl Display for Buttons {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), FmtError> {
         match self {
-            Self::Join => write!(f, "Join"),
-            Self::Leave => write!(f, "Leave"),
+            Self::Join => write!(f, "Sign up"),
+            Self::Leave => write!(f, "Remove Signup"),
             Self::EditRoles => write!(f, "Edit Roles"),
             Self::EditPreferences => write!(f, "Edit Boss Preferences (soon TM)"),
             Self::AddComment => write!(f, "Add a comment"),
+            Self::Dismiss => write!(f, "Dismiss"),
         }
     }
 }
@@ -60,6 +62,7 @@ impl FromStr for Buttons {
             "overview_st_edit_roles" => Ok(Self::EditRoles),
             "overview_st_edit_preferences" => Ok(Self::EditPreferences),
             "overview_st_add_comment" => Ok(Self::AddComment),
+            "overview_st_dismiss" => Ok(Self::Dismiss),
             _ => Err(anyhow!("Unknown interaction: {}", s)),
         }
     }
@@ -73,6 +76,7 @@ impl Buttons {
             Self::EditRoles => "overview_st_edit_roles",
             Self::EditPreferences => "overview_st_edit_preferences",
             Self::AddComment => "overview_st_add_comment",
+            Self::Dismiss => "overview_st_dismiss",
         }
     }
 
@@ -87,6 +91,7 @@ impl Buttons {
             Self::EditRoles => b.style(ButtonStyle::Primary),
             Self::EditPreferences => b.style(ButtonStyle::Primary).disabled(true),
             Self::AddComment => b.style(ButtonStyle::Primary),
+            Self::Dismiss => b.style(ButtonStyle::Secondary),
         };
 
         b
@@ -430,7 +435,9 @@ async fn edit_signup(
                     ar.add_button(Buttons::EditPreferences.button());
                     ar.add_button(Buttons::AddComment.button())
                 });
-                c.create_action_row(|ar| ar.add_button(Buttons::Leave.button()))
+                c.create_action_row(|ar| {
+                    ar.add_button(Buttons::Leave.button())
+                })
             })
         })
         .await?;
@@ -518,6 +525,7 @@ async fn edit_signup(
                         todo!()
                     }
                     Buttons::AddComment => {
+                        trace.step("Add comment");
                         let dm = mci.user.dm(ctx, |m| {
                             m.embed(|e| {
                                 e.field(
@@ -572,16 +580,18 @@ async fn edit_signup(
                             .map_err_reply(|what| dm.edit(ctx, |m| m.set_embed(CreateEmbed::error_box(what))))
                             .await?;
 
+                        trace.step("comment saved");
+
                         reply.channel_id.send_message(ctx, |r| {
                             r.reference_message(reply.as_ref());
                             r.embed(|e| {
                                 e.field(
                                     "Saved",
-                                    format!("Your comment was save. [Go back.]({})", msg.link()),
+                                    format!("Your comment was saved. [Go back.]({})", msg.link()),
                                     true)
                             })
                         }).await?;
-                    }
+                    },
                     _ => bail!("Unexpected interaction"),
                 }
             }
