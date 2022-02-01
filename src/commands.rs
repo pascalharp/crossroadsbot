@@ -89,12 +89,6 @@ async fn help_cmd(
 }
 
 // --- Command Setup ---
-mod misc;
-pub use misc::MISC_GROUP;
-
-mod signup;
-pub use signup::SIGNUP_GROUP;
-
 mod config;
 pub use config::CONFIG_GROUP;
 

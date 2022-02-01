@@ -276,12 +276,10 @@ async fn main() {
         })
         .on_dispatch_error(dispatch_error_hook)
         .help(&commands::HELP_CMD)
-        .group(&commands::SIGNUP_GROUP)
         .group(&commands::TRAINING_GROUP)
         .group(&commands::ROLE_GROUP)
         .group(&commands::TIER_GROUP)
         .group(&commands::CONFIG_GROUP);
-    //.group(&commands::MISC_GROUP);
 
     let mut client = Client::builder(token)
         .application_id(app_id)

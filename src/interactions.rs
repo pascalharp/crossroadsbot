@@ -514,7 +514,6 @@ async fn button_training_interaction(
     bti: &ButtonTrainingInteraction,
 ) -> LogResult<()> {
     let in_pub = in_public_channel(ctx, mci).await;
-    let bot = ctx.cache.current_user().await;
     // Check if user is registerd
     let db_user = match db::User::by_discord_id(ctx, mci.user.id).await {
         Ok(u) => u,
@@ -527,7 +526,7 @@ async fn button_training_interaction(
                             d.flags(CallbackDataFlags::EPHEMERAL);
                         }
                         d.content(Mention::from(&mci.user));
-                        d.add_embed(not_registered_embed(&bot))
+                        d.add_embed(not_registered_embed())
                     })
                 })
                 .await
