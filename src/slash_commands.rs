@@ -30,6 +30,7 @@ impl std::fmt::Display for SlashCommandParseError {
 
 impl std::error::Error for SlashCommandParseError {}
 
+mod config;
 mod testing;
 mod training;
 mod training_boss;
@@ -40,12 +41,14 @@ pub enum AppCommands {
     Training,
     TrainingBoss,
     Testing,
+    Config,
 }
 
 /// All commands that should be created when the bot starts
-const DEFAULT_COMMANDS: [AppCommands; 3] = [
+const DEFAULT_COMMANDS: [AppCommands; 4] = [
     AppCommands::Training,
     AppCommands::TrainingBoss,
+    AppCommands::Config,
     AppCommands::Testing,
 ];
 
@@ -56,6 +59,7 @@ impl FromStr for AppCommands {
         match s {
             training::CMD_TRAINING => Ok(Self::Training),
             training_boss::CMD_TRAINING_BOSS => Ok(Self::TrainingBoss),
+            config::CMD_CONFIG => Ok(Self::Config),
             testing::CMD_TESTING => Ok(Self::Testing),
             _ => Err(SlashCommandParseError(s.to_owned())),
         }
@@ -67,6 +71,7 @@ impl AppCommands {
         match self {
             Self::Training => training::create(),
             Self::TrainingBoss => training_boss::create(),
+            Self::Config => config::create(),
             Self::Testing => testing::create(),
         }
     }
@@ -88,11 +93,12 @@ impl AppCommands {
 
         // Here are all the configurations for Slash Command Permissions
         match self {
-            Self::Training | Self::TrainingBoss | Self::Testing => perms.create_permissions(|p| {
-                p.permission(true)
-                    .kind(ApplicationCommandPermissionType::Role)
-                    .id(conf.squadmaker_role_id.0)
-            }),
+            Self::Training | Self::TrainingBoss | Self::Config | Self::Testing => perms
+                .create_permissions(|p| {
+                    p.permission(true)
+                        .kind(ApplicationCommandPermissionType::Role)
+                        .id(conf.squadmaker_role_id.0)
+                }),
         };
 
         perms
@@ -102,6 +108,7 @@ impl AppCommands {
         match self {
             Self::Training => training::handle(ctx, aci).await,
             Self::TrainingBoss => training_boss::handle(ctx, aci).await,
+            Self::Config => config::handle(ctx, aci).await,
             Self::Testing => testing::handle(ctx, aci).await,
         }
     }

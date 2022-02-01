@@ -1,10 +1,8 @@
 use super::SQUADMAKER_ROLE_CHECK;
 use crate::{
-    components, data, db,
+    components, db,
     embeds::*,
     log::*,
-    signup_board::SignupBoard,
-    status,
     utils::{self, *},
 };
 use serde::ser::{Serialize, SerializeStruct, Serializer};
@@ -13,11 +11,9 @@ use serenity::framework::standard::{
     ArgError, Args, CommandResult,
 };
 use serenity::futures::prelude::*;
-use serenity::http::AttachmentType;
 use serenity::model::prelude::*;
 use serenity::prelude::*;
 use std::{
-    borrow::Cow,
     collections::{HashMap, HashSet},
     sync::Arc,
 };
@@ -25,7 +21,7 @@ use tokio::try_join;
 
 #[group]
 #[prefix = "training"]
-#[commands(list, show, add, set, info, download)]
+#[commands(list, show, add, info)]
 pub struct Training;
 
 #[command]
@@ -183,80 +179,6 @@ pub async fn show(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
                 m.set_embed(embed)
             })
             .await?;
-
-        Ok(())
-    })
-    .await
-}
-
-#[command]
-#[checks(squadmaker_role)]
-#[description = "set one or multiple training(s) with the specified id to the specified state"]
-#[example = "19832 started"]
-#[usage = "( created | open | closed | started | finished ) training_id [ training_id ...]"]
-#[min_args(2)]
-pub async fn set(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    log_command(ctx, msg, || async {
-        let state = args.single::<db::TrainingState>().log_reply(msg)?;
-
-        let training_id: Result<Vec<i32>, _> = args.iter::<i32>().collect();
-        let training_id = training_id.log_reply(msg)?;
-
-        // load trainings
-        let futs = training_id
-            .iter()
-            .map(|id| db::Training::by_id(ctx, *id))
-            .collect::<Vec<_>>();
-        let trainings = future::try_join_all(futs).await.log_reply(msg)?;
-
-        // set states
-        let futs = trainings
-            .into_iter()
-            .map(|t| t.set_state(ctx, state.clone()))
-            .collect::<Vec<_>>();
-        future::try_join_all(futs).await.log_unexpected_reply(msg)?;
-
-        let mut embed = serenity::builder::CreateEmbed::default();
-        for id in training_id {
-            let res = SignupBoard::update_training(ctx, id).await.log_reply(msg);
-            match res {
-                Ok(some) => match some {
-                    Some(msg) => {
-                        embed.field(
-                            format!("Training id: {}", id),
-                            format!("[Message on Board]({})", msg.link()),
-                            false,
-                        );
-                    }
-                    None => {
-                        embed.field(
-                            format!("Training id: {}", id),
-                            "_Message removed_".to_string(),
-                            false,
-                        );
-                    }
-                },
-                Err(err) => {
-                    embed.field(
-                        format!("Training id: {}", id),
-                        format!("_Error_: {}", err.to_string()),
-                        false,
-                    );
-                }
-            }
-        }
-
-        msg.channel_id
-            .send_message(ctx, |m| {
-                m.embed(|e| {
-                    e.0 = embed.0;
-                    e.color((255, 255, 0));
-                    e.description("Signup board updates:")
-                })
-            })
-            .await?;
-
-        status::update_status(ctx).await;
 
         Ok(())
     })
@@ -478,135 +400,4 @@ impl Serialize for SignupCsv {
         )?;
         state.end()
     }
-}
-
-#[command]
-#[checks(squadmaker_role)]
-#[description = "download the file into a csv"]
-#[example = "123"]
-#[usage = "training_id"]
-#[min_args(1)]
-pub async fn download(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    log_command(ctx, msg, || async {
-        let guild_id = match ctx.data.read().await.get::<data::ConfigValuesData>() {
-            Some(conf) => conf.main_guild_id,
-            None => return LogError::new("Guild configuration could not be loaded", msg).into(),
-        };
-
-        let guild = PartialGuild::get(ctx, guild_id)
-            .await
-            .log_custom_reply(msg, "Guild information could not be loaded")?;
-
-        let mut log: Vec<String> = vec![];
-        let mut signup_csv: Vec<SignupCsv> = vec![];
-
-        let training_ids = args
-            .iter::<i32>()
-            .collect::<Result<Vec<i32>, _>>()
-            .log_reply(msg)?;
-
-        let training_futs: Vec<_> = training_ids
-            .into_iter()
-            .map(|id| db::Training::by_id(ctx, id))
-            .collect();
-
-        let trainings = future::try_join_all(training_futs).await.log_reply(msg)?;
-
-        for training in trainings {
-            let training = Arc::new(training);
-            let signups = match training.get_signups(ctx).await {
-                Ok(s) => s,
-                Err(e) => {
-                    msg.reply(ctx, "Unexpected error loading signups").await?;
-                    return Err(e.into());
-                }
-            };
-
-            for s in signups {
-                let user = match s.get_user(ctx).await {
-                    Ok(u) => u,
-                    Err(_) => {
-                        log.push(format!(
-                            "Error loading user entry for signup with id {}. Skipped",
-                            s.id
-                        ));
-                        continue;
-                    }
-                };
-
-                let roles = match s.get_roles(ctx).await {
-                    Ok(r) => r,
-                    Err(_) => {
-                        log.push(format!(
-                            "Error loading roles for signup with id {}. Skipped",
-                            s.id
-                        ));
-                        continue;
-                    }
-                };
-
-                if roles.is_empty() {
-                    log.push(format!(
-                        "No roles selected for signup with id {}. Skipped",
-                        s.id
-                    ));
-                    continue;
-                }
-
-                let member = match guild.member(ctx, user.discord_id()).await {
-                    Ok(du) => du,
-                    Err(_) => {
-                        log.push(format!(
-                            "Did not find user with id {} in discord guild. Skipped",
-                            user.discord_id()
-                        ));
-                        continue;
-                    }
-                };
-
-                signup_csv.push(SignupCsv {
-                    user,
-                    member,
-                    training: training.clone(),
-                    roles,
-                    comment: s.comment.clone(),
-                });
-            }
-        }
-
-        let mut wtr = csv::Writer::from_writer(vec![]);
-
-        for s in signup_csv {
-            if let Err(e) = wtr.serialize(s) {
-                msg.reply(ctx, "Error converting to csv").await?;
-                return Err(e.into());
-            }
-        }
-
-        let wtr_inner = wtr.into_inner().log_reply(msg)?;
-        let bytes_csv = String::from_utf8(wtr_inner).log_reply(msg)?.into_bytes();
-
-        let file = AttachmentType::Bytes {
-            data: Cow::from(bytes_csv),
-            filename: String::from("signups.csv"),
-        };
-
-        msg.channel_id
-            .send_message(ctx, |m| {
-                m.content(format!(
-                    "Log:\n ```\n{}\n```",
-                    if log.is_empty() {
-                        "No errors".to_string()
-                    } else {
-                        log.join("\n")
-                    }
-                ));
-                m.add_file(file);
-                m
-            })
-            .await?;
-
-        Ok(())
-    })
-    .await
 }

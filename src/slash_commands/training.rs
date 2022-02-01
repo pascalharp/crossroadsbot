@@ -501,60 +501,33 @@ async fn set(
                         .into_iter()
                         .map(|t| t.set_state(ctx, state.clone()))
                         .collect();
-                    let trainings = future::try_join_all(update_futs).await?;
+                    let _ = future::try_join_all(update_futs).await?;
 
                     response
-                        .create_followup_message(ctx, |m| {
-                            m.flags(MessageFlags::EPHEMERAL);
-                            m.add_embed(te.clone());
+                        .edit_original_interaction_response(ctx, |m| {
                             m.create_embed(|e| {
                                 e.title("Trainings updated");
-                                e.description("Updating Signup Board")
+                                e.description("Updating Signup Board and status ...")
                             })
                         })
                         .await?;
 
                     trace.step("Updating signup board");
-                    let mut se = CreateEmbed::xdefault();
-                    se.title("Signup board updates");
-                    for id in trainings.iter().map(|t| t.id) {
-                        let res = signup_board::SignupBoard::update_training(ctx, id).await;
-                        match res {
-                            Ok(some) => match some {
-                                Some(msg) => {
-                                    se.field(
-                                        format!("Training id: {}", id),
-                                        format!("[Message on Board]({})", msg.link()),
-                                        true,
-                                    );
-                                }
-                                None => {
-                                    se.field(
-                                        format!("Training id: {}", id),
-                                        "_Message removed_".to_string(),
-                                        true,
-                                    );
-                                }
-                            },
-                            Err(err) => {
-                                se.field(
-                                    format!("Training id: {}", id),
-                                    format!("_Error_: {}", err),
-                                    true,
-                                );
-                            }
-                        }
-                    }
-
-                    response
-                        .create_followup_message(ctx, |m| {
-                            m.flags(MessageFlags::EPHEMERAL);
-                            m.add_embed(te);
-                            m.add_embed(se)
-                        })
+                    signup_board::SignupBoard::get(ctx)
+                        .await
+                        .read()
+                        .await
+                        .update_overview(ctx, trace.clone())
                         .await?;
 
+                    trace.step("Updating status");
                     status::update_status(ctx).await;
+
+                    response
+                        .edit_original_interaction_response(ctx, |m| {
+                            m.add_embed(CreateEmbed::info_box("Everything updated"))
+                        })
+                        .await?;
                 }
                 components::ButtonResponse::Abort => {
                     trace.step("Aborted");
@@ -571,7 +544,7 @@ async fn set(
                         .await?;
                 }
                 // Should not be possible
-                _ => unimplemented!(),
+                _ => bail!("Unexpected interaction"),
             }
         }
         None => {

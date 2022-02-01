@@ -303,7 +303,6 @@ async fn main() {
         data.insert::<LogConfigData>(Arc::new(RwLock::new(LogConfig { log: None })));
         data.insert::<DBPoolData>(Arc::new(db::DBPool::new()));
         data.insert::<SignupBoardData>(Arc::new(RwLock::new(SignupBoard {
-            discord_category_id: None,
             overview_channel_id: None,
             overview_message_id: None,
         })));

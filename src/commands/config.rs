@@ -1,5 +1,5 @@
 use super::ADMIN_ROLE_CHECK;
-use crate::{data::*, db, log::*, signup_board, utils};
+use crate::{data::*, db, log::*, utils};
 use serenity::framework::standard::{
     macros::{command, group},
     Args, CommandResult,
@@ -9,13 +9,7 @@ use serenity::prelude::*;
 
 #[group]
 #[only_in(guilds)]
-#[commands(
-    set_log_channel,
-    set_signup_board_category,
-    signup_board_reset,
-    signup_board_reset_hard,
-    signup_board_init_overview
-)]
+#[commands(set_log_channel)]
 struct Config;
 
 #[command]
@@ -45,100 +39,6 @@ pub async fn set_log_channel(ctx: &Context, msg: &Message, mut args: Args) -> Co
         };
         conf.save(ctx).await.log_reply(msg)?;
 
-        msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
-            .await?;
-        Ok(())
-    })
-    .await
-}
-
-#[command]
-#[checks(admin_role)]
-#[description = "Sets category id for the SignupBoard"]
-#[usage = "category_id"]
-#[only_in("guild")]
-#[num_args(1)]
-pub async fn set_signup_board_category(
-    ctx: &Context,
-    msg: &Message,
-    mut args: Args,
-) -> CommandResult {
-    log_command(ctx, msg, || async {
-        let channel_id: ChannelId = args.single::<ChannelId>().log_reply(msg)?;
-
-        {
-            let sb = signup_board::SignupBoard::get(ctx).await;
-            let mut write_lock = sb.write().await;
-            write_lock.discord_category_id = Some(channel_id);
-            write_lock.save_to_db(ctx).await.log_reply(msg)?;
-        }
-
-        msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
-            .await?;
-        Ok(())
-    })
-    .await
-}
-
-#[command]
-#[checks(admin_role)]
-#[description = "softly refreshes the Signup Board"]
-#[usage = ""]
-#[only_in("guild")]
-#[num_args(0)]
-pub async fn signup_board_reset(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    log_command(ctx, msg, || async {
-        signup_board::SignupBoard::reset(ctx)
-            .await
-            .log_reply(msg)
-            .log_reply(msg)?;
-        msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
-            .await?;
-        Ok(())
-    })
-    .await
-}
-
-#[command]
-#[checks(admin_role)]
-#[description = "fully resets the Signup Board"]
-#[usage = ""]
-#[only_in("guild")]
-#[num_args(0)]
-pub async fn signup_board_reset_hard(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    log_command(ctx, msg, || async {
-        signup_board::SignupBoard::reset_hard(ctx)
-            .await
-            .log_reply(msg)
-            .log_reply(msg)?;
-        msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
-            .await?;
-        Ok(())
-    })
-    .await
-}
-
-#[command]
-#[checks(admin_role)]
-#[description = "initialize the overview message"]
-#[usage = ""]
-#[only_in("guild")]
-#[num_args(0)]
-pub async fn signup_board_init_overview(ctx: &Context, msg: &Message, _: Args) -> CommandResult {
-    log_command(ctx, msg, || async {
-        {
-            // Write lock only as long as needed
-            let sb = signup_board::SignupBoard::get(ctx).await;
-            let mut write_lock = sb.write().await;
-            write_lock.set_up_overview(ctx).await.log_reply(msg)?
-        }
-        signup_board::SignupBoard::get(ctx)
-            .await
-            .read()
-            .await
-            .update_overview(ctx)
-            .await
-            .log_reply(msg)?;
         msg.react(ctx, ReactionType::from(utils::CHECK_EMOJI))
             .await?;
         Ok(())

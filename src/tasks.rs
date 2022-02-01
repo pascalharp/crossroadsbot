@@ -15,7 +15,7 @@ pub async fn signup_board_task(ctx: Context) {
                     .await
                     .read()
                     .await
-                    .update_overview(ctx)
+                    .update_overview(ctx, trace)
                     .await?;
                 Ok(())
             },
