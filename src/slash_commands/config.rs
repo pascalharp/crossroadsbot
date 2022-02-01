@@ -1,20 +1,25 @@
 use anyhow::{anyhow, bail, Result};
 use serenity::{
-    builder::CreateApplicationCommand,
+    builder::{CreateApplicationCommand, CreateEmbed},
     client::Context,
     model::{
+        guild::Guild,
         id::ChannelId,
-        interactions::application_command::{
-            ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
-            ApplicationCommandOptionType,
+        interactions::{
+            application_command::{
+                ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
+                ApplicationCommandOptionType,
+            },
+            InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
         },
     },
 };
-use serenity_tools::interactions::ApplicationCommandInteractionExt;
+use serenity_tools::{builder::CreateEmbedExt, interactions::ApplicationCommandInteractionExt};
 
 use crate::{
-    data::{LogConfigData, INFO_LOG_NAME},
+    data::{ConfigValuesData, LogConfigData, INFO_LOG_NAME},
     db,
+    embeds::CrossroadsEmbeds,
     logging::{log_discord, LogTrace, ReplyHelper},
     signup_board,
 };
@@ -48,6 +53,11 @@ pub fn create() -> CreateApplicationCommand {
             o.description("The channel to which all logs are posted")
         })
     });
+    app.create_option(|o| {
+        o.kind(ApplicationCommandOptionType::SubCommand);
+        o.name("emoji_list");
+        o.description("Lists all emojis from the emoji server")
+    });
     app
 }
 
@@ -58,6 +68,7 @@ pub async fn handle(ctx: &Context, aci: &ApplicationCommandInteraction) {
             match sub.name.as_ref() {
                 "overview" => overview(ctx, aci, sub, trace).await,
                 "log" => log(ctx, aci, sub, trace).await,
+                "emoji_list" => emoji_list(ctx, aci, trace).await,
                 _ => bail!("{} not yet available", sub.name),
             }
         } else {
@@ -170,6 +181,45 @@ async fn log(
 
     aci.create_quick_info(ctx, "Log channel updated", true)
         .await?;
+
+    Ok(())
+}
+
+async fn emoji_list(
+    ctx: &Context,
+    aci: &ApplicationCommandInteraction,
+    trace: LogTrace,
+) -> Result<()> {
+    // load all emojis from discord emoji guild
+    trace.step("Loading from emoji guild");
+    let gid = ctx
+        .data
+        .read()
+        .await
+        .get::<ConfigValuesData>()
+        .unwrap()
+        .emoji_guild_id;
+    let emoji_guild = Guild::get(ctx, gid).await?;
+    let emojis = emoji_guild.emojis(ctx).await?;
+
+    trace.step("Responding with emoji list");
+    aci.create_interaction_response(ctx, |r| {
+        r.kind(InteractionResponseType::ChannelMessageWithSource);
+        r.interaction_response_data(|d| {
+            d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL);
+            let mut emb = CreateEmbed::xdefault();
+            emb.fields_chunked_fmt(
+                &emojis,
+                //FIXME once patched upstream: https://github.com/serenity-rs/serenity/issues/1707
+                |e| format!("<:omitted:{}> | {}", e.id, e.name),
+                "Emojis",
+                true,
+                10,
+            );
+            d.add_embed(emb)
+        })
+    })
+    .await?;
 
     Ok(())
 }

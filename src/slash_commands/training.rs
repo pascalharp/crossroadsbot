@@ -11,13 +11,17 @@ use crate::{
 };
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use itertools::Itertools;
 use serde::Serialize;
-use serenity::model::interactions::{
-    application_command::{
-        ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
-        ApplicationCommandOptionType,
+use serenity::model::{
+    id::EmojiId,
+    interactions::{
+        application_command::{
+            ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
+            ApplicationCommandOptionType,
+        },
+        InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
     },
-    InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
 };
 use serenity::{
     builder::{CreateApplicationCommand, CreateEmbed},
@@ -117,6 +121,19 @@ pub fn create() -> CreateApplicationCommand {
     });
     app.create_option(|o| {
         o.kind(ApplicationCommandOptionType::SubCommand);
+        o.name("list");
+        o.description("List all trainings of a day basic information");
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.required(true);
+            o.name("day");
+            o.description(
+                "Select all trainings from that day. Format: yyyy-mm-dd. Comma separated list",
+            )
+        })
+    });
+    app.create_option(|o| {
+        o.kind(ApplicationCommandOptionType::SubCommand);
         o.name("download");
         o.description("Download one or multiple training(s)");
         o.create_sub_option(|o| {
@@ -139,6 +156,23 @@ pub fn create() -> CreateApplicationCommand {
             o.add_string_choice("csv", "csv")
         })
     });
+    app.create_option(|o| {
+        o.kind(ApplicationCommandOptionType::SubCommand);
+        o.name("info");
+        o.description("Show detailed information about a training");
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::Integer);
+            o.required(true);
+            o.name("id");
+            o.description("The id of the training");
+            o.min_int_value(0)
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::Boolean);
+            o.name("public");
+            o.description("Whether to post this public or not. Default: false")
+        })
+    });
     app
 }
 
@@ -149,7 +183,9 @@ pub async fn handle(ctx: &Context, aci: &ApplicationCommandInteraction) {
             match sub.name.as_ref() {
                 "add" => add(ctx, aci, sub, trace).await,
                 "set" => set(ctx, aci, sub, trace).await,
-                "download" => download(ctx, aci, sub).await,
+                "download" => download(ctx, aci, sub, trace).await,
+                "info" => info(ctx, aci, sub, trace).await,
+                "list" => list(ctx, aci, sub, trace).await,
                 _ => bail!("{} not yet available", sub.name),
             }
         } else {
@@ -651,6 +687,7 @@ async fn download(
     ctx: &Context,
     aci: &ApplicationCommandInteraction,
     option: &ApplicationCommandInteractionDataOption,
+    trace: LogTrace,
 ) -> Result<()> {
     let guild_id = match ctx.data.read().await.get::<data::ConfigValuesData>() {
         Some(conf) => conf.main_guild_id,
@@ -672,26 +709,39 @@ async fn download(
     // it also guarantees they exist
     let mut trainings: Vec<db::Training> = Vec::new();
 
+    trace.step("Loading training's by date");
     if let Some(days) = cmds
         .get("day")
         .and_then(|d| d.value.as_ref())
         .and_then(|d| d.as_str())
     {
-        trainings.append(&mut trainings_from_days(ctx, days).await?);
+        trainings.append(
+            &mut trainings_from_days(ctx, days)
+                .await
+                .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+                .await?,
+        );
     }
 
+    trace.step("Loading training's by id");
     if let Some(ids) = cmds
         .get("ids")
         .and_then(|d| d.value.as_ref())
         .and_then(|d| d.as_str())
     {
-        trainings.append(&mut trainings_from_ids(ctx, ids).await?);
+        trainings.append(
+            &mut trainings_from_ids(ctx, ids)
+                .await
+                .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+                .await?,
+        );
     }
 
     if trainings.is_empty() {
         bail!("Select at least one training");
     }
 
+    trace.step("sort training's");
     // filter out multiple
     trainings.sort_by_key(|t| t.id);
     trainings.dedup_by_key(|t| t.id);
@@ -712,14 +762,8 @@ async fn download(
         DonwloadFormat::Csv // Default
     };
 
-    aci.create_interaction_response(ctx, |r| {
-        r.kind(InteractionResponseType::ChannelMessageWithSource);
-        r.interaction_response_data(|d| {
-            d.flags(MessageFlags::EPHEMERAL);
-            d.content("Loading...")
-        })
-    })
-    .await?;
+    aci.create_quick_info(ctx, "Parsing training data...", true)
+        .await?;
 
     let msg = aci.get_interaction_response(ctx).await?;
 
@@ -877,5 +921,152 @@ async fn download(
     aci.edit_original_interaction_response(ctx, |r| r.content(format!("[Done]({})", msg.link())))
         .await?;
 
+    Ok(())
+}
+
+async fn info(
+    ctx: &Context,
+    aci: &ApplicationCommandInteraction,
+    option: &ApplicationCommandInteractionDataOption,
+    trace: LogTrace,
+) -> Result<()> {
+    let cmds = command_map(option);
+
+    let id = cmds
+        .get("id")
+        .and_then(|v| v.as_i64())
+        .ok_or(anyhow!("Expected id field"))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+        .await?;
+
+    let public = cmds
+        .get("public")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    trace.step("Loading training information");
+
+    let training = db::Training::by_id(ctx, id as i32)
+        .await
+        .with_context(|| format!("Failed to load training with id: {}", id))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+        .await?;
+
+    let bosses = training.all_training_bosses(ctx).await?;
+
+    let roles = training.all_roles(ctx).await?;
+
+    // HashMap with Role id as key and value to keep count
+    let mut roles_count = roles.iter().map(|r| (r.id, 0)).collect::<HashMap<_, _>>();
+
+    trace.step("Loading signups to calculate role count");
+    let signups = training.get_signups(ctx).await?;
+
+    future::try_join_all(signups.iter().map(|s| s.get_roles(ctx)))
+        .await?
+        .into_iter()
+        .flatten()
+        .for_each(|sr| {
+            roles_count.entry(sr.id).and_modify(|e| *e += 1);
+        });
+
+    trace.step("Replying to user");
+    aci.create_interaction_response(ctx, |r| {
+        r.kind(InteractionResponseType::ChannelMessageWithSource);
+        r.interaction_response_data(|d| {
+            if !public {
+                d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL);
+            }
+            let mut emb = CreateEmbed::xdefault();
+            emb.field("Training", training.title, false);
+            emb.field(
+                "Date/Time",
+                format!("<t:{}>", training.date.timestamp()),
+                false,
+            );
+
+            if !bosses.is_empty() {
+                emb.fields_chunked_fmt(
+                    &bosses,
+                    |b| {
+                        let boss_link = match &b.url {
+                            Some(l) => format!("[{}]({})", b.name, l),
+                            None => b.name.to_string(),
+                        };
+                        format!(
+                            "{} | {}",
+                            Mention::from(EmojiId::from(b.emoji as u64)),
+                            boss_link
+                        )
+                    },
+                    "Boss Pool",
+                    false,
+                    20,
+                );
+            }
+            emb.fields_chunked_fmt(
+                &roles,
+                |r| {
+                    format!(
+                        "{} | {} : {}",
+                        Mention::from(EmojiId::from(r.emoji as u64)),
+                        r.title,
+                        roles_count.get(&r.id).unwrap()
+                    )
+                },
+                "Sign-up Count",
+                true,
+                20,
+            );
+            d.add_embed(emb)
+        })
+    })
+    .await?;
+
+    Ok(())
+}
+
+async fn list(
+    ctx: &Context,
+    aci: &ApplicationCommandInteraction,
+    option: &ApplicationCommandInteractionDataOption,
+    trace: LogTrace,
+) -> Result<()> {
+    let cmds = command_map(option);
+
+    trace.step("Loading training's");
+    let mut trainings = trainings_from_days(ctx, cmds.get("day").unwrap().as_str().unwrap())
+        .await
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+        .await?;
+    trainings.sort_by_key(|t| t.date);
+
+    let mut embeds: Vec<CreateEmbed> = Vec::new();
+    let mut data_grouped = Vec::new();
+    for (key, group) in &trainings.into_iter().group_by(|a| a.date.date()) {
+        data_grouped.push((key, group.collect::<Vec<_>>()));
+    }
+    for (d, ts) in data_grouped {
+        let mut emb = CreateEmbed::xdefault();
+        emb.title(d);
+        for t in ts {
+            emb.field(
+                &t.title,
+                format!("{}\nId: {}", format!("<t:{}>", t.date.timestamp()), t.id),
+                true,
+            );
+        }
+        embeds.push(emb);
+    }
+
+    trace.step("Replying");
+    aci.create_interaction_response(ctx, |r| {
+        r.kind(InteractionResponseType::ChannelMessageWithSource);
+        r.interaction_response_data(|d| {
+            d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL);
+            d.embeds(embeds)
+        })
+    })
+    .await?;
     Ok(())
 }

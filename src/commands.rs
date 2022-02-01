@@ -89,14 +89,8 @@ async fn help_cmd(
 }
 
 // --- Command Setup ---
-mod config;
-pub use config::CONFIG_GROUP;
-
 mod role;
 pub use role::ROLE_GROUP;
-
-mod training;
-pub use training::TRAINING_GROUP;
 
 mod tier;
 pub use tier::TIER_GROUP;
