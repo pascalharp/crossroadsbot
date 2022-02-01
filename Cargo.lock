@@ -1170,7 +1170,7 @@ dependencies = [
 [[package]]
 name = "serenity_tools"
 version = "0.1.0"
-source = "git+https://github.com/pascalharp/serenity_tools.git?branch=main#c32fdd5e88a8e295e423845f1e530e008d34d83c"
+source = "git+https://github.com/pascalharp/serenity_tools.git?branch=main#4180445771964cad7191cbe61c96cd3cd4cf4c5f"
 dependencies = [
  "serenity",
  "tokio",

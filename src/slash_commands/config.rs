@@ -24,7 +24,7 @@ pub const CMD_CONFIG: &'static str = "config";
 pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
     app.name(CMD_CONFIG);
-    app.description("Testing");
+    app.description("Bot configurations");
     app.default_permission(false);
     app.create_option(|o| {
         o.kind(ApplicationCommandOptionType::SubCommand);

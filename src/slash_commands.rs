@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::FromStr};
+use std::str::FromStr;
 
 use serenity::{
     builder::{CreateApplicationCommand, CreateApplicationCommandPermissions},
@@ -12,13 +12,6 @@ use tracing::error;
 
 use crate::data::ConfigValues;
 
-/// The trait that every Slash Command should have
-/// to ease up configuration and parsing
-pub trait SlashCommand: FromStr + Display {
-    fn create() -> CreateApplicationCommand;
-    fn permission(&self, conf: &ConfigValues) -> (u64, ApplicationCommandPermissionType);
-}
-
 #[derive(Debug)]
 pub struct SlashCommandParseError(String);
 
@@ -31,6 +24,7 @@ impl std::fmt::Display for SlashCommandParseError {
 impl std::error::Error for SlashCommandParseError {}
 
 mod config;
+mod register;
 mod testing;
 mod training;
 mod training_boss;
@@ -38,6 +32,8 @@ mod training_boss;
 /// All slash commands
 #[derive(Debug)]
 pub enum AppCommands {
+    Register,
+    Unregister,
     Training,
     TrainingBoss,
     Testing,
@@ -45,7 +41,9 @@ pub enum AppCommands {
 }
 
 /// All commands that should be created when the bot starts
-const DEFAULT_COMMANDS: [AppCommands; 4] = [
+const DEFAULT_COMMANDS: [AppCommands; 6] = [
+    AppCommands::Register,
+    AppCommands::Unregister,
     AppCommands::Training,
     AppCommands::TrainingBoss,
     AppCommands::Config,
@@ -57,6 +55,8 @@ impl FromStr for AppCommands {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            register::CMD_REGISTER => Ok(Self::Register),
+            register::CMD_UNREGISTER => Ok(Self::Unregister),
             training::CMD_TRAINING => Ok(Self::Training),
             training_boss::CMD_TRAINING_BOSS => Ok(Self::TrainingBoss),
             config::CMD_CONFIG => Ok(Self::Config),
@@ -69,6 +69,8 @@ impl FromStr for AppCommands {
 impl AppCommands {
     pub fn create(&self) -> CreateApplicationCommand {
         match self {
+            Self::Register => register::create_reg(),
+            Self::Unregister => register::create_unreg(),
             Self::Training => training::create(),
             Self::TrainingBoss => training_boss::create(),
             Self::Config => config::create(),
@@ -99,6 +101,11 @@ impl AppCommands {
                         .kind(ApplicationCommandPermissionType::Role)
                         .id(conf.squadmaker_role_id.0)
                 }),
+            Self::Register | Self::Unregister => perms.create_permissions(|p| {
+                p.permission(true)
+                    .kind(ApplicationCommandPermissionType::Role)
+                    .id(conf.main_guild_id.0) // Guild id is same as @everyone
+            }),
         };
 
         perms
@@ -106,6 +113,8 @@ impl AppCommands {
 
     async fn handle(&self, ctx: &Context, aci: &ApplicationCommandInteraction) {
         match self {
+            Self::Register => register::handle_reg(ctx, aci).await,
+            Self::Unregister => register::handle_unreg(ctx, aci).await,
             Self::Training => training::handle(ctx, aci).await,
             Self::TrainingBoss => training_boss::handle(ctx, aci).await,
             Self::Config => config::handle(ctx, aci).await,

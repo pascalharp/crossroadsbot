@@ -1,4 +1,4 @@
-// automatic background tasks
+// automatic task trigger by specific events or constantly running in the background
 use crate::{logging::*, signup_board::SignupBoard};
 use serenity::client::Context;
 use std::time::Duration;

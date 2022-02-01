@@ -31,6 +31,7 @@ pub enum InfoError {
     TimedOut,
     Aborted,
     AbortedOrTimedOut,
+    NotRegistered,
 }
 
 impl InfoError {
@@ -45,6 +46,7 @@ impl std::fmt::Display for InfoError {
             Self::TimedOut => write!(f, "Timed out"),
             Self::Aborted => write!(f, "Aborted"),
             Self::AbortedOrTimedOut => write!(f, "Aborted or Timed out"),
+            Self::NotRegistered => write!(f, "Not registered"),
         }
     }
 }
@@ -240,10 +242,11 @@ async fn log_to_channel(ctx: &SerenityContext, info: LogInfo, trace: LogTrace, r
             Err(err) => {
                 if err.downcast_ref::<InfoError>().is_some() {
                     emb.color((255, 255, 0));
+                    emb.field("Info", format!("```\n{:?}\n```", err), false);
                 } else {
                     emb.color((255, 0, 0));
+                    emb.field("Error", format!("```\n{:?}\n```", err), false);
                 }
-                emb.field("Error", format!("```\n{:?}\n```", err), false);
             }
         }
 

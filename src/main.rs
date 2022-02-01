@@ -1,4 +1,5 @@
 use anyhow::bail;
+use crossroadsbot::logging;
 use crossroadsbot::{
     commands, data::*, db, interactions, logging::*, signup_board::*, slash_commands, status,
     tasks, utils::DIZZY_EMOJI,
@@ -183,6 +184,7 @@ impl EventHandler for Handler {
                 }
                 Err(NotFound) => {
                     trace.step("User not found in database");
+                    return Err(logging::InfoError::NotRegistered.into());
                 }
                 Err(e) => bail!(e),
             };
