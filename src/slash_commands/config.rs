@@ -4,14 +4,14 @@ use serenity::{
     client::Context,
     model::{
         guild::Guild,
-        id::ChannelId,
+        id::{ChannelId, EmojiId},
         interactions::{
             application_command::{
                 ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
                 ApplicationCommandOptionType,
             },
             InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
-        },
+        }, misc::Mention,
     },
 };
 use serenity_tools::{builder::CreateEmbedExt, interactions::ApplicationCommandInteractionExt};
@@ -211,7 +211,7 @@ async fn emoji_list(
             emb.fields_chunked_fmt(
                 &emojis,
                 //FIXME once patched upstream: https://github.com/serenity-rs/serenity/issues/1707
-                |e| format!("<:omitted:{}> | {}", e.id, e.name),
+                |e| format!("{} | {}", Mention::from(EmojiId::from(e.id)), e.name),
                 "Emojis",
                 true,
                 10,

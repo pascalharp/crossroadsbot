@@ -248,10 +248,18 @@ impl SignupBoard {
                 e.field(
                     "How to",
                     "\
-Before you can sign up you have to be registered. For more information on how to register \
+Before you can sign up you have to be __registered__. For more information on how to register \
 click the button at the end of the message.
-
 To **sign up**, **sign out** or to **edit** your sign-up select the training from the select menu below.",
+                    false);
+                e.field(
+                    "Legend",
+                    format!(
+                        "{} => {}\n{} => {}\n{} => {}",
+                        utils::GREEN_CIRCLE_EMOJI, "You can join this training or edit/remove your sign-up",
+                        utils::LOCK_EMOJI, "The training is locked. Most likely squadmaking is in progress",
+                        utils::RUNNING_EMOJI, "The training is currently ongoing"
+                        ),
                     false);
                 e.footer(|f| f.text("Last update"));
                 e.timestamp(&chrono::Utc::now())
@@ -290,7 +298,7 @@ To **sign up**, **sign out** or to **edit** your sign-up select the training fro
                                 match t.training.state {
                                     db::TrainingState::Created => utils::CONSTRUCTION_SITE_EMOJI,
                                     db::TrainingState::Open => utils::GREEN_CIRCLE_EMOJI,
-                                    db::TrainingState::Closed => utils::RED_CIRCLE_EMOJI,
+                                    db::TrainingState::Closed => utils::LOCK_EMOJI,
                                     db::TrainingState::Started => utils::RUNNING_EMOJI,
                                     db::TrainingState::Finished => utils::CROSS_EMOJI,
                                 },
