@@ -28,6 +28,7 @@ mod register;
 mod testing;
 mod training;
 mod training_boss;
+mod training_role;
 
 /// All slash commands
 #[derive(Debug)]
@@ -36,16 +37,18 @@ pub enum AppCommands {
     Unregister,
     Training,
     TrainingBoss,
+    TrainingRole,
     Testing,
     Config,
 }
 
 /// All commands that should be created when the bot starts
-const DEFAULT_COMMANDS: [AppCommands; 6] = [
+const DEFAULT_COMMANDS: [AppCommands; 7] = [
     AppCommands::Register,
     AppCommands::Unregister,
     AppCommands::Training,
     AppCommands::TrainingBoss,
+    AppCommands::TrainingRole,
     AppCommands::Config,
     AppCommands::Testing,
 ];
@@ -59,6 +62,7 @@ impl FromStr for AppCommands {
             register::CMD_UNREGISTER => Ok(Self::Unregister),
             training::CMD_TRAINING => Ok(Self::Training),
             training_boss::CMD_TRAINING_BOSS => Ok(Self::TrainingBoss),
+            training_role::CMD_TRAINING_ROLE => Ok(Self::TrainingRole),
             config::CMD_CONFIG => Ok(Self::Config),
             testing::CMD_TESTING => Ok(Self::Testing),
             _ => Err(SlashCommandParseError(s.to_owned())),
@@ -73,6 +77,7 @@ impl AppCommands {
             Self::Unregister => register::create_unreg(),
             Self::Training => training::create(),
             Self::TrainingBoss => training_boss::create(),
+            Self::TrainingRole => training_role::create(),
             Self::Config => config::create(),
             Self::Testing => testing::create(),
         }
@@ -95,12 +100,15 @@ impl AppCommands {
 
         // Here are all the configurations for Slash Command Permissions
         match self {
-            Self::Training | Self::TrainingBoss | Self::Config | Self::Testing => perms
-                .create_permissions(|p| {
-                    p.permission(true)
-                        .kind(ApplicationCommandPermissionType::Role)
-                        .id(conf.squadmaker_role_id.0)
-                }),
+            Self::Training
+            | Self::TrainingBoss
+            | Self::TrainingRole
+            | Self::Config
+            | Self::Testing => perms.create_permissions(|p| {
+                p.permission(true)
+                    .kind(ApplicationCommandPermissionType::Role)
+                    .id(conf.squadmaker_role_id.0)
+            }),
             Self::Register | Self::Unregister => perms.create_permissions(|p| {
                 p.permission(true)
                     .kind(ApplicationCommandPermissionType::Role)
@@ -117,6 +125,7 @@ impl AppCommands {
             Self::Unregister => register::handle_unreg(ctx, aci).await,
             Self::Training => training::handle(ctx, aci).await,
             Self::TrainingBoss => training_boss::handle(ctx, aci).await,
+            Self::TrainingRole => training_role::handle(ctx, aci).await,
             Self::Config => config::handle(ctx, aci).await,
             Self::Testing => testing::handle(ctx, aci).await,
         }

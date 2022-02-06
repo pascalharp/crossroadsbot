@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     db, embeds,
-    logging::{LogTrace, ReplyHelper},
+    logging::{InfoError, LogTrace, ReplyHelper},
 };
 use anyhow::{bail, Context as ErrContext, Result};
 use serenity::{
@@ -24,6 +24,7 @@ pub(super) async fn interaction(
         Ok(u) => u,
         Err(diesel::NotFound) => {
             return Err(diesel::NotFound)
+                .context(InfoError::NotRegistered)
                 .context("Not yet registered. Please register first")
                 .map_err_reply(|what| mci.create_quick_info(ctx, what, true))
                 .await
