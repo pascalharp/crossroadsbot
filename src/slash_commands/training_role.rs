@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use serenity::{
-    builder::CreateApplicationCommand,
+    builder::{CreateApplicationCommand, CreateEmbed},
     client::Context,
     model::{
         guild::Guild,
@@ -18,7 +18,7 @@ use serenity::{
 
 use serenity_tools::{builder::CreateEmbedExt, interactions::ApplicationCommandInteractionExt};
 
-use crate::{data::ConfigValuesData, db, logging::*};
+use crate::{data::ConfigValuesData, db, embeds::CrossroadsEmbeds, logging::*};
 
 pub(super) const CMD_TRAINING_ROLE: &'static str = "training_role";
 pub fn create() -> CreateApplicationCommand {
@@ -246,27 +246,29 @@ async fn list(ctx: &Context, aci: &ApplicationCommandInteraction, trace: LogTrac
     let mut roles = db::Role::all_active(ctx).await?;
     roles.sort_by_key(|r| r.title.clone());
     roles.sort_by_key(|r| r.priority);
+
+    let mut emb = CreateEmbed::xdefault();
+    emb.fields_chunked_fmt(
+        &roles,
+        |r| {
+            format!(
+                "{} | {} | {}",
+                Mention::from(EmojiId::from(r.emoji as u64)),
+                r.repr,
+                r.title
+            )
+        },
+        "Roles",
+        true,
+        10,
+    );
+    emb.title("Training Roles");
+
     aci.create_interaction_response(ctx, |r| {
         r.kind(InteractionResponseType::ChannelMessageWithSource);
         r.interaction_response_data(|d| {
             d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL);
-            d.create_embed(|e| {
-                e.title("Training Roles");
-                e.fields_chunked_fmt(
-                    &roles,
-                    |r| {
-                        format!(
-                            "{} | {} | {}",
-                            Mention::from(EmojiId::from(r.emoji as u64)),
-                            r.repr,
-                            r.title
-                        )
-                    },
-                    "Roles",
-                    true,
-                    10,
-                )
-            })
+            d.add_embed(emb)
         })
     })
     .await?;

@@ -276,7 +276,6 @@ async fn main() {
         })
         .on_dispatch_error(dispatch_error_hook)
         .help(&commands::HELP_CMD)
-        .group(&commands::ROLE_GROUP)
         .group(&commands::TIER_GROUP);
 
     let mut client = Client::builder(token)
