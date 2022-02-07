@@ -4,7 +4,6 @@ extern crate dotenv;
 extern crate serenity;
 
 pub mod components;
-pub mod conversation;
 pub mod data;
 pub mod db;
 pub mod embeds;

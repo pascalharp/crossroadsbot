@@ -3,7 +3,6 @@ use crossroadsbot::logging;
 use crossroadsbot::{
     data::*, db, interactions, logging::*, signup_board::*, slash_commands, status, tasks,
 };
-use dashmap::DashSet;
 use diesel::prelude::*;
 use diesel::{pg::PgConnection, result::Error::NotFound};
 use dotenv::dotenv;
@@ -257,7 +256,6 @@ async fn main() {
 
     {
         let mut data = client.data.write().await;
-        data.insert::<ConversationLock>(Arc::new(DashSet::new()));
         data.insert::<ConfigValuesData>(Arc::new(ConfigValues {
             main_guild_id,
             admin_role_id,

@@ -1,6 +1,5 @@
 use crate::db::DBPool;
 use crate::signup_board::SignupBoard;
-use dashmap::DashSet;
 use serenity::{model::prelude::*, prelude::*};
 use std::sync::Arc;
 
@@ -17,11 +16,6 @@ pub static INFO_LOG_NAME: &str = "log_channel_id";
 
 pub struct LogConfig {
     pub log: Option<ChannelId>,
-}
-
-pub struct ConversationLock;
-impl TypeMapKey for ConversationLock {
-    type Value = Arc<DashSet<UserId>>;
 }
 
 pub struct ConfigValuesData;
