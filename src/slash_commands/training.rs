@@ -738,7 +738,9 @@ async fn download(
     }
 
     if trainings.is_empty() {
-        bail!("Select at least one training");
+        Err(anyhow!("Select at least one training"))
+            .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+            .await?;
     }
 
     trace.step("sort training's");
@@ -918,7 +920,7 @@ async fn download(
         })
         .await?;
 
-    aci.edit_original_interaction_response(ctx, |r| r.content(format!("[Done]({})", msg.link())))
+    aci.edit_quick_success(ctx, format!("[Done]({})", msg.link()))
         .await?;
 
     Ok(())
