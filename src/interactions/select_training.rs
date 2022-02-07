@@ -46,7 +46,7 @@ impl Display for Buttons {
             Self::Leave => write!(f, "Sign Out"),
             Self::EditRoles => write!(f, "Edit Roles"),
             Self::EditPreferences => write!(f, "Edit Boss Preferences (soon TM)"),
-            Self::AddComment => write!(f, "Add a comment"),
+            Self::AddComment => write!(f, "Add/Edit a comment"),
             Self::Dismiss => write!(f, "Dismiss"),
         }
     }
@@ -358,7 +358,7 @@ async fn edit_signup(
     ctx: &Context,
     mci: &MessageComponentInteraction,
     _db_user: db::User,
-    signup: db::Signup,
+    mut signup: db::Signup,
     training: db::Training,
     roles: Vec<db::Role>,
     bosses: Vec<db::TrainingBoss>,
@@ -386,6 +386,9 @@ async fn edit_signup(
 
     loop {
         let mut emb = base_emb.clone();
+        if let Some(comment) = &signup.comment {
+            emb.field("Comment", &comment, false);
+        }
         emb.fields_chunked_fmt(
             &bosses,
             |b| {
@@ -572,7 +575,7 @@ async fn edit_signup(
                             },
                         }.unwrap();
 
-                        signup.update_comment(ctx, Some(reply.content.clone()))
+                        signup = signup.update_comment(ctx, Some(reply.content.clone()))
                             .await
                             .context("Unexpected error updating your comment =(")
                             .map_err_reply(|what| dm.edit(ctx, |m| m.set_embed(CreateEmbed::error_box(what))))
