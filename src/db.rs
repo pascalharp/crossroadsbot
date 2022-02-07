@@ -493,6 +493,23 @@ async fn select_tier_mappings_by_tier(ctx: &Context, id: i32) -> QueryResult<Vec
     .unwrap()
 }
 
+async fn select_tier_mappings_by_tier_and_discord_role(
+    ctx: &Context,
+    tier_id: i32,
+    discord_id: i64,
+) -> QueryResult<TierMapping> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = tier_mappings::table.inner_join(tiers::table);
+        join.filter(tiers::id.eq(tier_id))
+            .filter(tier_mappings::discord_role_id.eq(discord_id))
+            .select(tier_mappings::all_columns)
+            .first(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn select_training_roles_by_training(
     ctx: &Context,
     id: i32,
@@ -1055,6 +1072,14 @@ impl Tier {
 
     pub async fn get_discord_roles(&self, ctx: &Context) -> QueryResult<Vec<TierMapping>> {
         select_tier_mappings_by_tier(ctx, self.id).await
+    }
+
+    pub async fn get_tier_mapping_by_discord_role(
+        &self,
+        ctx: &Context,
+        role_id: u64,
+    ) -> QueryResult<TierMapping> {
+        select_tier_mappings_by_tier_and_discord_role(ctx, self.id, role_id as i64).await
     }
 
     pub async fn get_trainings(&self, ctx: &Context) -> QueryResult<Vec<Training>> {
