@@ -9,7 +9,6 @@ pub mod data;
 pub mod db;
 pub mod embeds;
 pub mod interactions;
-pub mod log;
 pub mod logging;
 pub mod signup_board;
 pub mod slash_commands;

@@ -1,8 +1,7 @@
 use anyhow::bail;
 use crossroadsbot::logging;
 use crossroadsbot::{
-    data::*, db, interactions, logging::*, signup_board::*, slash_commands, status,
-    tasks,
+    data::*, db, interactions, logging::*, signup_board::*, slash_commands, status, tasks,
 };
 use dashmap::DashSet;
 use diesel::prelude::*;

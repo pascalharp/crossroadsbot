@@ -50,7 +50,6 @@ impl std::error::Error for GlobalInteractionParseError {}
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum GlobalInteraction {
-    Training(ButtonTrainingInteraction),
     Overview(OverviewMessageInteraction),
 }
 
@@ -58,9 +57,7 @@ impl std::str::FromStr for GlobalInteraction {
     type Err = GlobalInteractionParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Ok(bti) = s.parse::<ButtonTrainingInteraction>() {
-            return Ok(Self::Training(bti));
-        } else if let Ok(bgi) = s.parse::<OverviewMessageInteraction>() {
+        if let Ok(bgi) = s.parse::<OverviewMessageInteraction>() {
             return Ok(Self::Overview(bgi));
         }
         Err(GlobalInteractionParseError {})
@@ -70,7 +67,6 @@ impl std::str::FromStr for GlobalInteraction {
 impl std::fmt::Display for GlobalInteraction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Training(bti) => write!(f, "{}", bti),
             Self::Overview(bgi) => write!(f, "{}", bgi),
         }
     }
