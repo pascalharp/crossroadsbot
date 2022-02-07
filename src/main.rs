@@ -1,8 +1,8 @@
 use anyhow::bail;
 use crossroadsbot::logging;
 use crossroadsbot::{
-    commands, data::*, db, interactions, logging::*, signup_board::*, slash_commands, status,
-    tasks, utils::DIZZY_EMOJI,
+    data::*, db, interactions, logging::*, signup_board::*, slash_commands, status,
+    tasks,
 };
 use dashmap::DashSet;
 use diesel::prelude::*;
@@ -11,7 +11,6 @@ use dotenv::dotenv;
 use serenity::{
     async_trait,
     client::{bridge::gateway::GatewayIntents, Client, EventHandler},
-    framework::standard::{macros::hook, DispatchError, StandardFramework},
     model::prelude::*,
     prelude::*,
 };
@@ -194,27 +193,6 @@ impl EventHandler for Handler {
     }
 }
 
-#[hook]
-async fn dispatch_error_hook(ctx: &Context, msg: &Message, error: DispatchError) {
-    match error {
-        DispatchError::NotEnoughArguments { min, given } => {
-            let s = format!("Need {} arguments, but only got {}.", min, given);
-            msg.reply(ctx, &s).await.ok();
-        }
-        DispatchError::TooManyArguments { max, given } => {
-            let s = format!("Max arguments allowed is {}, but got {}.", max, given);
-            msg.reply(ctx, &s).await.ok();
-        }
-        DispatchError::CheckFailed(..) => {
-            let s = "No permissions to use this command".to_string();
-            msg.reply(ctx, &s).await.ok();
-        }
-        _ => {
-            msg.react(ctx, DIZZY_EMOJI).await.ok();
-        }
-    }
-}
-
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     // Load .env into ENV
@@ -269,18 +247,8 @@ async fn main() {
             .expect("Failed to parse squadmaker role id"),
     );
 
-    let framework = StandardFramework::new()
-        .configure(|c| {
-            c.prefix(GLOB_COMMAND_PREFIX);
-            c.no_dm_prefix(true)
-        })
-        .on_dispatch_error(dispatch_error_hook)
-        .help(&commands::HELP_CMD)
-        .group(&commands::TIER_GROUP);
-
     let mut client = Client::builder(token)
         .application_id(app_id)
-        .framework(framework)
         .event_handler(Handler {
             signup_board_loop_running: AtomicBool::new(false),
         })
