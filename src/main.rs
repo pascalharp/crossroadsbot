@@ -149,6 +149,7 @@ impl EventHandler for Handler {
     }
 
     async fn resume(&self, _: Context, _: ResumedEvent) {
+        let _ = &__arg1;
         info!("Resumed");
     }
 
