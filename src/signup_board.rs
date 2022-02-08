@@ -67,7 +67,7 @@ fn title_sort_value(t: &db::Training) -> u64 {
     if t.title.contains("Practice") {
         return 6;
     }
-    return 0;
+    0
 }
 
 impl SignupBoard {
@@ -290,7 +290,7 @@ To **sign up**, **sign out** or to **edit** your sign-up select the training fro
                         for b in &t.bosses {
                             match &b.url {
                                 Some(url) => bosses_str.push(format!("[{}]({})", b.name, url)),
-                                None => bosses_str.push(format!("{}", b.name))
+                                None => bosses_str.push(b.name.to_string())
                             }
                         }
                         let bosses_str = bosses_str.join(", ");
@@ -316,7 +316,7 @@ To **sign up**, **sign out** or to **edit** your sign-up select the training fro
             }
             m.components(|c| {
                 c.add_action_row(components::overview_register_list_action_row());
-                if trainings.len() >= 1 {
+                if !trainings.is_empty() {
                     c.add_action_row(components::overview_training_select_action_row(
                         &trainings.iter().map(|t| &t.training).collect::<Vec<_>>(),
                     ));

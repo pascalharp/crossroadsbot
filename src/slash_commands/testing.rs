@@ -18,7 +18,7 @@ use crate::{
     logging::{log_discord, LogTrace},
 };
 
-pub const CMD_TESTING: &'static str = "xtest";
+pub(super) const CMD_TESTING: &str = "xtest";
 pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
     app.name(CMD_TESTING);
@@ -59,7 +59,7 @@ async fn selector(
     let bosses = db::TrainingBoss::all(ctx).await?;
     let conf = PagedSelectorConfig::default();
     let mut msg = aci.get_interaction_response(ctx).await?;
-    let mut select = UpdatAbleMessage::ApplicationCommand(&aci, &mut msg);
+    let mut select = UpdatAbleMessage::ApplicationCommand(aci, &mut msg);
     let selected = select
         .paged_selector(ctx, conf, &bosses, |b| {
             (

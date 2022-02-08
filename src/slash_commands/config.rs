@@ -4,7 +4,7 @@ use serenity::{
     client::Context,
     model::{
         guild::Guild,
-        id::{ChannelId, EmojiId},
+        id::ChannelId,
         interactions::{
             application_command::{
                 ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
@@ -25,7 +25,7 @@ use crate::{
     signup_board,
 };
 
-pub const CMD_CONFIG: &'static str = "config";
+pub(super) const CMD_CONFIG: &str = "config";
 
 pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
@@ -94,7 +94,7 @@ async fn overview(
         .value
         .as_ref()
         .and_then(|v| v.as_str())
-        .and_then(|v| Some(v.parse::<ChannelId>()))
+        .map(|v| v.parse::<ChannelId>())
         .ok_or(anyhow!("Unexpected missing value"))
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
@@ -150,7 +150,7 @@ async fn log(
         .value
         .as_ref()
         .and_then(|v| v.as_str())
-        .and_then(|v| Some(v.parse::<ChannelId>()))
+        .map(|v| v.parse::<ChannelId>())
         .ok_or(anyhow!("Unexpected missing value"))
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
@@ -212,7 +212,7 @@ async fn emoji_list(
             emb.fields_chunked_fmt(
                 &emojis,
                 //FIXME once patched upstream: https://github.com/serenity-rs/serenity/issues/1707
-                |e| format!("{} | {}", Mention::from(EmojiId::from(e.id)), e.name),
+                |e| format!("{} | {}", Mention::from(e.id), e.name),
                 "Emojis",
                 true,
                 10,

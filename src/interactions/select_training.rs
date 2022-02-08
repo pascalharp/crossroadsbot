@@ -147,7 +147,7 @@ pub(crate) async fn interaction(
 
     trace.step("Looking for signup");
     match db::Signup::by_user_and_training(ctx, &db_user, &training).await {
-        Ok(s) => signed_up(ctx, mci, db_user, training, s, trace).await,
+        Ok(s) => signed_up(ctx, mci, training, s, trace).await,
         Err(diesel::NotFound) => not_signed_up(ctx, mci, db_user, training, trace).await,
         Err(e) => bail!(e),
     }
@@ -178,7 +178,6 @@ async fn not_signed_up(
             .unwrap()
             .clone()
             .main_guild_id
-            .clone()
     };
 
     // check if user can join the training
@@ -286,6 +285,7 @@ async fn not_signed_up(
     Ok(())
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::too_many_arguments))]
 async fn join_fresh(
     ctx: &Context,
     mci: &MessageComponentInteraction,
@@ -350,14 +350,14 @@ async fn join_fresh(
             .await?;
     }
     trace.step("Signup completed");
-    edit_signup(ctx, mci, db_user, signup, training, roles, bosses, trace).await?;
+    edit_signup(ctx, mci, signup, training, roles, bosses, trace).await?;
     Ok(())
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::too_many_arguments))]
 async fn edit_signup(
     ctx: &Context,
     mci: &MessageComponentInteraction,
-    _db_user: db::User,
     mut signup: db::Signup,
     training: db::Training,
     roles: Vec<db::Role>,
@@ -471,10 +471,7 @@ async fn edit_signup(
                     Buttons::EditRoles => {
                         let pre_sel: Vec<&db::Role> = roles
                             .iter()
-                            .filter_map(|r| {
-                                if curr_roles.contains(&r.id) { Some(r) }
-                                else { None }
-                            })
+                            .filter(|r| curr_roles.contains(&r.id))
                             .collect();
 
                         trace.step("Edit roles");
@@ -603,7 +600,6 @@ async fn edit_signup(
 async fn signed_up(
     ctx: &Context,
     mci: &MessageComponentInteraction,
-    db_user: db::User,
     training: db::Training,
     signup: db::Signup,
     trace: LogTrace,
@@ -613,7 +609,7 @@ async fn signed_up(
     let bosses = training.all_training_bosses(ctx).await?;
     let roles = training.all_roles(ctx).await?;
 
-    edit_signup(ctx, mci, db_user, signup, training, roles, bosses, trace).await?;
+    edit_signup(ctx, mci, signup, training, roles, bosses, trace).await?;
 
     Ok(())
 }

@@ -21,7 +21,7 @@ use crate::{
     logging::{self, log_discord, ReplyHelper},
 };
 
-pub(super) const CMD_REGISTER: &'static str = "register";
+pub(super) const CMD_REGISTER: &str = "register";
 
 pub fn create_reg() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
@@ -56,7 +56,7 @@ pub async fn handle_reg(ctx: &Context, aci: &ApplicationCommandInteraction) {
         trace.step("Checking for valid format");
         let regex = Regex::new("^[a-zA-Z\\s]{3,27}\\.[0-9]{4}$").unwrap();
 
-        if !regex.is_match(&name) {
+        if !regex.is_match(name) {
             Err(anyhow!("Regex does not match"))
                 .context("Invalid Guild Wars 2 Account Name format.\nIt should look something like this: My Account.1234")
                 .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
@@ -77,7 +77,7 @@ pub async fn handle_reg(ctx: &Context, aci: &ApplicationCommandInteraction) {
     .await;
 }
 
-pub(super) const CMD_UNREGISTER: &'static str = "unregister";
+pub(super) const CMD_UNREGISTER: &str = "unregister";
 
 pub fn create_unreg() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();

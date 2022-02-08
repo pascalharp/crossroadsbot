@@ -10,7 +10,7 @@ async fn button_general_interaction(
     ctx: &Context,
     mci: &MessageComponentInteraction,
     ovi: &OverviewMessageInteraction,
-) -> () {
+) {
     log_discord(ctx, mci, |trace| async move {
         match ovi {
             OverviewMessageInteraction::List => list_signups::interaction(ctx, mci, trace).await,

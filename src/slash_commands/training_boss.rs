@@ -7,7 +7,6 @@ use serenity::{
     client::Context,
     model::{
         guild::Guild,
-        id::EmojiId,
         interactions::{
             application_command::{
                 ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
@@ -36,7 +35,7 @@ use serenity_tools::{
 
 use super::helpers::command_map;
 
-pub const CMD_TRAINING_BOSS: &str = "training_boss";
+pub(super) const CMD_TRAINING_BOSS: &str = "training_boss";
 
 pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
@@ -176,7 +175,7 @@ async fn add(
     let url = cmds
         .get("link")
         .and_then(|d| d.as_str())
-        .and_then(|s| Some(s.parse::<Url>()));
+        .map(|s| s.parse::<Url>());
 
     let url = match url {
         None => None,
@@ -242,7 +241,7 @@ async fn add(
             emb.field("Repr", &repr, true);
             emb.field("Wing", wing, true);
             emb.field("Boss", position, true);
-            emb.field("Emoji", Mention::from(EmojiId::from(emoji_id)), true);
+            emb.field("Emoji", Mention::from(emoji_id), true);
             if let Some(url) = &url {
                 emb.field("Url", url, false);
             } else {

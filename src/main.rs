@@ -154,11 +154,9 @@ impl EventHandler for Handler {
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         match &interaction {
-            Interaction::MessageComponent(mci) => {
-                interactions::button_interaction(&ctx, &mci).await
-            }
+            Interaction::MessageComponent(mci) => interactions::button_interaction(&ctx, mci).await,
             Interaction::ApplicationCommand(aci) => {
-                slash_commands::slash_command_interaction(&ctx, &aci).await
+                slash_commands::slash_command_interaction(&ctx, aci).await
             }
             _ => (),
         }
@@ -191,9 +189,9 @@ impl EventHandler for Handler {
         let mut log_info = LogInfo::automatic("User left server");
         log_info.add_user(user);
 
-        log_discord(&ctx, log_info, |trace| async move {
+        log_discord(ctx, log_info, |trace| async move {
             trace.step("Loading user database info");
-            match db::User::by_discord_id(&ctx, user_id).await {
+            match db::User::by_discord_id(ctx, user_id).await {
                 Ok(db_user) => {
                     trace.step("Deleting user from db");
                     db_user.delete(ctx).await?;

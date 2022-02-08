@@ -43,7 +43,7 @@ use serenity_tools::{
 
 type MessageFlags = InteractionApplicationCommandCallbackDataFlags;
 
-pub(crate) const CMD_TRAINING: &str = "training";
+pub(super) const CMD_TRAINING: &str = "training";
 const CHECK_EMOJI: char = '✅';
 
 pub fn create() -> CreateApplicationCommand {
@@ -289,7 +289,7 @@ async fn add(
         .get("roles")
         .and_then(|n| n.as_str())
         .ok_or(anyhow!("roles not set"))?
-        .split(",")
+        .split(',')
         .into_iter()
         .map(|s| s.trim())
         .collect();
@@ -317,7 +317,7 @@ async fn add(
         .get("bosses")
         .and_then(|n| n.as_str())
         .ok_or(anyhow!("bosses not set"))?
-        .split(",")
+        .split(',')
         .into_iter()
         .map(|s| s.trim())
         .collect();
@@ -1054,7 +1054,7 @@ async fn list(
         for t in ts {
             emb.field(
                 &t.title,
-                format!("{}\nId: {}", format!("<t:{}>", t.date.timestamp()), t.id),
+                format!("<t:{}>\nId: {}", t.date.timestamp(), t.id),
                 true,
             );
         }

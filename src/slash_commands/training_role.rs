@@ -20,7 +20,7 @@ use serenity_tools::{builder::CreateEmbedExt, interactions::ApplicationCommandIn
 
 use crate::{data::ConfigValuesData, db, embeds::CrossroadsEmbeds, logging::*};
 
-pub(super) const CMD_TRAINING_ROLE: &'static str = "training_role";
+pub(super) const CMD_TRAINING_ROLE: &str = "training_role";
 pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
     app.name(CMD_TRAINING_ROLE);

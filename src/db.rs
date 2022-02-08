@@ -1130,7 +1130,7 @@ impl TrainingBoss {
             wing,
             position,
             emoji: emoji.0 as i64,
-            url: url.and_then(|u| Some(u.to_string())),
+            url: url.map(|u| u.to_string()),
         };
 
         insert_training_boss(ctx, tb).await

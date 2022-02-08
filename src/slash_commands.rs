@@ -157,13 +157,7 @@ pub mod helpers {
     pub fn command_map(opt: &ApplicationCommandInteractionDataOption) -> HashMap<String, Value> {
         opt.options
             .iter()
-            .filter_map(|o| {
-                if let Some(val) = &o.value {
-                    Some((o.name.clone(), val.clone()))
-                } else {
-                    None
-                }
-            })
+            .filter_map(|o| o.value.as_ref().map(|v| (o.name.clone(), v.clone())))
             .collect()
     }
 }

@@ -23,7 +23,7 @@ use crate::{
     logging::{log_discord, LogTrace, ReplyHelper},
 };
 
-pub(super) const CMD_TRAINING_TIER: &'static str = "training_tier";
+pub(super) const CMD_TRAINING_TIER: &str = "training_tier";
 
 pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();

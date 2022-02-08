@@ -93,7 +93,7 @@ fn fmt_app_command_data_opt(data: &ApplicationCommandInteractionDataOption) -> S
             let opts = data
                 .options
                 .iter()
-                .map(|o| fmt_app_command_data_opt(o))
+                .map(fmt_app_command_data_opt)
                 .collect::<Vec<String>>()
                 .join(" ");
 
@@ -103,7 +103,7 @@ fn fmt_app_command_data_opt(data: &ApplicationCommandInteractionDataOption) -> S
             let opts = data
                 .options
                 .iter()
-                .map(|o| fmt_app_command_data_opt(o))
+                .map(fmt_app_command_data_opt)
                 .collect::<Vec<String>>()
                 .join(" ");
 
@@ -114,7 +114,7 @@ fn fmt_app_command_data_opt(data: &ApplicationCommandInteractionDataOption) -> S
             data.name,
             data.value
                 .as_ref()
-                .and_then(|v| Some(v.to_string()))
+                .map(|v| v.to_string())
                 .unwrap_or_else(|| "<empty>".to_string())
         ),
     }
@@ -124,7 +124,7 @@ fn fmt_app_command_data(data: &ApplicationCommandInteractionData) -> String {
     let opts = data
         .options
         .iter()
-        .map(|o| fmt_app_command_data_opt(o))
+        .map(fmt_app_command_data_opt)
         .collect::<Vec<String>>()
         .join(" ");
 
@@ -216,7 +216,7 @@ async fn log_to_channel(ctx: &SerenityContext, info: LogInfo, trace: LogTrace, r
                         trace_split.push(curr_str);
                         curr_str = line_str;
                     } else {
-                        curr_str.push_str("\n");
+                        curr_str.push('\n');
                         curr_str.push_str(&line_str);
                     }
                 }
