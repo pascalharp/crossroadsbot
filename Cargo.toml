@@ -1,6 +1,6 @@
 [package]
 name = "crossroadsbot"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["Narturio"]
 edition = "2018"
 
