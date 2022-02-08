@@ -3,8 +3,6 @@ use crate::signup_board::SignupBoard;
 use serenity::{model::prelude::*, prelude::*};
 use std::sync::Arc;
 
-pub static GLOB_COMMAND_PREFIX: &str = "~";
-
 pub struct ConfigValues {
     pub main_guild_id: GuildId,
     pub admin_role_id: RoleId,

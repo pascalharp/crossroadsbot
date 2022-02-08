@@ -1,8 +1,26 @@
+#[macro_use]
+extern crate diesel;
+extern crate dotenv;
+extern crate serenity;
+
+mod components;
+mod data;
+mod db;
+mod embeds;
+mod interactions;
+mod logging;
+mod signup_board;
+mod slash_commands;
+mod status;
+mod tasks;
+
 use anyhow::bail;
-use crossroadsbot::logging;
-use crossroadsbot::{
-    data::*, db, interactions, logging::*, signup_board::*, slash_commands, status, tasks,
-};
+use data::*;
+use logging::{log_discord, LogInfo};
+//use crate::logging;
+//use crate::{
+//    data::*, db, interactions, logging::*, signup_board::*, slash_commands, status, tasks,
+//};
 use diesel::prelude::*;
 use diesel::{pg::PgConnection, result::Error::NotFound};
 use dotenv::dotenv;
@@ -12,6 +30,7 @@ use serenity::{
     model::prelude::*,
     prelude::*,
 };
+use signup_board::SignupBoard;
 use std::{
     env,
     str::FromStr,

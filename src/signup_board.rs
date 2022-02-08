@@ -1,5 +1,5 @@
 use crate::embeds::CrossroadsEmbeds;
-use crate::{components, data, data::SignupBoardData, db, logging::LogTrace, utils};
+use crate::{components, data, data::SignupBoardData, db, logging::LogTrace};
 use anyhow::Result;
 use chrono::NaiveDate;
 use itertools::Itertools;
@@ -8,9 +8,13 @@ use serenity::{model::prelude::*, prelude::*};
 use serenity_tools::builder::CreateEmbedExt;
 use std::{mem, sync::Arc};
 
-pub const SIGNUP_BOARD_NAME: &str = "signup_board_id";
-pub const OVERVIEW_CHANNEL_ID: &str = "overview_channel_id";
-pub const OVERVIEW_MESSAGE_ID: &str = "overview_message_id";
+const OVERVIEW_CHANNEL_ID: &str = "overview_channel_id";
+const OVERVIEW_MESSAGE_ID: &str = "overview_message_id";
+const CROSS_EMOJI: char = '❌';
+const RUNNING_EMOJI: char = '🏃';
+const GREEN_CIRCLE_EMOJI: char = '🟢';
+const CONSTRUCTION_SITE_EMOJI: char = '🚧';
+const LOCK_EMOJI: char = '🔒';
 
 // Hold on to often used values
 pub struct SignupBoard {
@@ -256,9 +260,9 @@ To **sign up**, **sign out** or to **edit** your sign-up select the training fro
                     "Legend",
                     format!(
                         "{} => {}\n{} => {}\n{} => {}",
-                        utils::GREEN_CIRCLE_EMOJI, "You can join this training or edit/remove your sign-up",
-                        utils::LOCK_EMOJI, "The training is locked. Most likely squadmaking is in progress",
-                        utils::RUNNING_EMOJI, "The training is currently ongoing"
+                        GREEN_CIRCLE_EMOJI, "You can join this training or edit/remove your sign-up",
+                        LOCK_EMOJI, "The training is locked. Most likely squadmaking is in progress",
+                        RUNNING_EMOJI, "The training is currently ongoing"
                         ),
                     false);
                 e.footer(|f| f.text("Last update"));
@@ -296,11 +300,11 @@ To **sign up**, **sign out** or to **edit** your sign-up select the training fro
                             format!(
                                 "{}    **{}**",
                                 match t.training.state {
-                                    db::TrainingState::Created => utils::CONSTRUCTION_SITE_EMOJI,
-                                    db::TrainingState::Open => utils::GREEN_CIRCLE_EMOJI,
-                                    db::TrainingState::Closed => utils::LOCK_EMOJI,
-                                    db::TrainingState::Started => utils::RUNNING_EMOJI,
-                                    db::TrainingState::Finished => utils::CROSS_EMOJI,
+                                    db::TrainingState::Created => CONSTRUCTION_SITE_EMOJI,
+                                    db::TrainingState::Open => GREEN_CIRCLE_EMOJI,
+                                    db::TrainingState::Closed => LOCK_EMOJI,
+                                    db::TrainingState::Started => RUNNING_EMOJI,
+                                    db::TrainingState::Finished => CROSS_EMOJI,
                                 },
                                 &t.training.title),
                             details,

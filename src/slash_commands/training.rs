@@ -43,7 +43,8 @@ use serenity_tools::{
 
 type MessageFlags = InteractionApplicationCommandCallbackDataFlags;
 
-pub const CMD_TRAINING: &str = "training";
+pub(crate) const CMD_TRAINING: &str = "training";
+const CHECK_EMOJI: char = '✅';
 
 pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
@@ -399,7 +400,7 @@ async fn add(
                 }
 
                 emb.field("Training ID", training.id, false);
-                emb.footer(|f| f.text(format!("Training added {}", crate::utils::CHECK_EMOJI)));
+                emb.footer(|f| f.text(format!("Training added {}", CHECK_EMOJI)));
                 aci.edit_original_interaction_response(ctx, |d| {
                     d.add_embed(emb);
                     d.components(|c| c)
