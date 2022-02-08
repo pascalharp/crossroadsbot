@@ -225,6 +225,15 @@ async fn delete_tier_mapping(
     .unwrap()
 }
 
+async fn delete_training_boss_by_id(ctx: &Context, id: i32) -> QueryResult<usize> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::delete(training_bosses::table.find(id)).execute(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 // Select
 async fn select_user_by_id(ctx: &Context, id: i32) -> QueryResult<User> {
     let pool = DBPool::load(ctx).await;
@@ -1133,6 +1142,10 @@ impl TrainingBoss {
 
     pub async fn by_repr(ctx: &Context, repr: String) -> QueryResult<Self> {
         select_training_boss_by_repr(ctx, repr).await
+    }
+
+    pub async fn delete(&self, ctx: &Context) -> QueryResult<usize> {
+        delete_training_boss_by_id(ctx, self.id).await
     }
 }
 

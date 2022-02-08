@@ -291,13 +291,44 @@ async fn add(
 async fn remove(
     ctx: &Context,
     aci: &ApplicationCommandInteraction,
-    _option: &ApplicationCommandInteractionDataOption,
+    option: &ApplicationCommandInteractionDataOption,
     trace: LogTrace,
 ) -> Result<()> {
-    trace.step("TODO");
-    Err(anyhow!("Not yet implemented"))
+    let boss_repr = option
+        .options
+        .get(0)
+        .and_then(|o| o.value.as_ref())
+        .and_then(|o| o.as_str())
+        .context("Unexpected missing field")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?;
+
+    trace.step("Loading boss");
+    let boss = match db::TrainingBoss::by_repr(ctx, boss_repr.to_string()).await {
+        Ok(o) => o,
+        Err(diesel::NotFound) => {
+            Err(diesel::NotFound)
+                .context(format!("Boss {} does not exist", boss_repr))
+                .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+                .await?
+        }
+        Err(e) => {
+            Err(e)
+                .context("Unexpected error")
+                .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+                .await?
+        }
+    };
+
+    trace.step("Deleting boss");
+    boss.delete(ctx)
+        .await
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+        .await?;
+
+    aci.create_quick_success(ctx, format!("Deleted: {}", boss), true)
+        .await?;
+
     Ok(())
 }
 
