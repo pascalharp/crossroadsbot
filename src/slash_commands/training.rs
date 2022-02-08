@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::HashMap, time::Duration};
 
 use super::helpers::*;
 use crate::{
-    components, data,
+    data,
     db::{self, Tier, TrainingState},
     embeds::{embed_add_roles, CrossroadsEmbeds},
     logging::*,
@@ -505,7 +505,7 @@ async fn set(
         r.interaction_response_data(|d| {
             d.flags(MessageFlags::EPHEMERAL);
             d.add_embed(te.clone());
-            d.components(|c| c.add_action_row(components::confirm_abort_action_row(false)))
+            d.components(|c| c.create_action_row(|ar| ar.confirm_button().abort_button()))
         })
     })
     .await?;
@@ -518,8 +518,8 @@ async fn set(
         .await
     {
         Some(response) => {
-            match components::resolve_button_response(&response) {
-                components::ButtonResponse::Confirm => {
+            match response.parse_button() {
+                Ok(Button::Confirm) => {
                     trace.step("Confirmed");
                     response
                         .create_interaction_response(ctx, |r| {
@@ -564,7 +564,7 @@ async fn set(
                         })
                         .await?;
                 }
-                components::ButtonResponse::Abort => {
+                Ok(Button::Abort) => {
                     trace.step("Aborted");
                     response
                         .create_interaction_response(ctx, |r| {
