@@ -7,7 +7,6 @@ use crate::{
     embeds::{embed_add_roles, CrossroadsEmbeds},
     logging::*,
     signup_board, status,
-    utils::DEFAULT_TIMEOUT,
 };
 use anyhow::{anyhow, bail, Context as ErrContext, Result};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -515,7 +514,7 @@ async fn set(
     let msg = aci.get_interaction_response(ctx).await?;
     match msg
         .await_component_interaction(ctx)
-        .timeout(DEFAULT_TIMEOUT)
+        .timeout(Duration::from_secs(60))
         .await
     {
         Some(response) => {
