@@ -203,9 +203,9 @@ async fn not_signed_up(
     let mut emb = CreateEmbed::xdefault();
     emb.title(&training.title);
     if can_join {
-        emb.description("❌ You are not yet signed up");
+        emb.description("❌ You are not yet signed up\n**Feel free to dismiss this message**");
     } else {
-        emb.description("⚠ You do not have the required tier to join");
+        emb.description("⚠ You do not have the required tier to join\n**Feel free to dismiss this message**");
     }
     let (a, b, c) = embeds::field_training_date(&training);
     emb.field(a, b, c);
@@ -239,6 +239,7 @@ async fn not_signed_up(
         false,
         20,
     );
+    emb.footer(|f| f.text("Feel free to dismiss this message"));
 
     let mut join_button = Buttons::Join.button();
     if !can_join {
@@ -380,7 +381,7 @@ async fn edit_signup(
     base_emb.title(&training.title);
     let (a, b, c) = embeds::field_training_date(&training);
     base_emb.field(a, b, c);
-    base_emb.description("✅ You are signed up");
+    base_emb.description("✅ You are signed up\n**Feel free to dismiss this message**");
 
     let mut msg = mci.get_interaction_response(ctx).await?;
 
