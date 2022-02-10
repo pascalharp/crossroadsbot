@@ -86,14 +86,14 @@ pub fn overview_register_list_action_row() -> CreateActionRow {
     let mut ar = CreateActionRow::default();
 
     let mut b = CreateButton::default();
-    b.style(ButtonStyle::Primary);
+    b.style(ButtonStyle::Secondary);
     b.custom_id(OverviewMessageInteraction::List);
     b.label(COMPONENT_LABEL_LIST);
     b.emoji(ReactionType::from(DOCUMENT_EMOJI));
     ar.add_button(b);
 
     let mut b = CreateButton::default();
-    b.style(ButtonStyle::Primary);
+    b.style(ButtonStyle::Secondary);
     b.custom_id(OverviewMessageInteraction::Register);
     b.label(COMPONENT_LABEL_REGISTER);
     b.emoji(ReactionType::from(MEMO_EMOJI));
