@@ -286,15 +286,12 @@ To **sign up**, **sign out** or to **edit** your sign-up select the training fro
                             1 => details.push_str("\n`     Boss    `   "),
                             _ => details.push_str("\n`  Boss Pool  `   "),
                         }
-                        let mut bosses_str: Vec<String> = Vec::with_capacity(t.bosses.len());
-                        for b in &t.bosses {
-                            match &b.url {
-                                Some(url) => bosses_str.push(format!("[{}]({})", b.name, url)),
-                                None => bosses_str.push(b.name.to_string())
-                            }
-                        }
-                        let bosses_str = bosses_str.join(", ");
-                        details.push_str(&bosses_str);
+                        let boss_emojis = t.bosses
+                            .iter()
+                            .map(|b| Mention::from(EmojiId::from(b.emoji as u64)).to_string())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        details.push_str(&boss_emojis);
 
                         e.field(
                             format!(
