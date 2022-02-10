@@ -205,7 +205,9 @@ async fn not_signed_up(
     if can_join {
         emb.description("❌ You are not yet signed up\n**Feel free to dismiss this message**");
     } else {
-        emb.description("⚠ You do not have the required tier to join\n**Feel free to dismiss this message**");
+        emb.description(
+            "⚠ You do not have the required tier to join\n**Feel free to dismiss this message**",
+        );
     }
     let (a, b, c) = embeds::field_training_date(&training);
     emb.field(a, b, c);
