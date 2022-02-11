@@ -57,7 +57,7 @@ async fn load_guild_id(ctx: &Context) -> Result<GuildId> {
     Ok(guild_id)
 }
 
-fn title_sort_value(t: &db::Training) -> u64 {
+pub(crate) fn title_sort_value(t: &db::Training) -> u64 {
     if t.title.contains("Beginner") {
         return 10;
     }

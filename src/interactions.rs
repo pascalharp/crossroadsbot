@@ -5,6 +5,7 @@ use serenity::{model::interactions::message_component::MessageComponentInteracti
 mod list_signups;
 mod register_info;
 mod select_training;
+mod manage_sign_up;
 
 async fn button_general_interaction(
     ctx: &Context,
@@ -19,6 +20,9 @@ async fn button_general_interaction(
             }
             OverviewMessageInteraction::TrainingSelect => {
                 select_training::interaction(ctx, mci, trace).await
+            }
+            OverviewMessageInteraction::ManageSignups => {
+                manage_sign_up::interaction(ctx, mci, trace).await
             }
         }
     })

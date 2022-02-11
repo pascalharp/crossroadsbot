@@ -5,6 +5,7 @@ use serenity::model::prelude::*;
 
 const COMPONENT_LABEL_LIST: &str = "LIST SIGNUPS";
 const COMPONENT_LABEL_REGISTER: &str = "REGISTER INFORMATION";
+const COMPONENT_MANAGE_SIGNUPS: &str = "SIGN UP / SIGN OUT / EDIT SIGN-UP";
 const DOCUMENT_EMOJI: char = '🧾';
 const MEMO_EMOJI: char = '📝';
 
@@ -50,6 +51,7 @@ pub enum OverviewMessageInteraction {
     List,
     Register,
     TrainingSelect,
+    ManageSignups,
 }
 
 impl std::str::FromStr for OverviewMessageInteraction {
@@ -67,6 +69,7 @@ impl std::str::FromStr for OverviewMessageInteraction {
             "list" => Ok(Self::List),
             "register" => Ok(Self::Register),
             "trainingselect" => Ok(Self::TrainingSelect),
+            "managesignups" => Ok(Self::ManageSignups),
             _ => Err(GlobalInteractionParseError {}),
         }
     }
@@ -78,6 +81,7 @@ impl std::fmt::Display for OverviewMessageInteraction {
             Self::List => write!(f, "overview_list"),
             Self::Register => write!(f, "overview_register"),
             Self::TrainingSelect => write!(f, "overview_trainingselect"),
+            Self::ManageSignups => write!(f, "overview_managesignups"),
         }
     }
 }
@@ -96,6 +100,13 @@ pub fn overview_register_list_action_row() -> CreateActionRow {
     b.style(ButtonStyle::Secondary);
     b.custom_id(OverviewMessageInteraction::Register);
     b.label(COMPONENT_LABEL_REGISTER);
+    b.emoji(ReactionType::from(MEMO_EMOJI));
+    ar.add_button(b);
+
+    let mut b = CreateButton::default();
+    b.style(ButtonStyle::Primary);
+    b.custom_id(OverviewMessageInteraction::ManageSignups);
+    b.label(COMPONENT_MANAGE_SIGNUPS);
     b.emoji(ReactionType::from(MEMO_EMOJI));
     ar.add_button(b);
 
