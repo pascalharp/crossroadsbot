@@ -1,12 +1,12 @@
 use crate::db::schema::{
-    config, roles, signup_board_channels, signup_roles, signups, tier_mappings, tiers,
-    training_roles, trainings, users,
+    config, roles, signup_roles, signups, tier_mappings, tiers, training_boss_mappings,
+    training_bosses, training_roles, trainings, users,
 };
 use diesel_derive_enum::DbEnum;
 use serde::Serialize;
 use std::{fmt, str};
 
-use chrono::naive::{NaiveDate, NaiveDateTime};
+use chrono::naive::NaiveDateTime;
 
 #[derive(Identifiable, Queryable, PartialEq, Debug, Serialize)]
 #[table_name = "users"]
@@ -84,7 +84,7 @@ impl str::FromStr for TrainingState {
     }
 }
 
-#[derive(Identifiable, Queryable, Associations, PartialEq, Debug, Serialize)]
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug, Serialize, Clone)]
 #[belongs_to(Tier)]
 #[table_name = "trainings"]
 pub struct Training {
@@ -194,10 +194,32 @@ pub struct Config {
     pub value: String,
 }
 
-#[derive(Identifiable, Queryable, Insertable, Debug)]
-#[table_name = "signup_board_channels"]
-#[primary_key(day)]
-pub struct SignupBoardChannel {
-    pub day: NaiveDate,
-    pub channel_id: i64,
+#[derive(Identifiable, Queryable, Associations, Hash, PartialEq, Eq, Debug, Serialize)]
+#[table_name = "training_bosses"]
+pub struct TrainingBoss {
+    pub id: i32,
+    pub repr: String,
+    pub name: String,
+    pub wing: i32,
+    pub position: i32,
+    pub emoji: i64,
+    pub url: Option<String>,
+}
+
+#[derive(Insertable, Associations, Debug)]
+#[table_name = "training_bosses"]
+pub struct NewTrainingBoss {
+    pub repr: String,
+    pub name: String,
+    pub wing: i32,
+    pub position: i32,
+    pub emoji: i64,
+    pub url: Option<String>,
+}
+
+#[derive(Insertable, Queryable, Associations, Debug, Hash, PartialEq, Eq)]
+#[table_name = "training_boss_mappings"]
+pub struct TrainingBossMapping {
+    pub training_id: i32,
+    pub training_boss_id: i32,
 }

@@ -1,8 +1,8 @@
 [package]
 name = "crossroadsbot"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["Narturio"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,13 +12,15 @@ diesel-derive-enum = { version = "1.1.1", features = ["postgres"] }
 diesel_migrations = { version = "1.4.0" }
 dotenv = { version = "0.15.0" }
 chrono = { version = "0.4" }
-serenity = { version = "0.10.9", features = ["framework", "cache", "standard_framework", "collector", "rustls_backend", "unstable_discord_api"] }
+serenity = { git = "https://github.com/serenity-rs/serenity", branch = "current", default-features = false, features = ["builder", "cache", "client", "gateway", "http", "model", "utils", "rustls_backend", "unstable_discord_api"] }
+serenity_tools = { git = "https://github.com/pascalharp/serenity_tools.git", branch = "main" }
 tokio = { version = "1.5.0", features = ["full"] }
 tracing = { version = "0.1" }
 tracing-subscriber = { version = "0.2" }
-dashmap = { version = "4.0.2" }
 regex = { version = "1.4.6" }
 serde = { version = "1.0.126" }
 serde_json = { version = "1.0" }
 csv = { version = "1.1" }
 itertools = { version = "0.10.1" }
+anyhow = { version = "1.0.52" }
+url = { version = "2.2.2" }

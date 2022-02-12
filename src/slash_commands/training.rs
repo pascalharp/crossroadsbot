@@ -1,26 +1,32 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, time::Duration};
 
+use super::helpers::*;
 use crate::{
-    components, data,
-    db::{self, TrainingState},
-    embeds::CrossroadsEmbeds,
-    log::*,
+    data,
+    db::{self, Tier, TrainingState},
+    embeds::{embed_add_roles, CrossroadsEmbeds},
+    logging::*,
     signup_board, status,
-    utils::DEFAULT_TIMEOUT,
 };
-use chrono::{NaiveDate, NaiveDateTime};
+use anyhow::{anyhow, bail, Context as ErrContext, Result};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use itertools::Itertools;
 use serde::Serialize;
-use serenity::model::interactions::{
-    application_command::{
-        ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
-        ApplicationCommandOptionType,
+use serenity::model::{
+    id::EmojiId,
+    interactions::{
+        application_command::{
+            ApplicationCommandInteraction, ApplicationCommandInteractionDataOption,
+            ApplicationCommandOptionType,
+        },
+        InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
     },
-    InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
 };
 use serenity::{
     builder::{CreateApplicationCommand, CreateEmbed},
     client::Context,
     futures::future,
+    futures::future::OptionFuture,
     http::AttachmentType,
     model::{
         guild::{Member, PartialGuild, Role},
@@ -28,16 +34,63 @@ use serenity::{
         misc::Mention,
     },
 };
+use serenity_tools::{
+    builder::{CreateActionRowExt, CreateEmbedExt},
+    collectors::MessageCollectorExt,
+    components::Button,
+    interactions::{ApplicationCommandInteractionExt, MessageComponentInteractionExt},
+};
 
 type MessageFlags = InteractionApplicationCommandCallbackDataFlags;
 
-pub const CMD_TRAINING: &str = "training";
+pub(super) const CMD_TRAINING: &str = "training";
+const CHECK_EMOJI: char = '✅';
 
 pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
     app.name(CMD_TRAINING);
     app.description("Manage trainings");
     app.default_permission(false);
+    app.create_option(|o| {
+        o.kind(ApplicationCommandOptionType::SubCommand);
+        o.name("add");
+        o.description("Add a new Training");
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("name");
+            o.description("The name of the training");
+            o.required(true)
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("day");
+            o.description("Day in UTC. Format: yyyy-mm-dd");
+            o.required(true)
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("time");
+            o.description("Time in UTC. Format: HH:MM:SS");
+            o.required(true)
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("roles");
+            o.description("The roles available for the training. Comma separated list of repr's. Example: dps,druid,qfb");
+            o.required(true)
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("bosses");
+            o.description("The bosses available for the training. Comma separated list of repr's. Example: vg,gorse,trio");
+            o.required(true)
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.name("tier");
+            o.description("The required tier for the training. If left empty training is open for everyone")
+        })
+    });
     app.create_option(|o| {
         o.kind(ApplicationCommandOptionType::SubCommand);
         o.name("set");
@@ -68,6 +121,19 @@ pub fn create() -> CreateApplicationCommand {
     });
     app.create_option(|o| {
         o.kind(ApplicationCommandOptionType::SubCommand);
+        o.name("list");
+        o.description("List all trainings of a day basic information");
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::String);
+            o.required(true);
+            o.name("day");
+            o.description(
+                "Select all trainings from that day. Format: yyyy-mm-dd. Comma separated list",
+            )
+        })
+    });
+    app.create_option(|o| {
+        o.kind(ApplicationCommandOptionType::SubCommand);
         o.name("download");
         o.description("Download one or multiple training(s)");
         o.create_sub_option(|o| {
@@ -90,30 +156,51 @@ pub fn create() -> CreateApplicationCommand {
             o.add_string_choice("csv", "csv")
         })
     });
+    app.create_option(|o| {
+        o.kind(ApplicationCommandOptionType::SubCommand);
+        o.name("info");
+        o.description("Show detailed information about a training");
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::Integer);
+            o.required(true);
+            o.name("id");
+            o.description("The id of the training");
+            o.min_int_value(0)
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::Boolean);
+            o.name("public");
+            o.description("Whether to post this public or not. Default: false")
+        })
+    });
     app
 }
 
 pub async fn handle(ctx: &Context, aci: &ApplicationCommandInteraction) {
-    log_slash(ctx, aci, || async {
+    log_discord(ctx, aci, |trace| async move {
+        trace.step("Parsing command");
         if let Some(sub) = aci.data.options.get(0) {
             match sub.name.as_ref() {
-                "set" => set(ctx, aci, sub).await,
-                "download" => download(ctx, aci, sub).await,
-                _ => Err(LogError::new_slash("Not yet handled", aci.clone())),
+                "add" => add(ctx, aci, sub, trace).await,
+                "set" => set(ctx, aci, sub, trace).await,
+                "download" => download(ctx, aci, sub, trace).await,
+                "info" => info(ctx, aci, sub, trace).await,
+                "list" => list(ctx, aci, sub, trace).await,
+                _ => bail!("{} not yet available", sub.name),
             }
         } else {
-            Err(LogError::new_slash("Invalid command", aci.clone()))
+            bail!("Invalid command")
         }
     })
     .await;
 }
 
-async fn trainings_from_days(ctx: &Context, value: &str) -> LogResult<Vec<db::Training>> {
+async fn trainings_from_days(ctx: &Context, value: &str) -> Result<Vec<db::Training>> {
     let days: Vec<NaiveDate> = value
         .split(',')
         .map(|s| s.parse())
         .collect::<Result<Vec<_>, _>>()
-        .log_only()?;
+        .context("Could not parse date")?;
 
     let trainings_fut = days
         .into_iter()
@@ -121,33 +208,226 @@ async fn trainings_from_days(ctx: &Context, value: &str) -> LogResult<Vec<db::Tr
         .collect::<Vec<_>>();
 
     Ok(future::try_join_all(trainings_fut)
-        .await
-        .log_only()?
+        .await?
         .into_iter()
         .flatten()
         .collect::<Vec<_>>())
 }
 
-async fn trainings_from_ids(ctx: &Context, value: &str) -> LogResult<Vec<db::Training>> {
+async fn trainings_from_ids(ctx: &Context, value: &str) -> Result<Vec<db::Training>> {
     let i: Vec<i32> = value
         .split(',')
         .map(|s| s.parse())
-        .collect::<Result<Vec<_>, _>>()
-        .log_only()?;
+        .collect::<Result<Vec<_>, _>>()?;
 
     let trainings_fut = i
         .into_iter()
         .map(|i| db::Training::by_id(ctx, i))
         .collect::<Vec<_>>();
 
-    Ok(future::try_join_all(trainings_fut).await.log_only()?)
+    Ok(future::try_join_all(trainings_fut)
+        .await
+        .context("Training id does not exist")?)
+}
+
+async fn add(
+    ctx: &Context,
+    aci: &ApplicationCommandInteraction,
+    option: &ApplicationCommandInteractionDataOption,
+    trace: LogTrace,
+) -> Result<()> {
+    let cmds = command_map(option);
+
+    trace.step("Parsing basic training data");
+
+    let name = cmds
+        .get("name")
+        .and_then(|n| n.as_str())
+        .ok_or(anyhow!("name not set"))?;
+
+    let day: NaiveDate = cmds
+        .get("day")
+        .and_then(|n| n.as_str())
+        .ok_or(anyhow!("day not set"))?
+        .parse()
+        .context("Could not parse date")
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+        .await?;
+
+    let time: NaiveTime = cmds
+        .get("time")
+        .and_then(|n| n.as_str())
+        .ok_or(anyhow!("time not set"))?
+        .parse()
+        .context("Could not parse time")
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+        .await?;
+
+    let datetime: NaiveDateTime = day.and_time(time);
+
+    let mut emb = CreateEmbed::xdefault();
+    emb.title("Creating a new training");
+    emb.field("Name", name, false);
+    emb.field("Date/Time", format!("<t:{}>", datetime.timestamp()), false);
+
+    let mut emb_loading_roles = emb.clone();
+    emb_loading_roles.field("Roles", "Loading...", false);
+    aci.create_interaction_response(ctx, |r| {
+        r.kind(InteractionResponseType::ChannelMessageWithSource);
+        r.interaction_response_data(|d| {
+            d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL);
+            d.add_embed(emb_loading_roles)
+        })
+    })
+    .await?;
+
+    let msg = aci.get_interaction_response(ctx).await?;
+
+    trace.step("Loading training roles");
+
+    let roles_str: Vec<&str> = cmds
+        .get("roles")
+        .and_then(|n| n.as_str())
+        .ok_or(anyhow!("roles not set"))?
+        .split(',')
+        .into_iter()
+        .map(|s| s.trim())
+        .collect();
+
+    let mut roles: Vec<db::Role> = Vec::with_capacity(roles_str.len());
+    for r in roles_str {
+        let nr = db::Role::by_repr(ctx, r.to_string())
+            .await
+            .with_context(|| format!("Failed to load role: {}", r))
+            .map_err_reply(|what| aci.edit_quick_error(ctx, what))
+            .await?;
+        roles.push(nr);
+    }
+
+    embed_add_roles(&mut emb, &roles, true, false);
+
+    let mut emb_loading_bosses = emb.clone();
+    emb_loading_bosses.field("Bosses", "Loading...", false);
+    aci.edit_original_interaction_response(ctx, |d| d.add_embed(emb_loading_bosses))
+        .await?;
+
+    trace.step("Loading training bosses");
+
+    let bosses_str: Vec<&str> = cmds
+        .get("bosses")
+        .and_then(|n| n.as_str())
+        .ok_or(anyhow!("bosses not set"))?
+        .split(',')
+        .into_iter()
+        .map(|s| s.trim())
+        .collect();
+
+    let mut bosses: Vec<db::TrainingBoss> = Vec::with_capacity(bosses_str.len());
+    for b in bosses_str {
+        let nb = db::TrainingBoss::by_repr(ctx, b.to_string())
+            .await
+            .with_context(|| format!("Failed to load boss {}", b))
+            .map_err_reply(|what| aci.edit_quick_error(ctx, what))
+            .await?;
+        bosses.push(nb);
+    }
+
+    emb.fields_chunked_fmt(&bosses, |b| b.name.clone(), "Boss Pool", false, 10);
+
+    let mut emb_loading_tier = emb.clone();
+    emb_loading_tier.field("Tier", "Loading...", false);
+    aci.edit_original_interaction_response(ctx, |d| d.add_embed(emb_loading_tier))
+        .await?;
+
+    trace.step("Loading tier");
+    let tier_fut: OptionFuture<_> = cmds
+        .get("tier")
+        .and_then(|v| v.as_str())
+        .map(|t| Tier::by_name(ctx, t.to_owned()))
+        .into();
+
+    let tier = tier_fut
+        .await
+        .transpose()
+        .context("Failed to load tier")
+        .map_err_reply(|what| aci.edit_quick_error(ctx, what))
+        .await?;
+
+    if let Some(t) = &tier {
+        emb.field("Tier", &t.name, false);
+    } else {
+        emb.field("Tier", "Open for everyone", false);
+    }
+    aci.edit_original_interaction_response(ctx, |d| {
+        d.add_embed(emb.clone());
+        d.components(|c| c.create_action_row(|a| a.confirm_button().abort_button()))
+    })
+    .await?;
+
+    trace.step("Waiting for confirm");
+
+    if let Some(react) = msg
+        .await_confirm_abort_interaction(ctx)
+        .timeout(Duration::from_secs(60))
+        .await
+    {
+        react.defer(ctx).await?;
+        match react.parse_button()? {
+            Button::Confirm => {
+                trace.step("Confirmed. Saving training");
+                let training =
+                    db::Training::insert(ctx, name.to_string(), datetime, tier.map(|t| t.id))
+                        .await
+                        .map_err_reply(|what| aci.edit_quick_error(ctx, what))
+                        .await?;
+
+                trace.step("Saving roles");
+                for r in roles {
+                    training
+                        .add_role(ctx, r.id)
+                        .await
+                        .map_err_reply(|what| aci.edit_quick_error(ctx, what))
+                        .await?;
+                }
+
+                trace.step("Saving training bosses");
+                for tb in bosses {
+                    training
+                        .add_training_boss(ctx, tb.id)
+                        .await
+                        .map_err_reply(|what| aci.edit_quick_error(ctx, what))
+                        .await?;
+                }
+
+                emb.field("Training ID", training.id, false);
+                emb.footer(|f| f.text(format!("Training added {}", CHECK_EMOJI)));
+                aci.edit_original_interaction_response(ctx, |d| {
+                    d.add_embed(emb);
+                    d.components(|c| c)
+                })
+                .await?;
+            }
+            Button::Abort => {
+                trace.step("Aborted");
+                aci.edit_quick_info(ctx, "Aborted").await?;
+            }
+            _ => bail!("Unexpected interaction"),
+        }
+    } else {
+        Err(anyhow!("Timed out"))
+            .map_err_reply(|what| aci.edit_quick_info(ctx, what))
+            .await?;
+    }
+
+    Ok(())
 }
 
 async fn set(
     ctx: &Context,
     aci: &ApplicationCommandInteraction,
     option: &ApplicationCommandInteractionDataOption,
-) -> LogResult<()> {
+    trace: LogTrace,
+) -> Result<()> {
     // Get subcommands
     let cmds = option
         .options
@@ -156,7 +436,7 @@ async fn set(
         .collect::<HashMap<_, _>>();
 
     // required and pre defined so fine to unwrap
-    let state: TrainingState = cmds
+    let state = cmds
         .get("state")
         .unwrap()
         .value
@@ -164,8 +444,8 @@ async fn set(
         .unwrap()
         .as_str()
         .unwrap()
-        .parse()
-        .log_slash_reply(aci)?;
+        .parse::<TrainingState>()
+        .unwrap();
 
     // Although loading full trainings is a bit overhead
     // it also guarantees they exist
@@ -176,7 +456,12 @@ async fn set(
         .and_then(|d| d.value.as_ref())
         .and_then(|d| d.as_str())
     {
-        trainings.append(&mut trainings_from_days(ctx, days).await.log_slash_reply(aci)?);
+        trainings.append(
+            &mut trainings_from_days(ctx, days)
+                .await
+                .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+                .await?,
+        );
     }
 
     if let Some(ids) = cmds
@@ -184,15 +469,21 @@ async fn set(
         .and_then(|d| d.value.as_ref())
         .and_then(|d| d.as_str())
     {
-        trainings.append(&mut trainings_from_ids(ctx, ids).await.log_slash_reply(aci)?);
+        trainings.append(
+            &mut trainings_from_ids(ctx, ids)
+                .await
+                .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+                .await?,
+        );
     }
 
     if trainings.is_empty() {
-        return Err(LogError::new_slash(
-            "Select at least one training",
-            aci.clone(),
-        ));
+        Err(anyhow!("Select at least one training"))
+            .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+            .await?;
     }
+
+    trace.step("Traning(s) loaded");
 
     // filter out multiple
     trainings.sort_by_key(|t| t.id);
@@ -215,20 +506,22 @@ async fn set(
         r.interaction_response_data(|d| {
             d.flags(MessageFlags::EPHEMERAL);
             d.add_embed(te.clone());
-            d.components(|c| c.add_action_row(components::confirm_abort_action_row(false)))
+            d.components(|c| c.create_action_row(|ar| ar.confirm_button().abort_button()))
         })
     })
     .await?;
 
+    trace.step("Waiting for confirmation");
     let msg = aci.get_interaction_response(ctx).await?;
     match msg
         .await_component_interaction(ctx)
-        .timeout(DEFAULT_TIMEOUT)
+        .timeout(Duration::from_secs(60))
         .await
     {
         Some(response) => {
-            match components::resolve_button_response(&response) {
-                components::ButtonResponse::Confirm => {
+            match response.parse_button() {
+                Ok(Button::Confirm) => {
+                    trace.step("Confirmed");
                     response
                         .create_interaction_response(ctx, |r| {
                             r.kind(InteractionResponseType::UpdateMessage);
@@ -239,65 +532,41 @@ async fn set(
                         })
                         .await?;
 
+                    trace.step("Updating traning(s)");
                     let update_futs: Vec<_> = trainings
                         .into_iter()
                         .map(|t| t.set_state(ctx, state.clone()))
                         .collect();
-                    let trainings = future::try_join_all(update_futs).await?;
+                    let _ = future::try_join_all(update_futs).await?;
 
                     response
-                        .create_followup_message(ctx, |m| {
-                            m.flags(MessageFlags::EPHEMERAL);
-                            m.add_embed(te.clone());
+                        .edit_original_interaction_response(ctx, |m| {
                             m.create_embed(|e| {
                                 e.title("Trainings updated");
-                                e.description("Updating Signup Board")
+                                e.description("Updating Signup Board and status ...")
                             })
                         })
                         .await?;
 
-                    let mut se = CreateEmbed::xdefault();
-                    se.title("Signup board updates");
-                    for id in trainings.iter().map(|t| t.id) {
-                        let res = signup_board::SignupBoard::update_training(ctx, id).await;
-                        match res {
-                            Ok(some) => match some {
-                                Some(msg) => {
-                                    se.field(
-                                        format!("Training id: {}", id),
-                                        format!("[Message on Board]({})", msg.link()),
-                                        true,
-                                    );
-                                }
-                                None => {
-                                    se.field(
-                                        format!("Training id: {}", id),
-                                        "_Message removed_".to_string(),
-                                        true,
-                                    );
-                                }
-                            },
-                            Err(err) => {
-                                se.field(
-                                    format!("Training id: {}", id),
-                                    format!("_Error_: {}", err),
-                                    true,
-                                );
-                            }
-                        }
-                    }
-
-                    response
-                        .create_followup_message(ctx, |m| {
-                            m.flags(MessageFlags::EPHEMERAL);
-                            m.add_embed(te);
-                            m.add_embed(se)
-                        })
+                    trace.step("Updating signup board");
+                    signup_board::SignupBoard::get(ctx)
+                        .await
+                        .read()
+                        .await
+                        .update_overview(ctx, trace.clone())
                         .await?;
 
+                    trace.step("Updating status");
                     status::update_status(ctx).await;
+
+                    response
+                        .edit_original_interaction_response(ctx, |m| {
+                            m.add_embed(CreateEmbed::info_box("Everything updated"))
+                        })
+                        .await?;
                 }
-                components::ButtonResponse::Abort => {
+                Ok(Button::Abort) => {
+                    trace.step("Aborted");
                     response
                         .create_interaction_response(ctx, |r| {
                             r.kind(InteractionResponseType::UpdateMessage);
@@ -311,17 +580,13 @@ async fn set(
                         .await?;
                 }
                 // Should not be possible
-                _ => unimplemented!(),
+                _ => bail!("Unexpected interaction"),
             }
         }
         None => {
-            aci.edit_followup_message(ctx, msg.id, |m| {
-                m.flags(MessageFlags::EPHEMERAL);
-                m.content("Timed out");
-                m.create_embed(|e| e);
-                m.components(|c| c)
-            })
-            .await?;
+            Err(anyhow!("Timed out"))
+                .map_err_reply(|w| aci.edit_followup_quick_info(ctx, &msg, w))
+                .await?;
         }
     };
 
@@ -422,18 +687,16 @@ async fn download(
     ctx: &Context,
     aci: &ApplicationCommandInteraction,
     option: &ApplicationCommandInteractionDataOption,
-) -> LogResult<()> {
+    trace: LogTrace,
+) -> Result<()> {
     let guild_id = match ctx.data.read().await.get::<data::ConfigValuesData>() {
         Some(conf) => conf.main_guild_id,
         None => {
-            return LogError::new_slash("Guild configuration could not be loaded", aci.clone())
-                .into()
+            bail!("Guild configuration could not be loaded");
         }
     };
 
-    let guild = PartialGuild::get(ctx, guild_id)
-        .await
-        .log_slash_reply(aci)?;
+    let guild = PartialGuild::get(ctx, guild_id).await?;
 
     // Get subcommands
     let cmds = option
@@ -446,29 +709,41 @@ async fn download(
     // it also guarantees they exist
     let mut trainings: Vec<db::Training> = Vec::new();
 
+    trace.step("Loading training's by date");
     if let Some(days) = cmds
         .get("day")
         .and_then(|d| d.value.as_ref())
         .and_then(|d| d.as_str())
     {
-        trainings.append(&mut trainings_from_days(ctx, days).await.log_slash_reply(aci)?);
+        trainings.append(
+            &mut trainings_from_days(ctx, days)
+                .await
+                .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+                .await?,
+        );
     }
 
+    trace.step("Loading training's by id");
     if let Some(ids) = cmds
         .get("ids")
         .and_then(|d| d.value.as_ref())
         .and_then(|d| d.as_str())
     {
-        trainings.append(&mut trainings_from_ids(ctx, ids).await.log_slash_reply(aci)?);
+        trainings.append(
+            &mut trainings_from_ids(ctx, ids)
+                .await
+                .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+                .await?,
+        );
     }
 
     if trainings.is_empty() {
-        return Err(LogError::new_slash(
-            "Select at least one training",
-            aci.clone(),
-        ));
+        Err(anyhow!("Select at least one training"))
+            .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+            .await?;
     }
 
+    trace.step("sort training's");
     // filter out multiple
     trainings.sort_by_key(|t| t.id);
     trainings.dedup_by_key(|t| t.id);
@@ -489,14 +764,8 @@ async fn download(
         DonwloadFormat::Csv // Default
     };
 
-    aci.create_interaction_response(ctx, |r| {
-        r.kind(InteractionResponseType::ChannelMessageWithSource);
-        r.interaction_response_data(|d| {
-            d.flags(MessageFlags::EPHEMERAL);
-            d.content("Loading...")
-        })
-    })
-    .await?;
+    aci.create_quick_info(ctx, "Parsing training data...", true)
+        .await?;
 
     let msg = aci.get_interaction_response(ctx).await?;
 
@@ -504,11 +773,11 @@ async fn download(
     let mut tds: Vec<TrainingData> = Vec::with_capacity(trainings.len());
 
     for t in trainings {
-        let signups = t.get_signups(ctx).await.log_slash_reply(aci)?;
+        let signups = t.get_signups(ctx).await?;
         let mut sds: Vec<SignupData> = Vec::with_capacity(signups.len());
 
         for s in signups {
-            let user = s.get_user(ctx).await.log_slash_reply(aci)?;
+            let user = s.get_user(ctx).await?;
 
             let member = match guild.member(ctx, user.discord_id()).await {
                 Ok(du) => du,
@@ -523,8 +792,7 @@ async fn download(
 
             let roles = s
                 .get_roles(ctx)
-                .await
-                .log_slash_reply(aci)?
+                .await?
                 .into_iter()
                 .map(|r| r.repr)
                 .collect::<Vec<_>>();
@@ -537,7 +805,7 @@ async fn download(
             });
         }
 
-        let available_roles = t.all_roles(ctx).await.log_slash_reply(aci)?;
+        let available_roles = t.all_roles(ctx).await?;
 
         tds.push(TrainingData {
             training: t,
@@ -546,14 +814,13 @@ async fn download(
         });
     }
 
-    let dbtiers = db::Tier::all(ctx).await.log_slash_reply(aci)?;
+    let dbtiers = db::Tier::all(ctx).await?;
     let mut tiers: Vec<TierData> = Vec::with_capacity(dbtiers.len());
 
     for t in dbtiers {
         let dr = t
             .get_discord_roles(ctx)
-            .await
-            .log_slash_reply(aci)?
+            .await?
             .iter()
             .map(|t| guild.roles.get(&RoleId::from(t.discord_role_id as u64)))
             .collect::<Vec<_>>();
@@ -590,15 +857,13 @@ async fn download(
             let csv_data = data.to_csv();
 
             for d in csv_data {
-                wrt.serialize(&d).log_slash_reply(aci)?;
+                wrt.serialize(&d)?;
             }
 
-            String::from_utf8(wrt.into_inner().log_slash_reply(aci)?)
-                .log_slash_reply(aci)?
-                .into_bytes()
+            String::from_utf8(wrt.into_inner()?)?.into_bytes()
         }
         DonwloadFormat::Json => {
-            let json = serde_json::to_string_pretty(&data).log_slash_reply(aci)?;
+            let json = serde_json::to_string_pretty(&data)?;
             json.as_bytes().to_vec()
         }
     };
@@ -655,8 +920,155 @@ async fn download(
         })
         .await?;
 
-    aci.edit_original_interaction_response(ctx, |r| r.content(format!("[Done]({})", msg.link())))
+    aci.edit_quick_success(ctx, format!("[Done]({})", msg.link()))
         .await?;
 
+    Ok(())
+}
+
+async fn info(
+    ctx: &Context,
+    aci: &ApplicationCommandInteraction,
+    option: &ApplicationCommandInteractionDataOption,
+    trace: LogTrace,
+) -> Result<()> {
+    let cmds = command_map(option);
+
+    let id = cmds
+        .get("id")
+        .and_then(|v| v.as_i64())
+        .ok_or(anyhow!("Expected id field"))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+        .await?;
+
+    let public = cmds
+        .get("public")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    trace.step("Loading training information");
+
+    let training = db::Training::by_id(ctx, id as i32)
+        .await
+        .with_context(|| format!("Failed to load training with id: {}", id))
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+        .await?;
+
+    let bosses = training.all_training_bosses(ctx).await?;
+
+    let roles = training.all_roles(ctx).await?;
+
+    // HashMap with Role id as key and value to keep count
+    let mut roles_count = roles.iter().map(|r| (r.id, 0)).collect::<HashMap<_, _>>();
+
+    trace.step("Loading signups to calculate role count");
+    let signups = training.get_signups(ctx).await?;
+
+    future::try_join_all(signups.iter().map(|s| s.get_roles(ctx)))
+        .await?
+        .into_iter()
+        .flatten()
+        .for_each(|sr| {
+            roles_count.entry(sr.id).and_modify(|e| *e += 1);
+        });
+
+    trace.step("Replying to user");
+    aci.create_interaction_response(ctx, |r| {
+        r.kind(InteractionResponseType::ChannelMessageWithSource);
+        r.interaction_response_data(|d| {
+            if !public {
+                d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL);
+            }
+            let mut emb = CreateEmbed::xdefault();
+            emb.field("Training", training.title, false);
+            emb.field(
+                "Date/Time",
+                format!("<t:{}>", training.date.timestamp()),
+                false,
+            );
+
+            if !bosses.is_empty() {
+                emb.fields_chunked_fmt(
+                    &bosses,
+                    |b| {
+                        let boss_link = match &b.url {
+                            Some(l) => format!("[{}]({})", b.name, l),
+                            None => b.name.to_string(),
+                        };
+                        format!(
+                            "{} | {}",
+                            Mention::from(EmojiId::from(b.emoji as u64)),
+                            boss_link
+                        )
+                    },
+                    "Boss Pool",
+                    false,
+                    20,
+                );
+            }
+            emb.fields_chunked_fmt(
+                &roles,
+                |r| {
+                    format!(
+                        "{} | {} : {}",
+                        Mention::from(EmojiId::from(r.emoji as u64)),
+                        r.title,
+                        roles_count.get(&r.id).unwrap()
+                    )
+                },
+                "Sign-up Count",
+                true,
+                20,
+            );
+            d.add_embed(emb)
+        })
+    })
+    .await?;
+
+    Ok(())
+}
+
+async fn list(
+    ctx: &Context,
+    aci: &ApplicationCommandInteraction,
+    option: &ApplicationCommandInteractionDataOption,
+    trace: LogTrace,
+) -> Result<()> {
+    let cmds = command_map(option);
+
+    trace.step("Loading training's");
+    let mut trainings = trainings_from_days(ctx, cmds.get("day").unwrap().as_str().unwrap())
+        .await
+        .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
+        .await?;
+    trainings.sort_by_key(|t| t.date);
+
+    let mut embeds: Vec<CreateEmbed> = Vec::new();
+    let mut data_grouped = Vec::new();
+    for (key, group) in &trainings.into_iter().group_by(|a| a.date.date()) {
+        data_grouped.push((key, group.collect::<Vec<_>>()));
+    }
+    for (d, ts) in data_grouped {
+        let mut emb = CreateEmbed::xdefault();
+        emb.title(d);
+        for t in ts {
+            emb.field(
+                &t.title,
+                format!("<t:{}>\nId: {}", t.date.timestamp(), t.id),
+                true,
+            );
+        }
+        embeds.push(emb);
+    }
+
+    trace.step("Replying");
+    aci.create_interaction_response(ctx, |r| {
+        r.kind(InteractionResponseType::ChannelMessageWithSource);
+        r.interaction_response_data(|d| {
+            d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL);
+            d.embeds(embeds)
+        })
+    })
+    .await?;
     Ok(())
 }

@@ -10,10 +10,14 @@ use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::result::QueryResult;
 use serenity::client::Context;
-use serenity::model::id::{ChannelId, MessageId, UserId};
+use serenity::model::{
+    id::{EmojiId, MessageId, UserId},
+    misc::Mention,
+};
 use std::env;
 use std::sync::Arc;
 use tokio::task;
+use url::Url;
 
 pub mod models;
 pub mod schema;
@@ -104,6 +108,20 @@ async fn insert_training_role(ctx: &Context, tr: NewTrainingRole) -> QueryResult
     .unwrap()
 }
 
+async fn insert_training_boss_mapping(
+    ctx: &Context,
+    tbm: TrainingBossMapping,
+) -> QueryResult<TrainingBossMapping> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        diesel::insert_into(training_boss_mappings::table)
+            .values(&tbm)
+            .get_result(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn insert_signup(ctx: &Context, s: NewSignup) -> QueryResult<Signup> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
@@ -137,14 +155,11 @@ async fn insert_tier_mapping(ctx: &Context, tm: NewTierMapping) -> QueryResult<T
     .unwrap()
 }
 
-async fn insert_signup_board_channel(
-    ctx: &Context,
-    sbc: SignupBoardChannel,
-) -> QueryResult<SignupBoardChannel> {
+async fn insert_training_boss(ctx: &Context, tb: NewTrainingBoss) -> QueryResult<TrainingBoss> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
-        diesel::insert_into(signup_board_channels::table)
-            .values(sbc)
+        diesel::insert_into(training_bosses::table)
+            .values(tb)
             .get_result(&pool.conn())
     })
     .await
@@ -210,10 +225,10 @@ async fn delete_tier_mapping(
     .unwrap()
 }
 
-async fn delete_signup_board_channel(ctx: &Context, day: NaiveDate) -> QueryResult<usize> {
+async fn delete_training_boss_by_id(ctx: &Context, id: i32) -> QueryResult<usize> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
-        diesel::delete(signup_board_channels::table.find(day)).execute(&pool.conn())
+        diesel::delete(training_bosses::table.find(id)).execute(&pool.conn())
     })
     .await
     .unwrap()
@@ -308,6 +323,41 @@ async fn select_active_signups_trainings_by_user(
                     .or(trainings::state.eq(TrainingState::Started)),
             )
             .select((signups::all_columns, trainings::all_columns))
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_active_signups_by_user(ctx: &Context, user_id: i32) -> QueryResult<Vec<Signup>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = signups::table
+            .inner_join(users::table)
+            .inner_join(trainings::table);
+        join.filter(users::id.eq(user_id))
+            .filter(
+                trainings::state
+                    .eq(TrainingState::Open)
+                    .or(trainings::state.eq(TrainingState::Closed))
+                    .or(trainings::state.eq(TrainingState::Started)),
+            )
+            .select(signups::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_open_signups_by_user(ctx: &Context, user_id: i32) -> QueryResult<Vec<Signup>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = signups::table
+            .inner_join(users::table)
+            .inner_join(trainings::table);
+        join.filter(users::id.eq(user_id))
+            .filter(trainings::state.eq(TrainingState::Open))
+            .select(signups::all_columns)
             .load(&pool.conn())
     })
     .await
@@ -487,6 +537,23 @@ async fn select_tier_mappings_by_tier(ctx: &Context, id: i32) -> QueryResult<Vec
     .unwrap()
 }
 
+async fn select_tier_mappings_by_tier_and_discord_role(
+    ctx: &Context,
+    tier_id: i32,
+    discord_id: i64,
+) -> QueryResult<TierMapping> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        let join = tier_mappings::table.inner_join(tiers::table);
+        join.filter(tiers::id.eq(tier_id))
+            .filter(tier_mappings::discord_role_id.eq(discord_id))
+            .select(tier_mappings::all_columns)
+            .first(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
 async fn select_training_roles_by_training(
     ctx: &Context,
     id: i32,
@@ -595,14 +662,39 @@ async fn select_config_by_name(ctx: &Context, name: String) -> QueryResult<Confi
         .unwrap()
 }
 
-async fn select_signup_board_channel_by_date(
-    ctx: &Context,
-    day: NaiveDate,
-) -> QueryResult<SignupBoardChannel> {
+async fn select_all_training_bosses(ctx: &Context) -> QueryResult<Vec<TrainingBoss>> {
     let pool = DBPool::load(ctx).await;
-    task::spawn_blocking(move || signup_board_channels::table.find(day).first(&pool.conn()))
+    task::spawn_blocking(move || training_bosses::table.load(&pool.conn()))
         .await
         .unwrap()
+}
+
+async fn select_training_boss_by_repr(ctx: &Context, repr: String) -> QueryResult<TrainingBoss> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        training_bosses::table
+            .filter(training_bosses::repr.eq(repr))
+            .first(&pool.conn())
+    })
+    .await
+    .unwrap()
+}
+
+async fn select_training_bosses_by_training(
+    ctx: &Context,
+    id: i32,
+) -> QueryResult<Vec<TrainingBoss>> {
+    let pool = DBPool::load(ctx).await;
+    task::spawn_blocking(move || {
+        training_boss_mappings::table
+            .inner_join(trainings::table)
+            .inner_join(training_bosses::table)
+            .filter(trainings::id.eq(id))
+            .select(training_bosses::all_columns)
+            .load(&pool.conn())
+    })
+    .await
+    .unwrap()
 }
 
 // Count
@@ -743,8 +835,19 @@ impl User {
         select_joined_active_trainings_by_user(ctx, self.id).await
     }
 
-    pub async fn active_signups(&self, ctx: &Context) -> QueryResult<Vec<(Signup, Training)>> {
+    pub async fn active_signups_with_training(
+        &self,
+        ctx: &Context,
+    ) -> QueryResult<Vec<(Signup, Training)>> {
         select_active_signups_trainings_by_user(ctx, self.id).await
+    }
+
+    pub async fn active_signups(&self, ctx: &Context) -> QueryResult<Vec<Signup>> {
+        select_active_signups_by_user(ctx, self.id).await
+    }
+
+    pub async fn open_signups(&self, ctx: &Context) -> QueryResult<Vec<Signup>> {
+        select_open_signups_by_user(ctx, self.id).await
     }
 
     pub async fn all_signups(&self, ctx: &Context) -> QueryResult<Vec<Signup>> {
@@ -835,12 +938,29 @@ impl Training {
         insert_training_role(ctx, training_role).await
     }
 
+    pub async fn add_training_boss(
+        &self,
+        ctx: &Context,
+        training_boss_id: i32,
+    ) -> QueryResult<TrainingBossMapping> {
+        let mapping = TrainingBossMapping {
+            training_id: self.id,
+            training_boss_id,
+        };
+
+        insert_training_boss_mapping(ctx, mapping).await
+    }
+
     pub async fn get_training_roles(&self, ctx: &Context) -> QueryResult<Vec<TrainingRole>> {
         select_training_roles_by_training(ctx, self.id).await
     }
 
     pub async fn all_roles(&self, ctx: &Context) -> QueryResult<Vec<Role>> {
         select_roles_by_training(ctx, self.id).await
+    }
+
+    pub async fn all_training_bosses(&self, ctx: &Context) -> QueryResult<Vec<TrainingBoss>> {
+        select_training_bosses_by_training(ctx, self.id).await
     }
 
     pub async fn active_roles(&self, ctx: &Context) -> QueryResult<Vec<Role>> {
@@ -963,6 +1083,17 @@ impl Role {
     }
 }
 
+impl std::fmt::Display for Role {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} | {}",
+            Mention::from(EmojiId::from(self.emoji as u64)),
+            self.title
+        )
+    }
+}
+
 // --- Tier ---
 impl Tier {
     pub async fn insert(ctx: &Context, name: String) -> QueryResult<Tier> {
@@ -998,6 +1129,14 @@ impl Tier {
         select_tier_mappings_by_tier(ctx, self.id).await
     }
 
+    pub async fn get_tier_mapping_by_discord_role(
+        &self,
+        ctx: &Context,
+        role_id: u64,
+    ) -> QueryResult<TierMapping> {
+        select_tier_mappings_by_tier_and_discord_role(ctx, self.id, role_id as i64).await
+    }
+
     pub async fn get_trainings(&self, ctx: &Context) -> QueryResult<Vec<Training>> {
         select_trainings_by_tier(ctx, self.id).await
     }
@@ -1021,29 +1160,60 @@ impl Config {
     }
 }
 
-// --- SignupBoardChannel ---
-impl SignupBoardChannel {
+impl TrainingBoss {
     pub async fn insert(
         ctx: &Context,
-        day: NaiveDate,
-        channel_id: ChannelId,
-    ) -> QueryResult<SignupBoardChannel> {
-        let sbc = SignupBoardChannel {
-            day,
-            channel_id: channel_id.0 as i64,
+        name: String,
+        repr: String,
+        wing: i32,
+        position: i32,
+        emoji: EmojiId,
+        url: Option<Url>,
+    ) -> QueryResult<Self> {
+        let tb = NewTrainingBoss {
+            name,
+            repr,
+            wing,
+            position,
+            emoji: emoji.0 as i64,
+            url: url.map(|u| u.to_string()),
         };
-        insert_signup_board_channel(ctx, sbc).await
+
+        insert_training_boss(ctx, tb).await
     }
 
-    pub async fn by_day(ctx: &Context, day: NaiveDate) -> QueryResult<SignupBoardChannel> {
-        select_signup_board_channel_by_date(ctx, day).await
+    pub async fn all(ctx: &Context) -> QueryResult<Vec<Self>> {
+        select_all_training_bosses(ctx).await
     }
 
-    pub async fn delete(self, ctx: &Context) -> QueryResult<usize> {
-        delete_signup_board_channel(ctx, self.day).await
+    pub async fn by_repr(ctx: &Context, repr: String) -> QueryResult<Self> {
+        select_training_boss_by_repr(ctx, repr).await
     }
 
-    pub fn channel(&self) -> ChannelId {
-        ChannelId::from(self.channel_id as u64)
+    pub async fn delete(&self, ctx: &Context) -> QueryResult<usize> {
+        delete_training_boss_by_id(ctx, self.id).await
+    }
+}
+
+impl std::fmt::Display for TrainingBoss {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(url) = &self.url {
+            write!(
+                f,
+                "{} | {} | [{}]({})",
+                Mention::from(EmojiId::from(self.emoji as u64)),
+                self.repr,
+                self.name,
+                url
+            )
+        } else {
+            write!(
+                f,
+                "{} | {} | {}",
+                Mention::from(EmojiId::from(self.emoji as u64)),
+                self.repr,
+                self.name
+            )
+        }
     }
 }

@@ -1,18 +1,35 @@
-use crossroadsbot::{
-    commands, data::*, db, interactions, log::*, signup_board::*, slash_commands, status, tasks,
-    utils::DIZZY_EMOJI,
-};
-use dashmap::DashSet;
-use diesel::pg::PgConnection;
+#[macro_use]
+extern crate diesel;
+extern crate dotenv;
+extern crate serenity;
+
+mod data;
+mod db;
+mod embeds;
+mod interactions;
+mod logging;
+mod signup_board;
+mod slash_commands;
+mod status;
+mod tasks;
+
+use anyhow::bail;
+use data::*;
+use logging::{log_discord, LogInfo};
+//use crate::logging;
+//use crate::{
+//    data::*, db, interactions, logging::*, signup_board::*, slash_commands, status, tasks,
+//};
 use diesel::prelude::*;
+use diesel::{pg::PgConnection, result::Error::NotFound};
 use dotenv::dotenv;
 use serenity::{
     async_trait,
     client::{bridge::gateway::GatewayIntents, Client, EventHandler},
-    framework::standard::{macros::hook, DispatchError, StandardFramework},
     model::prelude::*,
     prelude::*,
 };
+use signup_board::SignupBoard;
 use std::{
     env,
     str::FromStr,
@@ -131,14 +148,13 @@ impl EventHandler for Handler {
     }
 
     async fn resume(&self, _: Context, _: ResumedEvent) {
+        let _ = &__arg1;
         info!("Resumed");
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        match &interaction {
-            Interaction::MessageComponent(mci) => {
-                interactions::button_interaction(&ctx, &mci).await
-            }
+        match interaction {
+            Interaction::MessageComponent(mci) => interactions::button_interaction(&ctx, mci).await,
             Interaction::ApplicationCommand(aci) => {
                 slash_commands::slash_command_interaction(&ctx, &aci).await
             }
@@ -168,34 +184,27 @@ impl EventHandler for Handler {
             return;
         }
 
-        log_automatic(&ctx, "left server", &user, || async {
-            // Load user if registered
-            let db_user = db::User::by_discord_id(&ctx, user.id).await?;
-            db_user.delete(&ctx).await?;
+        let ctx = &ctx;
+        let user_id = user.id;
+        let mut log_info = LogInfo::automatic("User left server");
+        log_info.add_user(user);
+
+        log_discord(ctx, log_info, |trace| async move {
+            trace.step("Loading user database info");
+            match db::User::by_discord_id(ctx, user_id).await {
+                Ok(db_user) => {
+                    trace.step("Deleting user from db");
+                    db_user.delete(ctx).await?;
+                }
+                Err(NotFound) => {
+                    trace.step("User not found in database");
+                    return Err(logging::InfoError::NotRegistered.into());
+                }
+                Err(e) => bail!(e),
+            };
             Ok(())
         })
         .await;
-    }
-}
-
-#[hook]
-async fn dispatch_error_hook(ctx: &Context, msg: &Message, error: DispatchError) {
-    match error {
-        DispatchError::NotEnoughArguments { min, given } => {
-            let s = format!("Need {} arguments, but only got {}.", min, given);
-            msg.reply(ctx, &s).await.ok();
-        }
-        DispatchError::TooManyArguments { max, given } => {
-            let s = format!("Max arguments allowed is {}, but got {}.", max, given);
-            msg.reply(ctx, &s).await.ok();
-        }
-        DispatchError::CheckFailed(..) => {
-            let s = "No permissions to use this command".to_string();
-            msg.reply(ctx, &s).await.ok();
-        }
-        _ => {
-            msg.react(ctx, DIZZY_EMOJI).await.ok();
-        }
     }
 }
 
@@ -253,23 +262,8 @@ async fn main() {
             .expect("Failed to parse squadmaker role id"),
     );
 
-    let framework = StandardFramework::new()
-        .configure(|c| {
-            c.prefix(GLOB_COMMAND_PREFIX);
-            c.no_dm_prefix(true)
-        })
-        .on_dispatch_error(dispatch_error_hook)
-        .help(&commands::HELP_CMD)
-        .group(&commands::SIGNUP_GROUP)
-        .group(&commands::TRAINING_GROUP)
-        .group(&commands::ROLE_GROUP)
-        .group(&commands::TIER_GROUP)
-        .group(&commands::CONFIG_GROUP);
-    //.group(&commands::MISC_GROUP);
-
     let mut client = Client::builder(token)
         .application_id(app_id)
-        .framework(framework)
         .event_handler(Handler {
             signup_board_loop_running: AtomicBool::new(false),
         })
@@ -279,7 +273,6 @@ async fn main() {
 
     {
         let mut data = client.data.write().await;
-        data.insert::<ConversationLock>(Arc::new(DashSet::new()));
         data.insert::<ConfigValuesData>(Arc::new(ConfigValues {
             main_guild_id,
             admin_role_id,
@@ -289,7 +282,6 @@ async fn main() {
         data.insert::<LogConfigData>(Arc::new(RwLock::new(LogConfig { log: None })));
         data.insert::<DBPoolData>(Arc::new(db::DBPool::new()));
         data.insert::<SignupBoardData>(Arc::new(RwLock::new(SignupBoard {
-            discord_category_id: None,
             overview_channel_id: None,
             overview_message_id: None,
         })));

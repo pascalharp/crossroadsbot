@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::FromStr};
+use std::str::FromStr;
 
 use serenity::{
     builder::{CreateApplicationCommand, CreateApplicationCommandPermissions},
@@ -12,13 +12,6 @@ use tracing::error;
 
 use crate::data::ConfigValues;
 
-/// The trait that every Slash Command should have
-/// to ease up configuration and parsing
-pub trait SlashCommand: FromStr + Display {
-    fn create() -> CreateApplicationCommand;
-    fn permission(&self, conf: &ConfigValues) -> (u64, ApplicationCommandPermissionType);
-}
-
 #[derive(Debug)]
 pub struct SlashCommandParseError(String);
 
@@ -30,23 +23,48 @@ impl std::fmt::Display for SlashCommandParseError {
 
 impl std::error::Error for SlashCommandParseError {}
 
+mod config;
+mod register;
 mod training;
+mod training_boss;
+mod training_role;
+mod training_tier;
 
 /// All slash commands
 #[derive(Debug)]
 pub enum AppCommands {
+    Register,
+    Unregister,
     Training,
+    TrainingBoss,
+    TrainingRole,
+    TrainingTier,
+    Config,
 }
 
 /// All commands that should be created when the bot starts
-const DEFAULT_COMMANDS: [AppCommands; 1] = [AppCommands::Training];
+const DEFAULT_COMMANDS: [AppCommands; 7] = [
+    AppCommands::Register,
+    AppCommands::Unregister,
+    AppCommands::Training,
+    AppCommands::TrainingBoss,
+    AppCommands::TrainingRole,
+    AppCommands::TrainingTier,
+    AppCommands::Config,
+];
 
 impl FromStr for AppCommands {
     type Err = SlashCommandParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            register::CMD_REGISTER => Ok(Self::Register),
+            register::CMD_UNREGISTER => Ok(Self::Unregister),
             training::CMD_TRAINING => Ok(Self::Training),
+            training_boss::CMD_TRAINING_BOSS => Ok(Self::TrainingBoss),
+            training_role::CMD_TRAINING_ROLE => Ok(Self::TrainingRole),
+            training_tier::CMD_TRAINING_TIER => Ok(Self::TrainingTier),
+            config::CMD_CONFIG => Ok(Self::Config),
             _ => Err(SlashCommandParseError(s.to_owned())),
         }
     }
@@ -55,7 +73,13 @@ impl FromStr for AppCommands {
 impl AppCommands {
     pub fn create(&self) -> CreateApplicationCommand {
         match self {
+            Self::Register => register::create_reg(),
+            Self::Unregister => register::create_unreg(),
             Self::Training => training::create(),
+            Self::TrainingBoss => training_boss::create(),
+            Self::TrainingRole => training_role::create(),
+            Self::TrainingTier => training_tier::create(),
+            Self::Config => config::create(),
         }
     }
 
@@ -76,10 +100,19 @@ impl AppCommands {
 
         // Here are all the configurations for Slash Command Permissions
         match self {
-            Self::Training => perms.create_permissions(|p| {
+            Self::Training
+            | Self::TrainingBoss
+            | Self::TrainingRole
+            | Self::TrainingTier
+            | Self::Config => perms.create_permissions(|p| {
                 p.permission(true)
                     .kind(ApplicationCommandPermissionType::Role)
                     .id(conf.squadmaker_role_id.0)
+            }),
+            Self::Register | Self::Unregister => perms.create_permissions(|p| {
+                p.permission(true)
+                    .kind(ApplicationCommandPermissionType::Role)
+                    .id(conf.main_guild_id.0) // Guild id is same as @everyone
             }),
         };
 
@@ -88,18 +121,13 @@ impl AppCommands {
 
     async fn handle(&self, ctx: &Context, aci: &ApplicationCommandInteraction) {
         match self {
+            Self::Register => register::handle_reg(ctx, aci).await,
+            Self::Unregister => register::handle_unreg(ctx, aci).await,
             Self::Training => training::handle(ctx, aci).await,
-            //_ => {
-            //    aci.create_interaction_response(ctx, |r| {
-            //        r.kind(InteractionResponseType::ChannelMessageWithSource);
-            //        r.interaction_response_data(|d| {
-            //            d.content("Not yet implemented");
-            //            d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL)
-            //        })
-            //    })
-            //    .await
-            //    .unwrap();
-            //}
+            Self::TrainingBoss => training_boss::handle(ctx, aci).await,
+            Self::TrainingRole => training_role::handle(ctx, aci).await,
+            Self::TrainingTier => training_tier::handle(ctx, aci).await,
+            Self::Config => config::handle(ctx, aci).await,
         }
     }
 }
@@ -109,5 +137,20 @@ pub async fn slash_command_interaction(ctx: &Context, aci: &ApplicationCommandIn
     match AppCommands::from_str(&aci.data.name) {
         Ok(cmd) => cmd.handle(ctx, aci).await,
         Err(e) => error!("{}", e),
+    }
+}
+
+pub mod helpers {
+    use std::collections::HashMap;
+
+    use serde_json::Value;
+    use serenity::model::interactions::application_command::ApplicationCommandInteractionDataOption;
+
+    /// Helps to quickly access commands
+    pub fn command_map(opt: &ApplicationCommandInteractionDataOption) -> HashMap<String, Value> {
+        opt.options
+            .iter()
+            .filter_map(|o| o.value.as_ref().map(|v| (o.name.clone(), v.clone())))
+            .collect()
     }
 }
