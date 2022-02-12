@@ -1,7 +1,9 @@
 use std::{
+    cmp::Reverse,
     fmt::{Display, Error as FmtError},
     str::FromStr,
-    time::Duration, sync::Arc, cmp::Reverse,
+    sync::Arc,
+    time::Duration,
 };
 
 use anyhow::{anyhow, bail, Context as ErrContext, Error, Result};
@@ -21,14 +23,16 @@ use serenity::{
 };
 use serenity_tools::{
     builder::CreateEmbedExt,
-    collectors::{PagedSelectorConfig, UpdatAbleMessage},
+    collectors::{PagedSelectorConfig, PagedSelectorError, UpdatAbleMessage},
+    components::Button,
     interactions::MessageComponentInteractionExt,
 };
 
 use crate::{
     data, db,
     embeds::{self, CrossroadsEmbeds},
-    logging::{self, LogTrace, ReplyHelper}, signup_board::title_sort_value,
+    logging::{self, LogTrace, ReplyHelper},
+    signup_board::title_sort_value,
 };
 
 enum Buttons {
@@ -92,7 +96,9 @@ impl Buttons {
             Self::EditRoles => b.style(ButtonStyle::Primary),
             Self::EditPreferences => b.style(ButtonStyle::Primary).disabled(true),
             Self::AddComment => b.style(ButtonStyle::Primary),
-            Self::BackToSelection => b.style(ButtonStyle::Secondary).emoji(ReactionType::Unicode("⬅️".to_string())),
+            Self::BackToSelection => b
+                .style(ButtonStyle::Secondary)
+                .emoji(ReactionType::Unicode("⬅️".to_string())),
         };
 
         b
@@ -126,9 +132,11 @@ pub(crate) async fn interaction(
             Err(diesel::NotFound) => {
                 return Err(diesel::NotFound)
                     .context("Not yet registered. Please register first")
-                    .map_err_reply(|_| mci.edit_original_interaction_response(ctx, |r| {
-                        r.add_embed(embeds::register_instructions_embed())
-                    }))
+                    .map_err_reply(|_| {
+                        mci.edit_original_interaction_response(ctx, |r| {
+                            r.add_embed(embeds::register_instructions_embed())
+                        })
+                    })
                     .await
             }
             Err(e) => bail!(e),
@@ -137,7 +145,6 @@ pub(crate) async fn interaction(
         let mut trainings: Vec<db::Training> = Vec::with_capacity(trainings_all.len());
 
         for training in trainings_all {
-
             // filter for trainings user can join
             let tier = training.get_tier(ctx).await.transpose()?;
             let tier_roles = match &tier {
@@ -153,7 +160,10 @@ pub(crate) async fn interaction(
                         .has_role(ctx, guild_id, RoleId::from(tr.discord_role_id as u64))
                         .await
                     {
-                        if b { cj = true; break; }
+                        if b {
+                            cj = true;
+                            break;
+                        }
                     }
                 }
                 cj
@@ -161,15 +171,21 @@ pub(crate) async fn interaction(
                 true
             };
 
-            if !can_join { continue }
+            if !can_join {
+                continue;
+            }
 
             // Add training to selection options
             trainings.push(training);
-        };
+        }
 
         if trainings.is_empty() {
             trace.step("No training's available");
-            mci.edit_quick_info(ctx, "There currently are no training options available for you =(").await?;
+            mci.edit_quick_info(
+                ctx,
+                "There currently are no training options available for you =(",
+            )
+            .await?;
             return Ok(());
         }
 
@@ -198,18 +214,14 @@ pub(crate) async fn interaction(
         emb.description("**Feel free to dismiss this message once your are done**");
 
         let mut joined_str = String::new();
-        for (d, v) in joined
-            .iter()
-            .group_by(|t| t.date.date())
-            .into_iter()
-        {
+        for (d, v) in joined.iter().group_by(|t| t.date.date()).into_iter() {
             joined_str.push_str(&format!("```\n{}\n\n", d.format("%A, %v")));
             for t in v {
-                    if t.state == db::TrainingState::Open {
-                        joined_str.push_str(&format!("> {}\n", &t.title));
-                    } else {
-                        joined_str.push_str(&format!("> {} 🔒\n", &t.title));
-                    }
+                if t.state == db::TrainingState::Open {
+                    joined_str.push_str(&format!("> {}\n", &t.title));
+                } else {
+                    joined_str.push_str(&format!("> {} 🔒\n", &t.title));
+                }
             }
             joined_str.push_str("```");
         }
@@ -218,17 +230,16 @@ pub(crate) async fn interaction(
         };
 
         // now filter out non open training's to not offer them in the select menu
-        joined = joined.into_iter().filter(|t| t.state == db::TrainingState::Open).collect();
+        joined = joined
+            .into_iter()
+            .filter(|t| t.state == db::TrainingState::Open)
+            .collect();
 
         let mut not_joined_str = String::new();
-        for (d, v) in not_joined
-            .iter()
-            .group_by(|t| t.date.date())
-            .into_iter()
-        {
+        for (d, v) in not_joined.iter().group_by(|t| t.date.date()).into_iter() {
             not_joined_str.push_str(&format!("```\n{}\n\n", d.format("%A, %v")));
             for t in v {
-                    not_joined_str.push_str(&format!("> {}\n", &t.title));
+                not_joined_str.push_str(&format!("> {}\n", &t.title));
             }
             not_joined_str.push_str("```");
         }
@@ -271,7 +282,8 @@ pub(crate) async fn interaction(
         })
         .await?;
 
-        mci = msg.await_component_interaction(ctx)
+        mci = msg
+            .await_component_interaction(ctx)
             .timeout(Duration::from_secs(60 * 3))
             .await
             .context(logging::InfoError::TimedOut)
@@ -284,7 +296,8 @@ pub(crate) async fn interaction(
                 d.add_embed(CreateEmbed::info_box("Loading ..."));
                 d.components(|c| c)
             })
-        }).await?;
+        })
+        .await?;
 
         let selected_id = mci
             .data
@@ -313,11 +326,17 @@ pub(crate) async fn interaction(
                 .map_err_reply(|what| mci.edit_quick_info(ctx, what))
                 .await?;
             mci = edit(ctx, mci.clone(), &mut msg, selected, signup, trace.clone()).await?;
-
         } else if not_joined.iter().any(|t| t.id == selected.id) {
             // Technically shouldn't be required to check here
-            join(ctx, mci.clone(), &mut msg, &db_user, selected, trace.clone()).await?;
-
+            join(
+                ctx,
+                mci.clone(),
+                &mut msg,
+                &db_user,
+                selected,
+                trace.clone(),
+            )
+            .await?;
         } else {
         }
 
@@ -335,7 +354,6 @@ async fn edit(
     mut signup: db::Signup,
     trace: LogTrace,
 ) -> Result<Arc<MessageComponentInteraction>> {
-
     trace.step("Signup edit");
     let bosses = training.all_training_bosses(ctx).await?;
     let roles = training.all_roles(ctx).await?;
@@ -459,22 +477,22 @@ async fn edit(
                             .min_select(1)
                             .pre_selected(&pre_sel);
 
-                        let selected = selector
+                        let selected = match selector
                             .paged_selector(ctx, selector_conf, &roles, |r| {
                                 (
                                     ReactionType::from(EmojiId::from(r.emoji as u64)),
                                     r.title.to_string(),
                                 )
                             })
-                            .await?;
-
-                        let selected = match selected {
-                            None => {
-                                let err = anyhow!(logging::InfoError::AbortedOrTimedOut);
-                                mci.edit_quick_info(ctx, err.to_string()).await?;
-                                return Err(err);
-                            },
-                            Some(s) => s.into_iter().collect::<Vec<_>>(),
+                            .await {
+                                Ok(s) => s,
+                                Err(PagedSelectorError::Aborted) => return Ok(mci),
+                                Err(PagedSelectorError::TimedOut) => {
+                                    let err = anyhow!(logging::InfoError::TimedOut);
+                                    mci.edit_quick_info(ctx, err.to_string()).await?;
+                                    return Err(err);
+                                },
+                                Err(e) => return Err(e.into()),
                         };
 
                         signup.clear_roles(ctx).await?;
@@ -510,7 +528,7 @@ async fn edit(
                                         format!("[Waiting for your reply in DM's]({})", dm.link()),
                                         false);
                                     m.add_embed(emb);
-                                    m.components(|c| c)
+                                    m.components(|c| c.create_action_row(|ar| ar.add_button(Button::Abort.create())))
                                 }).await?;
                                 dm
                             },
@@ -525,6 +543,13 @@ async fn edit(
                         let reply = tokio::select! {
                             reply = dm.channel_id.await_reply(ctx) => {
                                 reply
+                            },
+                            abort_interaction = msg.await_component_interaction(ctx) => {
+                                dm.edit(ctx, |m| {
+                                    m.set_embed(CreateEmbed::info_box("Aborted"))
+                                }).await?;
+                                abort_interaction.unwrap().defer(ctx).await?;
+                                continue;
                             },
                             _ = tokio::time::sleep(Duration::from_secs(60 * 5)) => {
                                 dm.edit(ctx, |m| {
@@ -574,7 +599,6 @@ async fn join(
     training: &db::Training,
     trace: LogTrace,
 ) -> Result<Arc<MessageComponentInteraction>> {
-
     trace.step("New Signup");
     let roles = training.all_roles(ctx).await?;
     let mut selector = UpdatAbleMessage::ComponentInteraction(&mci, msg);
@@ -593,25 +617,26 @@ async fn join(
     );
     selector_conf.base_embed(emb);
 
-    let selected = selector
+    let selected = match selector
         .paged_selector(ctx, selector_conf, &roles, |r| {
             (
                 ReactionType::from(EmojiId::from(r.emoji as u64)),
                 r.title.to_string(),
             )
         })
-        .await?;
-
-    let selected = match selected {
-        None => {
-            logging::InfoError::AbortedOrTimedOut
-                .err()
-                .map_err_reply(|what| mci.edit_quick_info(ctx, what))
-                .await?;
-            return Ok(mci);
+        .await
+    {
+        Ok(s) => s,
+        Err(PagedSelectorError::Aborted) => return Ok(mci),
+        Err(PagedSelectorError::TimedOut) => {
+            let err = anyhow!(logging::InfoError::TimedOut);
+            mci.edit_quick_info(ctx, err.to_string()).await?;
+            return Err(err);
         }
-        Some(s) => s.into_iter().collect::<Vec<_>>(),
-    };
+        Err(e) => return Err(e.into()),
+    }
+    .into_iter()
+    .collect::<Vec<_>>();
 
     let signup = db::Signup::insert(ctx, db_user, training)
         .await

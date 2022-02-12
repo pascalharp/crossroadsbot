@@ -25,7 +25,6 @@ impl std::error::Error for SlashCommandParseError {}
 
 mod config;
 mod register;
-mod testing;
 mod training;
 mod training_boss;
 mod training_role;
@@ -40,12 +39,11 @@ pub enum AppCommands {
     TrainingBoss,
     TrainingRole,
     TrainingTier,
-    Testing,
     Config,
 }
 
 /// All commands that should be created when the bot starts
-const DEFAULT_COMMANDS: [AppCommands; 8] = [
+const DEFAULT_COMMANDS: [AppCommands; 7] = [
     AppCommands::Register,
     AppCommands::Unregister,
     AppCommands::Training,
@@ -53,7 +51,6 @@ const DEFAULT_COMMANDS: [AppCommands; 8] = [
     AppCommands::TrainingRole,
     AppCommands::TrainingTier,
     AppCommands::Config,
-    AppCommands::Testing,
 ];
 
 impl FromStr for AppCommands {
@@ -68,7 +65,6 @@ impl FromStr for AppCommands {
             training_role::CMD_TRAINING_ROLE => Ok(Self::TrainingRole),
             training_tier::CMD_TRAINING_TIER => Ok(Self::TrainingTier),
             config::CMD_CONFIG => Ok(Self::Config),
-            testing::CMD_TESTING => Ok(Self::Testing),
             _ => Err(SlashCommandParseError(s.to_owned())),
         }
     }
@@ -84,7 +80,6 @@ impl AppCommands {
             Self::TrainingRole => training_role::create(),
             Self::TrainingTier => training_tier::create(),
             Self::Config => config::create(),
-            Self::Testing => testing::create(),
         }
     }
 
@@ -109,8 +104,7 @@ impl AppCommands {
             | Self::TrainingBoss
             | Self::TrainingRole
             | Self::TrainingTier
-            | Self::Config
-            | Self::Testing => perms.create_permissions(|p| {
+            | Self::Config => perms.create_permissions(|p| {
                 p.permission(true)
                     .kind(ApplicationCommandPermissionType::Role)
                     .id(conf.squadmaker_role_id.0)
@@ -134,7 +128,6 @@ impl AppCommands {
             Self::TrainingRole => training_role::handle(ctx, aci).await,
             Self::TrainingTier => training_tier::handle(ctx, aci).await,
             Self::Config => config::handle(ctx, aci).await,
-            Self::Testing => testing::handle(ctx, aci).await,
         }
     }
 }

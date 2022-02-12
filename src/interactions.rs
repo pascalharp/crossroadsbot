@@ -2,7 +2,14 @@ use std::sync::Arc;
 
 use crate::logging::*;
 
-use serenity::{model::{interactions::message_component::{MessageComponentInteraction, ButtonStyle}, channel::ReactionType}, prelude::*, builder::{CreateActionRow, CreateButton}};
+use serenity::{
+    builder::{CreateActionRow, CreateButton},
+    model::{
+        channel::ReactionType,
+        interactions::message_component::{ButtonStyle, MessageComponentInteraction},
+    },
+    prelude::*,
+};
 
 mod manage_sign_up;
 

@@ -1,5 +1,5 @@
 use crate::embeds::CrossroadsEmbeds;
-use crate::{interactions, data, data::SignupBoardData, db, logging::LogTrace};
+use crate::{data, data::SignupBoardData, db, interactions, logging::LogTrace};
 use anyhow::Result;
 use chrono::NaiveDate;
 use itertools::Itertools;

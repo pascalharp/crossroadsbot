@@ -30,7 +30,6 @@ use crate::data::LogConfigData;
 pub enum InfoError {
     TimedOut,
     Aborted,
-    AbortedOrTimedOut,
     NotRegistered,
 }
 
@@ -45,7 +44,6 @@ impl std::fmt::Display for InfoError {
         match self {
             Self::TimedOut => write!(f, "Timed out"),
             Self::Aborted => write!(f, "Aborted"),
-            Self::AbortedOrTimedOut => write!(f, "Aborted or Timed out"),
             Self::NotRegistered => write!(f, "Not registered"),
         }
     }

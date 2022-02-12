@@ -329,10 +329,7 @@ async fn select_active_signups_trainings_by_user(
     .unwrap()
 }
 
-async fn select_active_signups_by_user(
-    ctx: &Context,
-    user_id: i32,
-) -> QueryResult<Vec<Signup>> {
+async fn select_active_signups_by_user(ctx: &Context, user_id: i32) -> QueryResult<Vec<Signup>> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
         let join = signups::table
@@ -352,10 +349,7 @@ async fn select_active_signups_by_user(
     .unwrap()
 }
 
-async fn select_open_signups_by_user(
-    ctx: &Context,
-    user_id: i32,
-) -> QueryResult<Vec<Signup>> {
+async fn select_open_signups_by_user(ctx: &Context, user_id: i32) -> QueryResult<Vec<Signup>> {
     let pool = DBPool::load(ctx).await;
     task::spawn_blocking(move || {
         let join = signups::table
@@ -841,7 +835,10 @@ impl User {
         select_joined_active_trainings_by_user(ctx, self.id).await
     }
 
-    pub async fn active_signups_with_training(&self, ctx: &Context) -> QueryResult<Vec<(Signup, Training)>> {
+    pub async fn active_signups_with_training(
+        &self,
+        ctx: &Context,
+    ) -> QueryResult<Vec<(Signup, Training)>> {
         select_active_signups_trainings_by_user(ctx, self.id).await
     }
 
