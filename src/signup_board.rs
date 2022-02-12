@@ -1,5 +1,5 @@
 use crate::embeds::CrossroadsEmbeds;
-use crate::{components, data, data::SignupBoardData, db, logging::LogTrace};
+use crate::{interactions, data, data::SignupBoardData, db, logging::LogTrace};
 use anyhow::Result;
 use chrono::NaiveDate;
 use itertools::Itertools;
@@ -312,11 +312,8 @@ To **sign up**, **sign out** or to **edit** your sign-up select the training fro
                 });
             }
             m.components(|c| {
-                c.add_action_row(components::overview_register_list_action_row());
                 if !trainings.is_empty() {
-                    c.add_action_row(components::overview_training_select_action_row(
-                        &trainings.iter().map(|t| &t.training).collect::<Vec<_>>(),
-                    ));
+                    c.add_action_row(interactions::overview_action_row());
                 }
                 c
             });

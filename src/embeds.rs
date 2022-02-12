@@ -4,7 +4,6 @@ use serenity::{
     builder::{CreateEmbed, CreateEmbedAuthor},
     model::{id::EmojiId, misc::Mention},
 };
-use std::collections::HashMap;
 
 const EMBED_AUTHOR_ICON_URL: &str = "https://cdn.discordapp.com/avatars/512706205647372302/eb7a7f2de9a97006e8217b73ab5c7836.webp?size=128";
 const EMBED_AUTHOR_NAME: &str = "Crossroads Bot";
@@ -122,45 +121,5 @@ pub fn register_instructions_embed() -> CreateEmbed {
     let mut e = CreateEmbed::xdefault();
     e.title("How to register");
     internal_register_embed(&mut e);
-    e
-}
-
-pub fn signup_list_embed(
-    signups: &[(db::Signup, db::Training)],
-    roles: &HashMap<i32, Vec<db::Role>>,
-) -> CreateEmbed {
-    let mut e = CreateEmbed::xdefault();
-    e.xstyle();
-    e.description("All current active signups");
-    if signups.is_empty() {
-        e.field(
-            "Zero sign ups found",
-            "You should join some trainings ;)",
-            false,
-        );
-    }
-    for (s, t) in signups {
-        e.field(
-            &t.title,
-            format!(
-                "`Date       `\n<t:{}:D>\n\
-                `Time       `\n<t:{}:t>\n\
-                `Training Id`\n{}\n\
-                `Roles      `\n{}\n",
-                t.date.timestamp(),
-                t.date.timestamp(),
-                t.id,
-                match roles.get(&s.id) {
-                    Some(r) => r
-                        .iter()
-                        .map(|r| r.repr.clone())
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    None => String::from("Failed to load roles =("),
-                }
-            ),
-            true,
-        );
-    }
     e
 }

@@ -3,7 +3,6 @@ extern crate diesel;
 extern crate dotenv;
 extern crate serenity;
 
-mod components;
 mod data;
 mod db;
 mod embeds;
