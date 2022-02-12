@@ -252,9 +252,9 @@ impl SignupBoard {
                 e.field(
                     "How to",
                     "\
-Before you can sign up you have to be __registered__. For more information on how to register \
-click the button at the end of the message.
-To **sign up**, **sign out** or to **edit** your sign-up select the training from the select menu below.",
+Before you can sign up you have to be __registered__. \
+To do so simply use the `/register` command an any channel you have write permissions in.\n\n\
+To **sign up**, **sign out** or to **edit** your sign-up click the button at the end of the message",
                     false);
                 e.field(
                     "Legend",
