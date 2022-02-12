@@ -154,10 +154,10 @@ impl EventHandler for Handler {
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        match &interaction {
+        match interaction {
             Interaction::MessageComponent(mci) => interactions::button_interaction(&ctx, mci).await,
             Interaction::ApplicationCommand(aci) => {
-                slash_commands::slash_command_interaction(&ctx, aci).await
+                slash_commands::slash_command_interaction(&ctx, &aci).await
             }
             _ => (),
         }
