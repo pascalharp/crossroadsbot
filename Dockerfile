@@ -1,4 +1,4 @@
-FROM rust:1.52
+FROM rust:1.58.1
 
 WORKDIR /crossroadsbot
 COPY . .
