@@ -13,7 +13,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    restart: on_failure
+    restart: on-failure
   bot:
     build: .
     depends_on:
@@ -44,6 +44,6 @@ services:
     - APP_DB_USER=crossroads
     - POSTGRES_PASSWORD=docker
     - POSTGRES_USER=docker
-    restart: on_failure
+    restart: on-failure
 volumes:
   dbdata:
