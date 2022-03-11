@@ -1,52 +1,49 @@
-volumes:
-  dbdata:
-
+version: '2.1'
 services:
+  backup:
+    image: kartoza/pg-backup:latest
+    volumes:
+    - ./dbbackups:/backups
+    network_mode: service:db
+    environment:
+    - POSTGRES_DBNAME=crossraods
+    - POSTGRES_HOST=db
+    - POSTGRES_PASS=docker
+    - POSTGRES_USER=docker
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on_failure
   bot:
     build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+    - ADMIN_ROLE_ID=
+    - APPLICATION_ID=
+    - DATABASE_URL=postgres://crossroads:crossroads@127.0.0.1/crossroads
+    - DISCORD_TOKEN=
+    - EMOJI_GUILD_ID=
+    - MAIN_GUILD_ID=
+    - RUST_LOG=info
+    - SQUADMAKER_ROLE_ID=
+    network_mode: service:db
     restart: always
-    network_mode: "service:db"
-    environment:
-      - DISCORD_TOKEN=
-      - DATABASE_URL=postgres://crossroads:crossroads@127.0.0.1/crossroads
-      - APPLICATION_ID=
-      - MAIN_GUILD_ID=
-      - EMOJI_GUILD_ID=
-      - ADMIN_ROLE_ID=
-      - SQUADMAKER_ROLE_ID=
-      - RUST_LOG=info
-    depends_on:
-      db:
-        condition: service_healthy
-
   db:
-    image: "postgres"
-    environment:
-      - POSTGRES_USER=docker
-      - POSTGRES_PASSWORD=docker
-      - APP_DB_USER=crossroads
-      - APP_DB_PASS=crossroads
-      - APP_DB_NAME=crossroads
-      - ALLOW_IP_RANGE=0.0.0.0/0
+    image: postgres
     volumes:
-      - dbdata:/var/lib/postgresql
-      - ./docker_db:/docker-entrypoint-initdb.d/
+    - ./docker_db:/docker-entrypoint-initdb.d/
+    - dbdata:/var/lib/postgresql
     healthcheck:
-      test: "exit 0"
+      test: exit 0
+    environment:
+    - ALLOW_IP_RANGE=0.0.0.0/0
+    - APP_DB_NAME=crossroads
+    - APP_DB_PASS=crossroads
+    - APP_DB_USER=crossroads
+    - POSTGRES_PASSWORD=docker
+    - POSTGRES_USER=docker
     restart: on_failure
-
-  backup:
-    image: "kartoza/pg-backup:latest"
-    network_mode: "service:db"
-    enviroment:
-      - POSTGRES_USER=docker
-      - POSTGRES_PASS=docker
-      - POSTGRES_DBNAME=crossraods
-      - POSTGRES_HOST=db
-    volumes:
-      - ./dbbackups:/backups
-    restart: on_failure
-    depends_on:
-      db:
-        condition: service_healthy
-
+volumes:
+  dbdata:
