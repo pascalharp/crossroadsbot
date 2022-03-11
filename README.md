@@ -1,4 +1,4 @@
-![Crossroads](https://cdn.discordapp.com/icons/226398442082140160/03fe915815e9dbb6cdd18fe577fc6dd9.webp)
+![Crossroads](resources/inn_bot_logo.png)
 
 # Crossroads Inn signup bot
 
@@ -25,10 +25,8 @@ The main discord guild id the bot will be used on. This is also the discord wher
 permissions are taken from
 ### EMOJI\_GUILD\_ID
 The discord guild the bot will load and use custom emojis from.
-### ADMIN\_ROLE\_ID
-The discord role id for MAIN\_GUILD\_ID that has access to all commands
 ### SQUADMAKER\_ROLE\_ID
-The discord role id for MAIN\_GUILD\_ID that has access selected commands
+The discord role id for MAIN\_GUILD\_ID that has access to all commands
 ### RUST\_LOG
 Amount of LOG verbosity. Options are: `warn, info, debug`
 
@@ -41,7 +39,6 @@ DATABASE_URL=postgres://username:password@localhost/crossroad
 DISCORD_TOKEN=AVERYLONGSECRETTOKENTHATSHOULDNEVERBEMADEPUBLIC
 MAIN_GUILD_ID=111222333444555666
 EMOJI_GUILD_ID=111222333444555666
-ADMIN_ROLE_ID=666777888999000111
 SQUADMAKER_ROLE_ID=666777888999000111
 RUST_LOG=info
 ```
