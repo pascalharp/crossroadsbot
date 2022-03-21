@@ -253,7 +253,7 @@ impl SignupBoard {
                     "How to",
                     "\
 Before you can sign up you have to be __registered__. \
-To do so simply use the `/register` command an any channel you have write permissions in.\n\n\
+To do so simply use the `/register` command in any channel you have write permissions in.\n\n\
 To **sign up**, **sign out** or to **edit** your sign-up click the button at the end of the message",
                     false);
                 e.field(
