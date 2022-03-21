@@ -49,7 +49,7 @@ pub async fn handle_reg(ctx: &Context, aci: &ApplicationCommandInteraction) {
             .get(0) // only one option anyway
             .and_then(|v| v.value.as_ref())
             .and_then(|v| v.as_str())
-            .ok_or(anyhow!("Unexpected! Missing Guild Wars 2 Account field"))
+            .context("Unexpected! Missing Guild Wars 2 Account field")
             .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
             .await?;
 

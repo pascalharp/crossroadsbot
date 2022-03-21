@@ -243,12 +243,12 @@ async fn add(
     let name = cmds
         .get("name")
         .and_then(|n| n.as_str())
-        .ok_or(anyhow!("name not set"))?;
+        .context("name not set")?;
 
     let day: NaiveDate = cmds
         .get("day")
         .and_then(|n| n.as_str())
-        .ok_or(anyhow!("day not set"))?
+        .context("day not set")?
         .parse()
         .context("Could not parse date")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
@@ -257,7 +257,7 @@ async fn add(
     let time: NaiveTime = cmds
         .get("time")
         .and_then(|n| n.as_str())
-        .ok_or(anyhow!("time not set"))?
+        .context("time not set")?
         .parse()
         .context("Could not parse time")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
@@ -288,7 +288,7 @@ async fn add(
     let roles_str: Vec<&str> = cmds
         .get("roles")
         .and_then(|n| n.as_str())
-        .ok_or(anyhow!("roles not set"))?
+        .context("roles not set")?
         .split(',')
         .into_iter()
         .map(|s| s.trim())
@@ -316,7 +316,7 @@ async fn add(
     let bosses_str: Vec<&str> = cmds
         .get("bosses")
         .and_then(|n| n.as_str())
-        .ok_or(anyhow!("bosses not set"))?
+        .context("bosses not set")?
         .split(',')
         .into_iter()
         .map(|s| s.trim())
@@ -937,7 +937,7 @@ async fn info(
     let id = cmds
         .get("id")
         .and_then(|v| v.as_i64())
-        .ok_or(anyhow!("Expected id field"))
+        .context("Expected id field")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?;
 

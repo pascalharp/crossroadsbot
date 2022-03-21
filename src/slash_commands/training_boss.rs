@@ -143,7 +143,7 @@ async fn add(
     let name = cmds
         .get("name")
         .and_then(|d| d.as_str())
-        .ok_or(anyhow!("name is required"))
+        .context("name is required")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
         .to_owned();
@@ -151,7 +151,7 @@ async fn add(
     let repr = cmds
         .get("repr")
         .and_then(|d| d.as_str())
-        .ok_or(anyhow!("repr is required"))
+        .context("repr is required")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
         .to_owned();
@@ -159,7 +159,7 @@ async fn add(
     let wing: i32 = cmds
         .get("wing")
         .and_then(|d| d.as_i64())
-        .ok_or(anyhow!("wing is required"))
+        .context("wing is required")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
         .try_into()?;
@@ -167,7 +167,7 @@ async fn add(
     let position: i32 = cmds
         .get("position")
         .and_then(|d| d.as_i64())
-        .ok_or(anyhow!("position is required"))
+        .context("position is required")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
         .try_into()?;

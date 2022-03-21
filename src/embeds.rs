@@ -49,7 +49,7 @@ pub(crate) fn google_calendar_link(training: &db::Training) -> String {
         "https://calendar.google.com/calendar/event?action=TEMPLATE&dates={}/{}&text={}",
         begin,
         end,
-        training.title.replace(" ", "%20")
+        training.title.replace(' ', "%20")
     )
 }
 

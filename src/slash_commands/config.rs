@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result, Context as ErrContext};
 use serenity::{
     builder::{CreateApplicationCommand, CreateEmbed},
     client::Context,
@@ -88,14 +88,14 @@ async fn overview(
     let channel_id = option
         .options
         .get(0)
-        .ok_or(anyhow!("Unexpected missing option"))
+        .context("Unexpected missing option")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
         .value
         .as_ref()
         .and_then(|v| v.as_str())
         .map(|v| v.parse::<ChannelId>())
-        .ok_or(anyhow!("Unexpected missing value"))
+        .context("Unexpected missing value")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
@@ -144,14 +144,14 @@ async fn log(
     let channel_id = option
         .options
         .get(0)
-        .ok_or(anyhow!("Unexpected missing option"))
+        .context("Unexpected missing option")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
         .value
         .as_ref()
         .and_then(|v| v.as_str())
         .map(|v| v.parse::<ChannelId>())
-        .ok_or(anyhow!("Unexpected missing value"))
+        .context("Unexpected missing value")
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
         .await?
         .map_err_reply(|what| aci.create_quick_error(ctx, what, true))
