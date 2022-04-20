@@ -2,7 +2,7 @@ use crate::db;
 use chrono::{Duration, NaiveDateTime};
 use serenity::{
     builder::{CreateEmbed, CreateEmbedAuthor},
-    model::{id::EmojiId, misc::Mention},
+    model::{id::EmojiId, mention::Mention},
 };
 
 const EMBED_AUTHOR_ICON_URL: &str = "https://cdn.discordapp.com/avatars/512706205647372302/eb7a7f2de9a97006e8217b73ab5c7836.webp?size=128";

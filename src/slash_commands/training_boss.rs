@@ -14,7 +14,7 @@ use serenity::{
             },
             InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
         },
-        misc::Mention,
+        mention::Mention,
     },
 };
 use url::Url;

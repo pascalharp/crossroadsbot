@@ -18,7 +18,7 @@ use serenity::{
             message_component::{ButtonStyle, MessageComponentInteraction},
             InteractionResponseType,
         },
-        misc::Mention,
+        mention::Mention,
     },
 };
 use serenity_tools::{

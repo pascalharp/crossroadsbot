@@ -27,11 +27,11 @@ use serenity::{
     client::Context,
     futures::future,
     futures::future::OptionFuture,
-    http::AttachmentType,
     model::{
+        channel::AttachmentType,
         guild::{Member, PartialGuild, Role},
         id::RoleId,
-        misc::Mention,
+        mention::Mention,
     },
 };
 use serenity_tools::{

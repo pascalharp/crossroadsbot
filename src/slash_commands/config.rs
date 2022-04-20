@@ -12,7 +12,7 @@ use serenity::{
             },
             InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
         },
-        misc::Mention,
+        mention::Mention,
     },
 };
 use serenity_tools::{builder::CreateEmbedExt, interactions::ApplicationCommandInteractionExt};

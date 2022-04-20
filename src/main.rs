@@ -25,7 +25,7 @@ use diesel::{pg::PgConnection, result::Error::NotFound};
 use dotenv::dotenv;
 use serenity::{
     async_trait,
-    client::{bridge::gateway::GatewayIntents, Client, EventHandler},
+    client::{Client, EventHandler},
     model::prelude::*,
     prelude::*,
 };
