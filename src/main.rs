@@ -262,12 +262,12 @@ async fn main() {
             .expect("Failed to parse squadmaker role id"),
     );
 
-    let mut client = Client::builder(token)
+    let intents = GatewayIntents::non_privileged() | GatewayIntents::GUILD_MEMBERS | GatewayIntents::MESSAGE_CONTENT;
+    let mut client = Client::builder(token, intents)
         .application_id(app_id)
         .event_handler(Handler {
             signup_board_loop_running: AtomicBool::new(false),
         })
-        .intents(GatewayIntents::non_privileged() | GatewayIntents::GUILD_MEMBERS)
         .await
         .expect("Error creating client");
 
