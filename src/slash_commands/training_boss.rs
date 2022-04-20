@@ -358,7 +358,7 @@ async fn list(
         r.kind(InteractionResponseType::ChannelMessageWithSource);
         r.interaction_response_data(|d| {
             d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL);
-            d.create_embed(|e| {
+            d.embed(|e| {
                 for (w, b) in bosses_grouped {
                     e.field(
                         format!("Wing {}", w),

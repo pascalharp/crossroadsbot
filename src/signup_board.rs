@@ -266,7 +266,7 @@ To **sign up**, **sign out** or to **edit** your sign-up click the button at the
                         ),
                     false);
                 e.footer(|f| f.text("Last update"));
-                e.timestamp(&chrono::Utc::now())
+                e.timestamp(chrono::Utc::now())
             });
             for (date, trainings, total) in groups {
                 m.add_embed(|e| {
