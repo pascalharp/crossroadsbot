@@ -11,11 +11,12 @@ use itertools::Itertools;
 use serenity::{
     builder::{CreateButton, CreateEmbed, CreateSelectMenu},
     client::Context,
+    futures::StreamExt,
     model::{
         channel::{Message, ReactionType},
         id::{EmojiId, RoleId},
         interactions::{
-            message_component::{ButtonStyle, MessageComponentInteraction},
+            message_component::{ButtonStyle, InputTextStyle, MessageComponentInteraction},
             InteractionResponseType,
         },
         mention::Mention,
@@ -111,6 +112,7 @@ pub(crate) async fn interaction(
     trace: LogTrace,
 ) -> Result<()> {
     trace.step("Preparing interaction");
+    load_user(ctx, &mci, trace.clone()).await?;
     // Not super elegent but gives as a message to work with right away
     mci.create_quick_info(ctx, "Loading...", true).await?;
     let mut msg = mci.get_interaction_response(ctx).await?;
@@ -655,4 +657,69 @@ async fn join(
 
     let mci = edit(ctx, mci, msg, training, signup, trace).await?;
     Ok(mci)
+}
+
+async fn load_user(
+    ctx: &Context,
+    mci: &MessageComponentInteraction,
+    trace: LogTrace,
+) -> Result<(db::User, Message)> {
+    trace.step("Checking for user");
+    match db::User::by_discord_id(ctx, mci.user.id).await {
+        Ok(user) => {
+            trace.step("Already registered");
+            mci.create_quick_info(ctx, "Loading...", true).await?;
+            let msg = mci.get_interaction_response(ctx).await?;
+            return Ok((user, msg));
+        }
+        Err(diesel::NotFound) => trace.step("User not yet registered"),
+        Err(e) => bail!(e),
+    };
+    let custom_id = format!("{}_{}", "register_modal", uuid::Uuid::new_v4());
+    mci.create_interaction_response(ctx, |r| {
+        r.kind(InteractionResponseType::Modal)
+            .interaction_response_data(|d| {
+                d.custom_id(&custom_id)
+                    .title("Please register with your GW2 account name")
+                    .components(|c| {
+                        c.create_action_row(|ar| {
+                            ar.create_input_text(|it| {
+                                it.style(InputTextStyle::Short)
+                                    .custom_id("gw2_account_name")
+                                    .label("Gw2 account name")
+                                    .required(true)
+                                    .placeholder("Account Name.1234")
+                                    .min_length(8)
+                            })
+                        })
+                    })
+            })
+    })
+    .await?;
+
+    // A user could just ignore the modal and spawn multiple ones
+    // compare uuid and only react to correct one
+    let mut collect = mci
+        .message
+        .await_modal_interactions(ctx)
+        .author_id(mci.user.id)
+        .timeout(Duration::from_secs(5 * 60))
+        .build();
+
+    trace.step("Waiting for register input");
+    let resp = loop {
+        match collect.next().await {
+            Some(resp) => {
+                if resp.data.custom_id == custom_id {
+                    collect.stop();
+                    break resp;
+                }
+            }
+            None => {
+                bail!(logging::InfoError::TimedOut);
+            }
+        }
+    };
+
+    todo!();
 }
