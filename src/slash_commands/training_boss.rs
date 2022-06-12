@@ -71,12 +71,14 @@ pub fn create() -> CreateApplicationCommand {
             o.add_int_choice("Wing 4", 4);
             o.add_int_choice("Wing 5", 5);
             o.add_int_choice("Wing 6", 6);
-            o.add_int_choice("Wing 7", 7)
+            o.add_int_choice("Wing 7", 7);
+            o.add_int_choice("Strikes IBS", 101);
+            o.add_int_choice("Strikes EoD", 102)
         });
         o.create_sub_option(|o| {
             o.kind(ApplicationCommandOptionType::Integer);
             o.name("position");
-            o.description("Which boss it is in the specified wing");
+            o.description("Which boss it is in the specified wing/strike");
             o.required(true);
             o.add_int_choice("Boss 1", 1);
             o.add_int_choice("Boss 2", 2);
@@ -361,7 +363,11 @@ async fn list(
             d.embed(|e| {
                 for (w, b) in bosses_grouped {
                     e.field(
-                        format!("Wing {}", w),
+                        if w < 100 {
+                            format!("Wing {}", w)
+                        } else {
+                            format!("Strike Pool {}", w - 100)
+                        },
                         b.iter()
                             .map(|b| b.to_string())
                             .collect::<Vec<_>>()
