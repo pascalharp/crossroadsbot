@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Context as ErrContext, Error, Result};
 use itertools::Itertools;
+use regex::Regex;
 use serenity::{
     builder::{CreateButton, CreateEmbed, CreateSelectMenu},
     client::Context,
@@ -16,11 +17,14 @@ use serenity::{
         channel::{Message, ReactionType},
         id::{EmojiId, RoleId},
         interactions::{
-            message_component::{ButtonStyle, InputTextStyle, MessageComponentInteraction},
+            message_component::{
+                ActionRowComponent, ButtonStyle, InputTextStyle, MessageComponentInteraction,
+            },
             InteractionResponseType,
         },
         mention::Mention,
     },
+    prelude::Mentionable,
 };
 use serenity_tools::{
     builder::CreateEmbedExt,
@@ -108,10 +112,9 @@ impl Buttons {
 
 pub(crate) async fn interaction(
     ctx: &Context,
-    mut mci: Arc<MessageComponentInteraction>,
+    mci: Arc<MessageComponentInteraction>,
     trace: LogTrace,
 ) -> Result<()> {
-
     let guild_id = {
         ctx.data
             .read()
@@ -123,7 +126,8 @@ pub(crate) async fn interaction(
     };
 
     trace.step("Loading user");
-    let (db_user, mut msg) = load_user(ctx, &mci, trace.clone()).await?;
+    let (db_user, mut mci) = load_user(ctx, mci, trace.clone()).await?;
+    let mut msg = mci.get_interaction_response(ctx).await?;
 
     loop {
         // TODO cache them on the signup board
@@ -234,8 +238,6 @@ pub(crate) async fn interaction(
             emb.field("**❌ Not yet signed up for**", not_joined_str, false);
         };
 
-
-
         // only create a select menu if there are options
         if !(joined.is_empty() && not_joined.is_empty()) {
             emb.field("🤔 How to",
@@ -269,16 +271,21 @@ pub(crate) async fn interaction(
             mci.edit_original_interaction_response(ctx, |r| {
                 r.add_embed(emb);
                 r.components(|c| c.create_action_row(|ar| ar.add_select_menu(select_menu)))
-            }).await?;
+            })
+            .await?;
         } else {
-            emb.field("🤔 How to",
-            "```There are currently no options, please check back later :D```",
-            false);
+            trace.step("No options");
+            emb.field(
+                "🤔 How to",
+                "```There are currently no options, please check back later :D```",
+                false,
+            );
 
             mci.edit_original_interaction_response(ctx, |r| {
                 r.add_embed(emb);
                 r.components(|c| c)
-            }).await?;
+            })
+            .await?;
             return Ok(());
         }
 
@@ -659,16 +666,15 @@ async fn join(
 
 async fn load_user(
     ctx: &Context,
-    mci: &MessageComponentInteraction,
+    mci: Arc<MessageComponentInteraction>,
     trace: LogTrace,
-) -> Result<(db::User, Message)> {
+) -> Result<(db::User, Arc<MessageComponentInteraction>)> {
     trace.step("Checking for user");
     match db::User::by_discord_id(ctx, mci.user.id).await {
         Ok(user) => {
             trace.step("Already registered");
             mci.create_quick_info(ctx, "Loading...", true).await?;
-            let msg = mci.get_interaction_response(ctx).await?;
-            return Ok((user, msg));
+            return Ok((user, mci));
         }
         Err(diesel::NotFound) => trace.step("User not yet registered"),
         Err(e) => bail!(e),
@@ -719,5 +725,102 @@ async fn load_user(
         }
     };
 
-    todo!();
+    trace.step("Checking for valid format");
+    let regex = Regex::new("^[a-zA-Z\\s]{3,27}\\.[0-9]{4}$").unwrap();
+
+    let name = resp
+        .data
+        .components
+        .get(0)
+        .context("Unexpected error")
+        .and_then(|d| d.components.get(0).context("Unexpected Error"))
+        .and_then(|d| match d {
+            ActionRowComponent::InputText(t) => Ok(t.value.clone()),
+            _ => Err(anyhow!("Unexpected components")).context("Unexpected Error"),
+        })
+        .map_err_reply(|err| {
+            resp.create_interaction_response(ctx, |r| {
+                r.interaction_response_data(|d| d.add_embed(CreateEmbed::error_box(err)))
+            })
+        })
+        .await?;
+
+    if !regex.is_match(&name) {
+        resp.create_interaction_response(ctx, |r| {
+            r.interaction_response_data(|d| {
+                d.add_embed(CreateEmbed::error_box(format!(
+                    "{} Invalid gw2 account format. Please try again",
+                    resp.user.mention()
+                )));
+                d.ephemeral(true)
+            })
+        })
+        .await?;
+        bail!("Invalid gw2 account name format");
+    }
+
+    resp.create_interaction_response(ctx, |r| {
+        r.interaction_response_data(|d| {
+            d.add_embed(CreateEmbed::info_box("Saving..."));
+            d.ephemeral(true)
+        })
+    })
+    .await?;
+
+    trace.step("Saving user to db");
+    let user = db::User::upsert(ctx, mci.user.id.0, name)
+        .await
+        .context("Unexpected error")
+        .map_err_reply(|err| {
+            resp.edit_original_interaction_response(ctx, |r| {
+                r.add_embed(CreateEmbed::error_box(err))
+            })
+        })
+        .await?;
+
+    let msg = resp
+        .edit_original_interaction_response(ctx, |r| {
+            r.add_embed(CreateEmbed::info_box(format!(
+                "{} Sucesfully registerd 🎉\nClick the button to continue to training selection",
+                mci.user.mention()
+            )));
+            r.components(|c| {
+                c.create_action_row(|ar| {
+                    ar.create_button(|b| {
+                        b.custom_id("__register_continue")
+                            .style(ButtonStyle::Primary)
+                            .label("Continue")
+                    })
+                })
+            })
+        })
+        .await?;
+
+    let mci = match msg
+        .await_component_interaction(ctx)
+        .timeout(Duration::from_secs(3 * 60))
+        .await
+    {
+        None => {
+            resp.edit_original_interaction_response(ctx, |r| {
+                r.set_embed(CreateEmbed::info_box("Timed out"));
+                r.components(|c| c)
+            })
+            .await?;
+            bail!(logging::InfoError::TimedOut)
+        }
+        Some(r) => r,
+    };
+
+    mci.create_quick_info(ctx, "Loading...", true).await?;
+    resp.edit_original_interaction_response(ctx, |r| {
+        r.set_embed(CreateEmbed::info_box(format!(
+            "{} Sucesfully registerd 🎉",
+            mci.user.mention()
+        )));
+        r.components(|c| c)
+    })
+    .await?;
+
+    Ok((user, mci))
 }

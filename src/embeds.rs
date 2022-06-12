@@ -104,22 +104,3 @@ pub fn embed_add_roles(e: &mut CreateEmbed, roles: &[db::Role], inline: bool, re
         e.field("Roles", roles_text, inline);
     }
 }
-
-fn internal_register_embed(e: &mut CreateEmbed) {
-    e.description(
-        "To register with the bot simply use the register slash command: `/register` in any channel \
-        you have write permissions in.\n\
-        It requires your in game account name which you can also find in game on your friends list at the top. \
-        It consists of your chosen in game name followed by a dot and 4 digits.\n\n\
-        If you want to remove all your information associated with the bot simply use the \
-        unregister slash command: `/unregister`",
-    );
-    e.field("Example Account Name:", "Narturio.1234", false);
-}
-
-pub fn register_instructions_embed() -> CreateEmbed {
-    let mut e = CreateEmbed::xdefault();
-    e.title("How to register");
-    internal_register_embed(&mut e);
-    e
-}
