@@ -111,11 +111,6 @@ pub(crate) async fn interaction(
     mut mci: Arc<MessageComponentInteraction>,
     trace: LogTrace,
 ) -> Result<()> {
-    trace.step("Preparing interaction");
-    load_user(ctx, &mci, trace.clone()).await?;
-    // Not super elegent but gives as a message to work with right away
-    mci.create_quick_info(ctx, "Loading...", true).await?;
-    let mut msg = mci.get_interaction_response(ctx).await?;
 
     let guild_id = {
         ctx.data
@@ -127,22 +122,12 @@ pub(crate) async fn interaction(
             .main_guild_id
     };
 
+    trace.step("Loading user");
+    let (db_user, mut msg) = load_user(ctx, &mci, trace.clone()).await?;
+
     loop {
-        trace.step("Refreshing information");
-        let db_user = match db::User::by_discord_id(ctx, mci.user.id).await {
-            Ok(u) => u,
-            Err(diesel::NotFound) => {
-                return Err(diesel::NotFound)
-                    .context("Not yet registered. Please register first")
-                    .map_err_reply(|_| {
-                        mci.edit_original_interaction_response(ctx, |r| {
-                            r.add_embed(embeds::register_instructions_embed())
-                        })
-                    })
-                    .await
-            }
-            Err(e) => bail!(e),
-        };
+        // TODO cache them on the signup board
+        trace.step("Reloading trainings");
         let trainings_all = db::Training::all_active(ctx).await?;
         let mut trainings: Vec<db::Training> = Vec::with_capacity(trainings_all.len());
 
@@ -249,40 +234,53 @@ pub(crate) async fn interaction(
             emb.field("**❌ Not yet signed up for**", not_joined_str, false);
         };
 
-        emb.field("🤔 How to",
+
+
+        // only create a select menu if there are options
+        if !(joined.is_empty() && not_joined.is_empty()) {
+            emb.field("🤔 How to",
             "```To sign up, sign out or to edit your sign-up simply select the training from the select menu below\n\n\
             📝 => Sign out or edit your existing sign-up\n\
             🟢 => Sign up for this training\n```",
             false);
 
-        let mut select_menu = CreateSelectMenu::default();
-        select_menu.custom_id("_user_training_select");
-        select_menu.placeholder("Select a training to continue");
-        select_menu.options(|opts| {
-            for t in &joined {
-                opts.create_option(|o| {
-                    o.label(format!("| {} {}", t.date.date().format("%A"), t.title));
-                    o.emoji(ReactionType::from('📝'));
-                    o.value(t.id);
-                    o
-                });
-            }
-            for t in &not_joined {
-                opts.create_option(|o| {
-                    o.label(format!("| {} {}", t.date.date().format("%A"), t.title));
-                    o.emoji(ReactionType::from('🟢'));
-                    o.value(t.id);
-                    o
-                });
-            }
-            opts
-        });
+            let mut select_menu = CreateSelectMenu::default();
+            select_menu.custom_id("_user_training_select");
+            select_menu.placeholder("Select a training to continue");
+            select_menu.options(|opts| {
+                for t in &joined {
+                    opts.create_option(|o| {
+                        o.label(format!("| {} {}", t.date.date().format("%A"), t.title));
+                        o.emoji(ReactionType::from('📝'));
+                        o.value(t.id);
+                        o
+                    });
+                }
+                for t in &not_joined {
+                    opts.create_option(|o| {
+                        o.label(format!("| {} {}", t.date.date().format("%A"), t.title));
+                        o.emoji(ReactionType::from('🟢'));
+                        o.value(t.id);
+                        o
+                    });
+                }
+                opts
+            });
+            mci.edit_original_interaction_response(ctx, |r| {
+                r.add_embed(emb);
+                r.components(|c| c.create_action_row(|ar| ar.add_select_menu(select_menu)))
+            }).await?;
+        } else {
+            emb.field("🤔 How to",
+            "```There are currently no options, please check back later :D```",
+            false);
 
-        mci.edit_original_interaction_response(ctx, |r| {
-            r.add_embed(emb);
-            r.components(|c| c.create_action_row(|ar| ar.add_select_menu(select_menu)))
-        })
-        .await?;
+            mci.edit_original_interaction_response(ctx, |r| {
+                r.add_embed(emb);
+                r.components(|c| c)
+            }).await?;
+            return Ok(());
+        }
 
         mci = msg
             .await_component_interaction(ctx)
