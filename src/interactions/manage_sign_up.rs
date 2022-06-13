@@ -401,7 +401,7 @@ async fn edit(
             },
             "Boss Pool",
             false,
-            20,
+            8,
         );
         emb.fields_chunked_fmt(
             &roles,
