@@ -225,9 +225,9 @@ async fn trainings_from_ids(ctx: &Context, value: &str) -> Result<Vec<db::Traini
         .map(|i| db::Training::by_id(ctx, i))
         .collect::<Vec<_>>();
 
-    Ok(future::try_join_all(trainings_fut)
+    future::try_join_all(trainings_fut)
         .await
-        .context("Training id does not exist")?)
+        .context("Training id does not exist")
 }
 
 async fn add(

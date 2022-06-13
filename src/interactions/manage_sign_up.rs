@@ -554,7 +554,7 @@ async fn edit(
             submit = msg.await_modal_interaction(ctx) => {
                 trace.step("Process comment input form");
                 let submit = submit.expect("Unexpected None value on add comment interaction");
-                if !(submit.data.custom_id == "edit_signup_add_comment") {
+                if submit.data.custom_id != "edit_signup_add_comment" {
                     bail!("Unexpected modal interaction");
                 }
                 let comment = submit
