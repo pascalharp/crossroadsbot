@@ -21,6 +21,7 @@ use serenity::model::{
         },
         InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
     },
+    Permissions,
 };
 use serenity::{
     builder::{CreateApplicationCommand, CreateEmbed},
@@ -50,7 +51,8 @@ pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
     app.name(CMD_TRAINING);
     app.description("Manage trainings");
-    app.default_permission(false);
+    app.default_member_permissions(Permissions::empty());
+    app.dm_permission(false);
     app.create_option(|o| {
         o.kind(ApplicationCommandOptionType::SubCommand);
         o.name("add");

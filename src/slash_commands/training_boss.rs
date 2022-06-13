@@ -15,6 +15,7 @@ use serenity::{
             InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
         },
         mention::Mention,
+        Permissions,
     },
 };
 use url::Url;
@@ -41,7 +42,8 @@ pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
     app.name(CMD_TRAINING_BOSS);
     app.description("Manage bosses for training");
-    app.default_permission(false);
+    app.default_member_permissions(Permissions::empty());
+    app.dm_permission(false);
     app.create_option(|o| {
         o.kind(ApplicationCommandOptionType::SubCommand);
         o.name("add");

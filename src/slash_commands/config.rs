@@ -13,6 +13,7 @@ use serenity::{
             InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
         },
         mention::Mention,
+        Permissions,
     },
 };
 use serenity_tools::{builder::CreateEmbedExt, interactions::ApplicationCommandInteractionExt};
@@ -31,7 +32,7 @@ pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
     app.name(CMD_CONFIG);
     app.description("Bot configurations");
-    app.default_permission(false);
+    app.default_member_permissions(Permissions::empty());
     app.create_option(|o| {
         o.kind(ApplicationCommandOptionType::SubCommand);
         o.name("overview");

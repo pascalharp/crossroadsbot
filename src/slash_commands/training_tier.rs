@@ -13,6 +13,7 @@ use serenity::{
             InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
         },
         mention::Mention,
+        Permissions,
     },
 };
 use serenity_tools::interactions::ApplicationCommandInteractionExt;
@@ -29,7 +30,8 @@ pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
     app.name(CMD_TRAINING_TIER);
     app.description("Training tier configurations");
-    app.default_permission(false);
+    app.default_member_permissions(Permissions::empty());
+    app.dm_permission(false);
     app.create_option(|o| {
         o.kind(ApplicationCommandOptionType::SubCommand);
         o.name("new");

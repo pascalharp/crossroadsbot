@@ -13,6 +13,7 @@ use serenity::{
             InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
         },
         mention::Mention,
+        Permissions,
     },
 };
 
@@ -25,7 +26,8 @@ pub fn create() -> CreateApplicationCommand {
     let mut app = CreateApplicationCommand::default();
     app.name(CMD_TRAINING_ROLE);
     app.description("Testing");
-    app.default_permission(false);
+    app.default_member_permissions(Permissions::empty());
+    app.dm_permission(false);
     app.create_option(|o| {
         o.kind(ApplicationCommandOptionType::SubCommand);
         o.name("add");
