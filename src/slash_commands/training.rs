@@ -911,7 +911,10 @@ async fn download(
                             .iter()
                             .map(|s| format!("`{}`", s))
                             .collect::<Vec<_>>()
-                            .join("\n"),
+                            .join("\n")
+                            .chars()
+                            .take(1024)
+                            .collect(),
                     },
                     false,
                 )
