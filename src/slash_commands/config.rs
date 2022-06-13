@@ -1,4 +1,4 @@
-use anyhow::{bail, Result, Context as ErrContext};
+use anyhow::{bail, Context as ErrContext, Result};
 use serenity::{
     builder::{CreateApplicationCommand, CreateEmbed},
     client::Context,
@@ -12,7 +12,7 @@ use serenity::{
             },
             InteractionApplicationCommandCallbackDataFlags, InteractionResponseType,
         },
-        misc::Mention,
+        mention::Mention,
     },
 };
 use serenity_tools::{builder::CreateEmbedExt, interactions::ApplicationCommandInteractionExt};

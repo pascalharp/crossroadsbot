@@ -12,7 +12,7 @@ use diesel::result::QueryResult;
 use serenity::client::Context;
 use serenity::model::{
     id::{EmojiId, MessageId, UserId},
-    misc::Mention,
+    mention::Mention,
 };
 use std::env;
 use std::sync::Arc;

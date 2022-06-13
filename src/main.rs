@@ -25,7 +25,7 @@ use diesel::{pg::PgConnection, result::Error::NotFound};
 use dotenv::dotenv;
 use serenity::{
     async_trait,
-    client::{bridge::gateway::GatewayIntents, Client, EventHandler},
+    client::{Client, EventHandler},
     model::prelude::*,
     prelude::*,
 };
@@ -83,46 +83,13 @@ impl EventHandler for Handler {
         };
 
         info!("Setting up slash commands");
-        match main_guild_id
+        if let Err(e) = main_guild_id
             .set_application_commands(&ctx, |cmds| {
                 cmds.set_application_commands(slash_commands::AppCommands::create_default())
             })
             .await
         {
-            Ok(cmds) => {
-                //info!("Setting slash commands permissions for: {:#?}", cmds);
-                // Register slash commands for main guild
-                let confs = {
-                    ctx.data
-                        .read()
-                        .await
-                        .get::<ConfigValuesData>()
-                        .unwrap()
-                        .clone()
-                };
-
-                let perms = cmds
-                    .iter()
-                    .map(|c| {
-                        slash_commands::AppCommands::from_str(&c.name)
-                            .map(|ac| ac.permission(c, &confs))
-                    })
-                    .collect::<Result<Vec<_>, _>>();
-                match perms {
-                    Err(e) => error!("Failed to figure out permissions for slash commands: {}", e),
-                    Ok(perms) => {
-                        if let Err(e) = main_guild_id
-                            .set_application_commands_permissions(&ctx, |p| {
-                                p.set_application_commands(perms)
-                            })
-                            .await
-                        {
-                            error!("Failed to set permissions for slash commands {:?}", e);
-                        }
-                    }
-                }
-            }
-            Err(e) => error!("Failed to create application commands: {:?}", e),
+            error!("Failed to create application commands: {:?}", e);
         }
 
         // attempt to load SignupBoardData from db
@@ -262,12 +229,14 @@ async fn main() {
             .expect("Failed to parse squadmaker role id"),
     );
 
-    let mut client = Client::builder(token)
+    let intents = GatewayIntents::non_privileged()
+        | GatewayIntents::GUILD_MEMBERS
+        | GatewayIntents::MESSAGE_CONTENT;
+    let mut client = Client::builder(token, intents)
         .application_id(app_id)
         .event_handler(Handler {
             signup_board_loop_running: AtomicBool::new(false),
         })
-        .intents(GatewayIntents::non_privileged() | GatewayIntents::GUILD_MEMBERS)
         .await
         .expect("Error creating client");
 

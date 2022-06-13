@@ -11,12 +11,17 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
+    if: github.event.pull_request.draft == false
     steps:
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
     - name: Clippy
       run: cargo clippy --verbose
+  draft-build:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == true
+    steps:
+    - name: Draft Pull info
+      run: echo Draft PR, skipped

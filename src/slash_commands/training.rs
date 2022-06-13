@@ -27,11 +27,11 @@ use serenity::{
     client::Context,
     futures::future,
     futures::future::OptionFuture,
-    http::AttachmentType,
     model::{
+        channel::AttachmentType,
         guild::{Member, PartialGuild, Role},
         id::RoleId,
-        misc::Mention,
+        mention::Mention,
     },
 };
 use serenity_tools::{
@@ -225,9 +225,9 @@ async fn trainings_from_ids(ctx: &Context, value: &str) -> Result<Vec<db::Traini
         .map(|i| db::Training::by_id(ctx, i))
         .collect::<Vec<_>>();
 
-    Ok(future::try_join_all(trainings_fut)
+    future::try_join_all(trainings_fut)
         .await
-        .context("Training id does not exist")?)
+        .context("Training id does not exist")
 }
 
 async fn add(
@@ -541,7 +541,7 @@ async fn set(
 
                     response
                         .edit_original_interaction_response(ctx, |m| {
-                            m.create_embed(|e| {
+                            m.embed(|e| {
                                 e.title("Trainings updated");
                                 e.description("Updating Signup Board and status ...")
                             })
@@ -573,7 +573,7 @@ async fn set(
                             r.interaction_response_data(|d| {
                                 d.flags(MessageFlags::EPHEMERAL);
                                 d.content("Aborted");
-                                d.embeds(std::iter::empty());
+                                d.set_embeds(Vec::new());
                                 d.components(|c| c)
                             })
                         })
@@ -664,7 +664,7 @@ impl DownloadData {
                 let elem = SignupDataCsv {
                     gw2_acc: &s.user.gw2_id,
                     discord_acc: s.member.user.tag(),
-                    discord_ping: Mention::from(&s.member).to_string(),
+                    discord_ping: Mention::from(s.member.user.id).to_string(),
                     training_name: &t.training.title,
                     roles: s
                         .roles
@@ -1066,7 +1066,7 @@ async fn list(
         r.kind(InteractionResponseType::ChannelMessageWithSource);
         r.interaction_response_data(|d| {
             d.flags(InteractionApplicationCommandCallbackDataFlags::EPHEMERAL);
-            d.embeds(embeds)
+            d.set_embeds(embeds)
         })
     })
     .await?;
