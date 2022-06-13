@@ -90,7 +90,6 @@ impl EventHandler for Handler {
             .await
         {
             Ok(cmds) => {
-                //info!("Setting slash commands permissions for: {:#?}", cmds);
                 // Register slash commands for main guild
                 let confs = {
                     ctx.data
@@ -101,6 +100,7 @@ impl EventHandler for Handler {
                         .clone()
                 };
 
+                // FIXME rework (breaking change in discord api)
                 let perms = cmds
                     .iter()
                     .map(|c| {
