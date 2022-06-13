@@ -1,16 +1,11 @@
 use std::str::FromStr;
 
 use serenity::{
-    builder::{CreateApplicationCommand, CreateApplicationCommandPermissions},
-    client::Context,
-    model::interactions::application_command::{
-        ApplicationCommand, ApplicationCommandInteraction, ApplicationCommandPermissionType,
-    },
+    builder::CreateApplicationCommand, client::Context,
+    model::interactions::application_command::ApplicationCommandInteraction,
 };
 
 use tracing::error;
-
-use crate::data::ConfigValues;
 
 #[derive(Debug)]
 pub struct SlashCommandParseError(String);
@@ -88,35 +83,6 @@ impl AppCommands {
             .iter()
             .map(Self::create)
             .collect::<Vec<_>>()
-    }
-
-    pub fn permission(
-        &self,
-        ac: &ApplicationCommand,
-        conf: &ConfigValues,
-    ) -> CreateApplicationCommandPermissions {
-        let mut perms = CreateApplicationCommandPermissions::default();
-        perms.id(ac.id.0);
-
-        // Here are all the configurations for Slash Command Permissions
-        match self {
-            Self::Training
-            | Self::TrainingBoss
-            | Self::TrainingRole
-            | Self::TrainingTier
-            | Self::Config => perms.create_permissions(|p| {
-                p.permission(true)
-                    .kind(ApplicationCommandPermissionType::Role)
-                    .id(conf.squadmaker_role_id.0)
-            }),
-            Self::Register | Self::Unregister => perms.create_permissions(|p| {
-                p.permission(true)
-                    .kind(ApplicationCommandPermissionType::Role)
-                    .id(conf.main_guild_id.0) // Guild id is same as @everyone
-            }),
-        };
-
-        perms
     }
 
     async fn handle(&self, ctx: &Context, aci: &ApplicationCommandInteraction) {
