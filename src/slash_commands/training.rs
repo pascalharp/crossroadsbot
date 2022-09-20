@@ -1008,7 +1008,7 @@ async fn info(
                     },
                     "Boss Pool",
                     false,
-                    10,
+                    8,
                 );
             }
             emb.fields_chunked_fmt(
