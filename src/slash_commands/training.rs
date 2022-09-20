@@ -1008,7 +1008,7 @@ async fn info(
                     },
                     "Boss Pool",
                     false,
-                    20,
+                    10,
                 );
             }
             emb.fields_chunked_fmt(
@@ -1023,7 +1023,7 @@ async fn info(
                 },
                 "Sign-up Count",
                 true,
-                20,
+                10,
             );
             d.add_embed(emb)
         })
