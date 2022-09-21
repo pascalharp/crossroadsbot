@@ -986,6 +986,7 @@ async fn info(
             }
             let mut emb = CreateEmbed::xdefault();
             emb.field("Training", training.title, false);
+            emb.field("State", training.state, false);
             emb.field(
                 "Date/Time",
                 format!("<t:{}>", training.date.timestamp()),
@@ -1015,10 +1016,10 @@ async fn info(
                 &roles,
                 |r| {
                     format!(
-                        "{} | {} : {}",
+                        "{} |{:>3}| {}",
                         Mention::from(EmojiId::from(r.emoji as u64)),
-                        r.title,
-                        roles_count.get(&r.id).unwrap()
+                        roles_count.get(&r.id).unwrap(),
+                        r.title
                     )
                 },
                 "Sign-up Count",
