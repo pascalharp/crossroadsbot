@@ -156,6 +156,11 @@ pub fn create() -> CreateApplicationCommand {
             o.description("Select the download format. Default: csv");
             o.add_string_choice("json", "json");
             o.add_string_choice("csv", "csv")
+        });
+        o.create_sub_option(|o| {
+            o.kind(ApplicationCommandOptionType::Boolean);
+            o.name("include-finished");
+            o.description("Whether to include finished training's. Defaults to false")
         })
     });
     app.create_option(|o| {
@@ -765,6 +770,15 @@ async fn download(
     } else {
         DonwloadFormat::Csv // Default
     };
+
+    // Check if we filter out finished training's
+    if !cmds
+        .get("include-finished")
+        .and_then(|d| d.value.as_ref())
+        .and_then(|d| d.as_bool())
+        .unwrap_or(false) {
+            trainings.retain(|t| t.state != TrainingState::Finished)
+    }
 
     aci.create_quick_info(ctx, "Parsing training data...", true)
         .await?;
