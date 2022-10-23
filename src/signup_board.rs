@@ -190,7 +190,7 @@ impl SignupBoard {
             bosses: Vec<db::TrainingBoss>,
         }
 
-        trace.step("Loading additional traning info");
+        trace.step("Loading additional training info");
         let mut trainings: Vec<TrainingInfo> = Vec::new();
         for training in active_trainings {
             let signup_count = training.get_signup_count(ctx).await?;
@@ -252,8 +252,6 @@ impl SignupBoard {
                 e.field(
                     "How to",
                     "\
-Before you can sign up you have to be __registered__. \
-To do so simply use the `/register` command in any channel you have write permissions in.\n\n\
 To **sign up**, **sign out** or to **edit** your sign-up click the button at the end of the message",
                     false);
                 e.field(
